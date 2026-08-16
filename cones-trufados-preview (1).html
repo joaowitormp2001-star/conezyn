@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cones da Casa — Preview do Front-end</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cacau:#3e2723; --cacau-claro:#5d4037;
+    --casquinha:#c8955c; --casquinha-claro:#e8c79a;
+    --chantilly:#fff9f2; --chantilly-esc:#f6ead9;
+    --pistache:#7a9b76; --framboesa:#c94f5e;
+    --radius:1.25rem; --shadow:0 4px 20px -6px rgb(62 39 35 / .12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--chantilly);color:var(--cacau);font-family:"Inter",system-ui,sans-serif;min-height:100dvh}
+  .display{font-family:"Fraunces",Georgia,serif}
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,textarea,select{font-family:inherit;font-size:.875rem;color:var(--cacau)}
+  :focus-visible{outline:3px solid var(--casquinha);outline-offset:2px;border-radius:6px}
+  .wrap{max-width:64rem;margin:0 auto;padding:0 1rem}
+  .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow)}
+  .carimbo{border:2px dashed currentColor;border-radius:9999px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:2.75rem;
+       padding:.625rem 1.5rem;border-radius:9999px;font-size:.875rem;font-weight:600;transition:.15s}
+  .btn-primary{background:var(--cacau);color:var(--chantilly)}
+  .btn-primary:hover{background:var(--cacau-claro)}
+  .btn-primary:disabled{background:rgb(62 39 35 / .3);cursor:not-allowed}
+  .btn-ghost{border:1px solid rgb(62 39 35 / .2)}
+  .btn-ghost:hover{background:var(--chantilly-esc)}
+  .btn-verde{background:var(--pistache);color:#fff}
+  .badge{display:inline-flex;align-items:center;border-radius:9999px;padding:.15rem .65rem;
+         font-size:.65rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+  .b-classico{background:var(--chantilly-esc);color:var(--cacau)}
+  .b-premium{background:var(--cacau);color:var(--casquinha-claro)}
+  .b-novo{background:var(--pistache);color:#fff}
+  .b-vendido{background:var(--cacau);color:var(--casquinha-claro)}
+  .b-esgotado{background:var(--framboesa);color:#fff}
+  .field{width:100%;border:1px solid rgb(62 39 35 / .15);background:var(--chantilly);
+         border-radius:.75rem;padding:.75rem 1rem}
+  .field::placeholder{color:rgb(62 39 35 / .4)}
+  .label{font-size:.875rem;font-weight:600;display:block;margin-bottom:.25rem}
+  .muted{color:rgb(62 39 35 / .55)}
+  .stars{color:var(--casquinha);letter-spacing:-.05em}
+  .stars .off{color:rgb(62 39 35 / .2)}
+  header.loja{position:sticky;top:0;z-index:40;backdrop-filter:blur(8px);
+    background:rgb(255 249 242 / .9);border-bottom:1px solid rgb(62 39 35 / .08)}
+  header.loja .inner{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.75rem 0}
+  .logo{display:flex;align-items:center;gap:.5rem;font-weight:900;font-size:1.25rem;letter-spacing:-.02em}
+  .logo .selo{width:2.5rem;height:2.5rem;display:grid;place-items:center;color:var(--casquinha);font-size:1.1rem}
+  .cart-btn{position:relative;width:2.75rem;height:2.75rem;display:grid;place-items:center;
+    border-radius:9999px;background:var(--cacau);color:var(--chantilly);font-size:1.1rem}
+  .cart-count{position:absolute;top:-4px;right:-4px;width:1.25rem;height:1.25rem;display:grid;place-items:center;
+    border-radius:9999px;background:var(--framboesa);color:#fff;font-size:.68rem;font-weight:700}
+  .hero{position:relative;overflow:hidden;background:var(--cacau);color:var(--chantilly);
+    border-radius:var(--radius);padding:2.5rem 1.5rem;box-shadow:var(--shadow)}
+  .hero .big{position:absolute;right:-1.5rem;bottom:-2rem;font-size:10rem;opacity:.2;pointer-events:none}
+  .hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;line-height:1.1;max-width:26rem;margin-top:1rem}
+  .grid{display:grid;gap:1rem}
+  @media(min-width:600px){.grid.c2{grid-template-columns:1fr 1fr}}
+  @media(min-width:900px){.grid.c3{grid-template-columns:repeat(3,1fr)}
+    .split{display:grid;grid-template-columns:1fr 20rem;gap:1.5rem;align-items:start}
+    .split aside{position:sticky;top:6rem}}
+  .pcard{display:flex;flex-direction:column;overflow:hidden;transition:transform .15s}
+  .pcard:hover{transform:translateY(-2px)}
+  .pcard.esgotado{filter:saturate(.5)}
+  .pfoto{position:relative;aspect-ratio:4/3;display:grid;place-items:center;font-size:3.75rem;cursor:pointer}
+  .pfoto .tags{position:absolute;top:.5rem;left:.5rem;display:flex;flex-wrap:wrap;gap:.25rem}
+  .pbody{display:flex;flex-direction:column;gap:.5rem;padding:1rem;flex:1}
+  .chips{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.25rem}
+  .chip{flex-shrink:0;min-height:2.75rem;padding:0 1.25rem;border-radius:9999px;font-size:.875rem;font-weight:600;
+    background:#fff;box-shadow:var(--shadow)}
+  .chip[aria-selected="true"]{background:var(--cacau);color:var(--chantilly)}
+  .stepper{display:inline-flex;align-items:center;gap:.25rem;border:1px solid rgb(62 39 35 / .15);
+    border-radius:9999px;background:#fff}
+  .stepper button{width:2.5rem;height:2.5rem;border-radius:9999px;font-size:1.1rem;font-weight:700}
+  .stepper button:disabled{opacity:.3;cursor:not-allowed}
+  .stepper span{width:1.5rem;text-align:center;font-size:.875rem;font-weight:700}
+  .radio-opt{display:flex;align-items:center;flex-wrap:wrap;gap:.75rem;min-height:3rem;padding:.5rem 1rem;
+    border-radius:.75rem;border:1px solid rgb(62 39 35 / .15);background:rgb(255 255 255 / .6);cursor:pointer}
+  .radio-opt.on{border-color:var(--cacau);background:#fff}
+  .radio-opt input[type=radio]{accent-color:var(--cacau)}
+  .status{display:inline-flex;border-radius:9999px;padding:.25rem .75rem;font-size:.72rem;font-weight:700}
+  .st-Pendente{background:var(--casquinha-claro)} .st-Confirmado{background:var(--chantilly-esc)}
+  .st-Em_preparo{background:var(--casquinha);color:#fff} .st-A_caminho{background:var(--cacau-claro);color:#fff}
+  .st-Entregue{background:var(--pistache);color:#fff} .st-Cancelado{background:var(--framboesa);color:#fff}
+  header.admin{position:sticky;top:0;z-index:40;background:var(--cacau);color:var(--chantilly);
+    border-bottom:1px solid rgb(62 39 35 / .1)}
+  header.admin .inner{max-width:72rem;margin:0 auto;padding:.75rem 1rem}
+  header.admin .row1{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+  header.admin nav{display:flex;gap:.25rem;margin-top:.5rem}
+  header.admin nav button{min-height:2.5rem;padding:.4rem 1rem;border-radius:9999px;font-size:.875rem;font-weight:600;color:rgb(255 249 242/.7)}
+  header.admin nav button[aria-current]{background:var(--chantilly);color:var(--cacau)}
+  .pill-pend{background:var(--casquinha);color:var(--cacau);border-radius:9999px;padding:.25rem .75rem;font-size:.72rem;font-weight:700}
+  .toast{position:fixed;right:1rem;bottom:5.5rem;z-index:60;width:min(24rem,calc(100% - 2rem));
+    background:var(--cacau);color:var(--chantilly);border-radius:var(--radius);padding:1rem;box-shadow:var(--shadow);
+    animation:toastin .25s ease-out}
+  @keyframes toastin{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .switch{position:fixed;left:1rem;bottom:1rem;z-index:50;box-shadow:var(--shadow)}
+  .alerta{background:rgb(201 79 94 / .1);color:var(--framboesa);border-radius:.75rem;
+    padding:.75rem 1rem;font-size:.875rem;font-weight:600}
+  .ok{background:rgb(122 155 118 / .15);color:var(--pistache);border-radius:.75rem;
+    padding:.75rem 1rem;font-size:.875rem;font-weight:600}
+  dl.linhas{display:flex;flex-direction:column;gap:.4rem;font-size:.875rem}
+  dl.linhas>div{display:flex;justify-content:space-between}
+  .total-row{border-top:1px solid rgb(62 39 35 / .1);padding-top:.5rem;margin-top:.25rem;
+    font-size:1.25rem;font-weight:900}
+  .stamps{display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-top:1.25rem}
+  .stamps .s{aspect-ratio:1;display:grid;place-items:center;font-size:1.1rem;color:rgb(255 249 242 / .3)}
+  .stamps .s.on{background:var(--casquinha);color:var(--cacau)}
+  .dep-carousel{overflow:hidden;position:relative;padding:1rem 0;
+    mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+  .dep-track{display:flex;gap:1rem;width:max-content;animation:marquee 45s linear infinite}
+  .dep-carousel:hover .dep-track{animation-play-state:paused}
+  @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(calc(-50% - .5rem))}}
+  .dep-card{width:18rem;flex-shrink:0;padding:1.25rem;transition:transform .2s ease}
+  .dep-card:hover{transform:scale(1.04)}
+  @media(prefers-reduced-motion:reduce){.dep-track{animation:none}.dep-carousel{overflow-x:auto;mask-image:none;-webkit-mask-image:none}}
+  .cart-toast{position:fixed;top:1rem;right:1rem;z-index:70;width:min(20rem,calc(100% - 2rem));
+    display:flex;gap:.75rem;align-items:center;padding:.85rem 1rem;animation:ct-in .3s ease-out}
+  .cart-toast.out{animation:ct-out .35s ease-in forwards}
+  @keyframes ct-in{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+  @keyframes ct-out{to{transform:translateY(-16px);opacity:0}}
+  .avatar{width:2.5rem;height:2.5rem;border-radius:9999px;object-fit:cover;flex-shrink:0;
+    display:grid;place-items:center;background:var(--casquinha-claro);color:var(--cacau);
+    font-size:.8rem;font-weight:700;letter-spacing:.02em}
+  .avatar.lg{width:5rem;height:5rem;font-size:1.5rem}
+  .back-btn{width:2.75rem;height:2.75rem;flex-shrink:0;display:grid;place-items:center;border-radius:9999px;
+    border:1px solid rgb(62 39 35/.15);background:#fff;font-size:1.1rem;box-shadow:var(--shadow)}
+  .mini-card{width:10rem;flex-shrink:0;overflow:hidden;cursor:pointer;transition:transform .15s}
+  .mini-card:hover{transform:translateY(-2px)}
+  .mini-foto{aspect-ratio:4/3;display:grid;place-items:center;font-size:2rem}
+  .mini-row{display:flex;gap:.75rem;overflow-x:auto;padding:.25rem .25rem .75rem}
+  .modal-overlay{position:fixed;inset:0;z-index:80;background:rgb(62 39 35/.45);
+    display:grid;place-items:center;padding:1rem;animation:ov-in .15s ease-out}
+  @keyframes ov-in{from{opacity:0}to{opacity:1}}
+  .modal{width:100%;max-width:26rem;max-height:82dvh;overflow-y:auto;padding:1.5rem}
+  .rating-btn{display:inline-flex;align-items:center;gap:.35rem;border-radius:.5rem;text-align:left}
+  .rating-btn:hover{text-decoration:underline}
+  section{scroll-margin-top:6rem}
+  footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
+    text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast-slot"></div>
+<div id="cart-toast-slot"></div>
+<div id="modal-slot"></div>
+<button class="btn btn-primary switch" id="switch-btn" onclick="toggleAdmin()">Painel admin</button>
+
+<script>
+/* ============================================================
+   PREVIEW EM ARQUIVO ÚNICO — mesmas telas, tokens e engine do
+   projeto Next.js. Estado em memória (dura a sessão da página):
+   no projeto real isso é localStorage → Supabase.
+   ============================================================ */
+
+/* ---------- Dados (espelho de src/lib/data/produtos.ts) ---------- */
+const CL = { unit: 1400, dupla: 1200 }, PR = { unit: 1600, dupla: 1400 };
+const PRODUTOS = [
+  { id:"p-brigadeiro", nome:"Brigadeiro", cat:"classico", ...CL, estoque:12, emoji:"🍫",
+    grad:"linear-gradient(135deg,#5d4037,#3e2723)", tags:["Mais vendido"], destaque:true,
+    desc:"Casquinha crocante com recheio cremoso de brigadeiro e cobertura de granulado belga.", nota:4.8, qtd:27 },
+  { id:"p-kitkat", nome:"KitKat", cat:"classico", ...CL, estoque:8, emoji:"🍪",
+    grad:"linear-gradient(135deg,#8d5a3b,#5d4037)", tags:[], destaque:false,
+    desc:"Recheio trufado ao leite com pedaços generosos de KitKat por dentro e por cima.", nota:4.7, qtd:19 },
+  { id:"p-prestigio", nome:"Prestígio", cat:"classico", ...CL, estoque:10, emoji:"🥥",
+    grad:"linear-gradient(135deg,#6b4f3a,#4e342e)", tags:[], destaque:false,
+    desc:"Trufa de chocolate com coco fresco — a versão em cone do clássico que todo mundo ama.", nota:4.6, qtd:14 },
+  { id:"p-doce", nome:"Doce de Leite", cat:"classico", ...CL, estoque:6, emoji:"🍮",
+    grad:"linear-gradient(135deg,#c8955c,#8d5a3b)", tags:["Novo"], destaque:false,
+    desc:"Doce de leite argentino cremoso com toque de flor de sal na cobertura.", nota:4.9, qtd:8 },
+  { id:"p-ferrero", nome:"Ferrero Rocher", cat:"premium", ...PR, estoque:5, emoji:"🌰",
+    grad:"linear-gradient(135deg,#7a5230,#3e2723)", tags:["Mais vendido"], destaque:true,
+    desc:"Trufa de avelã com Nutella, crocante de avelãs e um Ferrero Rocher inteiro no topo.", nota:4.9, qtd:31 },
+  { id:"p-kinder", nome:"Kinder Bueno", cat:"premium", ...PR, estoque:0, emoji:"🤍",
+    grad:"linear-gradient(135deg,#e8c79a,#c8955c)", tags:[], destaque:true,
+    desc:"Creme de avelã com chocolate branco e pedaços de Kinder Bueno em dose dupla.", nota:4.8, qtd:22 },
+];
+const AVALIACOES = [
+  { pid:"p-brigadeiro", nome:"Mariana", nota:5, txt:"O melhor brigadeiro que já comi em cone. Chegou rapidinho na minha mesa!", data:"05/08/2026" },
+  { pid:"p-brigadeiro", nome:"Carlos", nota:5, txt:"Recheio generoso até o fundo da casquinha. Virou tradição de sexta.", data:"01/08/2026" },
+  { pid:"p-brigadeiro", nome:"Paula", nota:4, txt:"Muito bom! Só queria que tivesse tamanho grande.", data:"28/07/2026" },
+  { pid:"p-ferrero", nome:"Ricardo", nota:5, txt:"Vale cada centavo. O Ferrero inteiro no topo é covardia.", data:"07/08/2026" },
+  { pid:"p-ferrero", nome:"Juliana", nota:5, txt:"Pedi dois na promoção. Perfeito.", data:"03/08/2026" },
+  { pid:"p-kinder", nome:"Fernanda", nota:5, txt:"Meu favorito absoluto. Repõe logo o estoque!", data:"30/07/2026" },
+  { pid:"p-kitkat", nome:"Bruno", nota:4, txt:"Crocância no ponto certo.", data:"29/07/2026" },
+  { pid:"p-doce", nome:"Letícia", nota:5, txt:"A flor de sal no doce de leite muda tudo. Já quero de novo.", data:"08/08/2026" },
+  { pid:"p-prestigio", nome:"André", nota:5, txt:"Coco fresco de verdade, não aquele ralado seco. Aprovadíssimo.", data:"06/08/2026" },
+];
+/* Regra de produção (a implementar): a seção de depoimentos só entra no ar
+   com no mínimo 7 depoimentos REAIS. Os acima são exemplos de visualização. */
+const MIN_DEPOIMENTOS = 7;
+const STATUS = ["Pendente","Confirmado","Em preparo","A caminho","Entregue","Cancelado"];
+const META_CARIMBOS = 10, ANTECEDENCIA_MIN = 20;
+
+/* ---------- Estado (em memória — dura a sessão) ---------- */
+const S = {
+  view: "home", param: null,
+  perfil: null,
+  carrinho: {},               // id -> quantidade
+  pedidos: [], seq: 1047,
+  filtro: "todos",
+  checkout: { local:"", quando:"agora", hora:"", erro:null },
+  sugestaoOk: false, loginErro: null, cadastroErro: null, voltarPara: null,
+  contas: [],                  // contas registradas: {nome, tel, senha, email, foto}
+  hist: [],                    // pilha de navegação p/ botão voltar
+  adminTab: "dash", adminFiltro: "todos",
+};
+const byId = id => PRODUTOS.find(p => p.id === id);
+const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+/* ---------- Engine de preços (espelho de src/lib/pricing/) ---------- */
+function precificar(){
+  const linhas = Object.entries(S.carrinho).filter(([,q])=>q>0).map(([id,q])=>{
+    const p = byId(id);
+    return { id, unit:p.unit, dupla:p.dupla, q };
+  });
+  const cones = linhas.reduce((s,l)=>s+l.q,0);
+  const subtotal = linhas.reduce((s,l)=>s+l.unit*l.q,0);
+  const somaDupla = linhas.reduce((s,l)=>s+l.dupla*l.q,0);
+  let ajuste = 0, imparId = null;
+  if (cones % 2 === 1){
+    const m = linhas.reduce((min,l)=>{
+      const d = l.unit - l.dupla;
+      return d < min.d ? {d, id:l.id} : min;
+    }, {d:Infinity, id:null});
+    ajuste = m.d; imparId = m.id;
+  }
+  const total = somaDupla + ajuste;
+  return {
+    total, subtotal, economia: subtotal - total, cones,
+    linhas: linhas.map(l => ({...l, efetivo: l.dupla*l.q + (l.id===imparId ? ajuste : 0)}))
+  };
+}
+
+/* ---------- Helpers ---------- */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function stars(nota, qtd){
+  const n = Math.round(nota);
+  return `<span class="stars" aria-hidden>${"★".repeat(n)}<span class="off">${"★".repeat(5-n)}</span></span>
+    <strong style="font-size:.875rem">${nota.toFixed(1).replace(".",",")}</strong>
+    ${qtd!=null?`<span class="muted" style="font-size:.875rem">(${qtd} avaliações)</span>`:""}`;
+}
+function badges(p, card=false){
+  const esg = p.estoque<=0;
+  const base = `<span class="badge ${p.cat==="premium"?"b-premium":"b-classico"}">${p.cat==="premium"?"Premium":"Clássico"}</span>
+    ${p.tags.includes("Novo")?'<span class="badge b-novo">Novo</span>':""}`;
+  if (card) return base; // nos cards, "esgotado" fica só no botão
+  return `${base}
+    ${p.tags.includes("Mais vendido")?'<span class="badge b-vendido">Mais vendido</span>':""}
+    ${esg?'<span class="badge b-esgotado">Esgotado</span>':""}`;
+}
+function nav(view, param){
+  param = param ?? null;
+  if (!(S.view===view && S.param===param)) S.hist.push({view:S.view, param:S.param});
+  S.view = view; S.param = param;
+  if (view==="checkout"){ S.checkout = { local:"", quando:"agora", hora:"", erro:null }; }
+  if (view==="produto") pqv = 1;
+  S.loginErro = null; S.cadastroErro = null;
+  render(); window.scrollTo({top:0});
+}
+function voltar(){
+  const prev = S.hist.pop();
+  if (prev){ S.view = prev.view; S.param = prev.param; }
+  else { S.view = "home"; S.param = null; }
+  if (S.view==="produto") pqv = 1;
+  render(); window.scrollTo({top:0});
+}
+function backBtn(estilo=""){
+  return `<button class="back-btn" aria-label="Voltar" title="Voltar" style="${estilo}" onclick="voltar()">←</button>`;
+}
+function toggleAdmin(){
+  if (S.view.startsWith("admin")) nav("home");
+  else { S.adminTab="dash"; nav("admin"); }
+}
+function addCart(id, q=1){
+  const p = byId(id); if (!p || p.estoque<=0) return;
+  S.carrinho[id] = Math.min((S.carrinho[id]||0)+q, p.estoque);
+  mostrarCartToast(p, q);
+  render();
+}
+function mostrarCartToast(p, q){
+  const slot = document.getElementById("cart-toast-slot");
+  slot.innerHTML = `<div class="cart-toast card" role="status">
+    <span aria-hidden style="width:3rem;height:3rem;flex-shrink:0;display:grid;place-items:center;
+      border-radius:.85rem;font-size:1.4rem;background:${p.grad}">${p.emoji}</span>
+    <div style="min-width:0">
+      <p style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--pistache)">
+        Adicionado ao carrinho</p>
+      <p class="display" style="font-weight:700;line-height:1.2">${q>1?q+"× ":""}${esc(p.nome)}</p>
+      <p class="muted" style="font-size:.75rem">${reais(p.unit)} · em dupla ${reais(p.dupla)}</p>
+    </div>
+  </div>`;
+  const el = slot.firstElementChild;
+  clearTimeout(mostrarCartToast.t1); clearTimeout(mostrarCartToast.t2);
+  mostrarCartToast.t1 = setTimeout(()=>{ el.classList.add("out"); }, 4000);
+  mostrarCartToast.t2 = setTimeout(()=>{ if (slot.firstElementChild===el) slot.innerHTML=""; }, 4400);
+}
+function iniciais(nome){
+  const p = String(nome||"").trim().split(/\s+/).filter(Boolean);
+  if (p.length===0) return "?";
+  return (p.length>1 ? p[0][0]+p[p.length-1][0] : p[0][0]).toUpperCase();
+}
+function avatarHtml(nome, foto, lg=false){
+  if (foto) return `<img class="avatar ${lg?"lg":""}" src="${foto}" alt="Foto de ${esc(nome)}">`;
+  return `<span class="avatar ${lg?"lg":""}" role="img" aria-label="${esc(nome)}">${esc(iniciais(nome))}</span>`;
+}
+function fotoDe(nome){
+  const conta = S.contas.find(c=>c.nome===nome);
+  return conta?.foto || null;
+}
+function carregarFoto(input){
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { S.perfil.foto = r.result; render(); };
+  r.readAsDataURL(f);
+}
+function abrirAvaliacoes(pid){
+  const p = byId(pid); if (!p) return;
+  const avs = AVALIACOES.filter(a=>a.pid===pid);
+  document.getElementById("modal-slot").innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)fecharModal()">
+      <div class="modal card" role="dialog" aria-modal="true" aria-label="Avaliações de ${esc(p.nome)}">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:.75rem">
+          <div>
+            <h2 class="display" style="font-size:1.25rem;font-weight:900">${esc(p.nome)}</h2>
+            <p style="margin-top:.25rem">${stars(p.nota, p.qtd)}</p>
+          </div>
+          <button class="back-btn" style="box-shadow:none" aria-label="Fechar" onclick="fecharModal()">✕</button>
+        </div>
+        ${avs.length===0
+          ? `<p class="muted" style="margin-top:1rem;font-size:.875rem">Ainda não há avaliações deste sabor.</p>`
+          : `<ul style="list-style:none;margin-top:1rem;display:flex;flex-direction:column;gap:.75rem">
+              ${avs.map(a=>`<li style="border-bottom:1px solid rgb(62 39 35/.08);padding-bottom:.75rem">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <p>${stars(a.nota)}</p><span class="muted" style="font-size:.72rem">${a.data}</span>
+                </div>
+                <p style="margin-top:.25rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</p>
+                <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
+                  ${avatarHtml(a.nome, fotoDe(a.nome))}
+                  <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.nome)}</span>
+                </div>
+              </li>`).join("")}
+            </ul>`}
+      </div>
+    </div>`;
+}
+function fecharModal(){ document.getElementById("modal-slot").innerHTML = ""; }
+document.addEventListener("keydown", e => { if (e.key==="Escape") fecharModal(); });
+function setQtd(id, q){
+  const p = byId(id);
+  if (q<=0) delete S.carrinho[id];
+  else S.carrinho[id] = Math.min(q, p.estoque);
+  render();
+}
+
+/* ---------- Pedido (espelho de src/lib/data/pedidos.ts) ---------- */
+function confirmarPedido(){
+  const c = S.checkout;
+  c.erro = null;
+  if (!c.local.trim()){ c.erro = "Informe o local da entrega dentro da empresa."; return render(); }
+  if (c.quando==="horario"){
+    if (!/^\d{2}:\d{2}$/.test(c.hora)){ c.erro="Escolha um horário válido."; return render(); }
+    const [h,m] = c.hora.split(":").map(Number);
+    const alvo = new Date(); alvo.setHours(h,m,0,0);
+    const diff = (alvo - new Date())/60000;
+    if (diff < 0){ c.erro="Esse horário já passou. Escolha um horário mais tarde."; return render(); }
+    if (diff < ANTECEDENCIA_MIN){ c.erro=`Precisamos de pelo menos ${ANTECEDENCIA_MIN} minutos para preparar seu pedido.`; return render(); }
+  }
+  const pr = precificar();
+  const pedido = {
+    id: Math.random().toString(36).slice(2), numero: ++S.seq,
+    cliente: { nome: S.perfil.nome, tel: S.perfil.tel },
+    itens: pr.linhas.map(l=>({id:l.id, nome:byId(l.id).nome, q:l.q, efetivo:l.efetivo})),
+    subtotal: pr.subtotal, economia: pr.economia, total: pr.total,
+    local: c.local.trim(), quando: c.quando==="agora" ? "agora" : c.hora,
+    status: "Pendente", criadoEm: new Date(),
+  };
+  S.pedidos.unshift(pedido);
+  S.carrinho = {};
+  notificarAdmin(pedido);
+  nav("confirmado", pedido.numero);
+}
+function notificarAdmin(pedido){
+  const slot = document.getElementById("toast-slot");
+  slot.innerHTML = `
+    <div class="toast" role="status">
+      <p class="display" style="font-weight:900">🔔 Novo pedido recebido!</p>
+      <p style="font-size:.875rem;color:rgb(255 249 242/.8);margin-top:.25rem">
+        Pedido #${pedido.numero} — ${esc(pedido.cliente.nome)} — ${reais(pedido.total)}</p>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem">
+        <button class="btn" style="background:var(--casquinha);color:var(--cacau);font-weight:700"
+          onclick="S.adminTab='pedidos';nav('admin');document.getElementById('toast-slot').innerHTML=''">Ver pedido</button>
+        <button class="btn" style="color:rgb(255 249 242/.7)"
+          onclick="document.getElementById('toast-slot').innerHTML=''">Fechar</button>
+      </div>
+    </div>`;
+  setTimeout(()=>{ slot.innerHTML=""; }, 9000);
+}
+function carimbos(nome){
+  const entregues = S.pedidos.filter(p=>p.status==="Entregue" && p.cliente.nome===nome);
+  const hist = entregues.map(p=>({pedido:p.numero, n:p.itens.reduce((s,i)=>s+i.q,0),
+    data:p.criadoEm.toLocaleDateString("pt-BR")}));
+  return { total: hist.reduce((s,h)=>s+h.n,0), hist };
+}
+
+/* ---------- Views ---------- */
+function vHeader(){
+  const cones = precificar().cones;
+  return `<header class="loja"><div class="wrap inner">
+    <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
+      ${S.view!=="home" ? backBtn() : ""}
+      <a href="#" class="logo display" onclick="nav('home');return false">
+        <span class="selo carimbo">🍦</span>Cones da Casa</a>
+    </div>
+    <nav style="display:flex;align-items:center;gap:.5rem">
+      <button class="btn" style="font-weight:600" onclick="nav(S.perfil?'conta':'login')">
+        ${S.perfil ? "Olá, "+esc(S.perfil.nome.split(" ")[0]) : "Entrar"}</button>
+      <button class="cart-btn" aria-label="Carrinho" onclick="nav('carrinho')">🛒
+        ${cones>0?`<span class="cart-count">${cones}</span>`:""}</button>
+    </nav>
+  </div></header>`;
+}
+function vFooter(){
+  return `<footer><p class="display" style="font-size:.875rem;font-weight:700;color:rgb(62 39 35/.7)">Cones da Casa</p>
+    <p style="margin-top:.25rem">Pagamento combinado direto com o vendedor, de preferência via Pix.</p>
+    <p style="margin-top:.25rem">Entrega exclusivamente dentro da empresa.</p></footer>`;
+}
+function vCardProduto(p){
+  const esg = p.estoque<=0;
+  return `<article class="card pcard ${esg?"esgotado":""}">
+    <div class="pfoto" style="background:${p.grad}" role="img" aria-label="Foto do cone ${esc(p.nome)}"
+         onclick="nav('produto','${p.id}')">
+      <span>${p.emoji}</span><div class="tags">${badges(p, true)}</div>
+    </div>
+    <div class="pbody">
+      <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:start">
+        <h3 class="display" style="font-size:1.1rem;font-weight:700;cursor:pointer" onclick="nav('produto','${p.id}')">${esc(p.nome)}</h3>
+        <p class="display" style="font-size:1.1rem;font-weight:900">${reais(p.unit)}</p>
+      </div>
+      <p class="muted" style="font-size:.875rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(p.desc)}</p>
+      <button class="rating-btn" style="font-size:.875rem"
+        aria-label="Ver as ${p.qtd} avaliações de ${esc(p.nome)}"
+        onclick="event.stopPropagation();abrirAvaliacoes('${p.id}')">${stars(p.nota,p.qtd)}</button>
+      <p style="font-size:.75rem;font-weight:600;color:var(--pistache)">2 por ${reais(p.dupla*2)} — vale misturar sabores</p>
+      <button class="btn btn-primary" style="margin-top:auto" ${esg?"disabled":""}
+        onclick="addCart('${p.id}')">${esg?"Esgotado":"Adicionar ao carrinho"}</button>
+    </div>
+  </article>`;
+}
+function vHome(){
+  const vis = PRODUTOS.filter(p=>S.filtro==="todos"||p.cat===S.filtro);
+  const disponiveis = PRODUTOS.filter(p=>p.estoque>0);
+  const conesRestantes = PRODUTOS.reduce((s,p)=>s+p.estoque,0);
+  const tagEstoque = conesRestantes===0 ? "Estoque esgotado por hoje"
+    : conesRestantes===1 ? "Resta 1 cone hoje" : `Restam ${conesRestantes} cones hoje`;
+  return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;display:flex;flex-direction:column;gap:3rem">
+    <section class="hero">
+      <span class="big" aria-hidden>🍦</span>
+      <p class="carimbo" style="display:inline-block;padding:.25rem .75rem;font-size:.7rem;font-weight:700;
+        letter-spacing:.12em;text-transform:uppercase;color:var(--casquinha-claro)">${tagEstoque}</p>
+      <h1 class="display">Cones trufados artesanais, entregues na sua mesa.</h1>
+      <p style="margin-top:.75rem;font-size:.875rem;color:rgb(255 249 242/.7);max-width:26rem">
+        Leve dois cones e pague menos.</p>
+      <a href="#catalogo" class="btn" style="margin-top:1.5rem;background:var(--casquinha);color:var(--cacau);font-weight:700">Ver os sabores</a>
+    </section>
+
+    ${disponiveis.length>0 ? `<section aria-labelledby="t-disp">
+      <h2 id="t-disp" class="display" style="font-size:1.5rem;font-weight:900">
+        ${disponiveis.length===1 ? "Sabor disponível hoje" : "Sabores disponíveis hoje"}</h2>
+      <div class="grid c2 c3" style="margin-top:1rem">${disponiveis.map(vCardProduto).join("")}</div>
+    </section>` : ""}
+
+    <section id="catalogo" aria-labelledby="t-cat">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:.75rem">
+        <h2 id="t-cat" class="display" style="font-size:1.5rem;font-weight:900">Todos os sabores</h2>
+        <div class="chips" role="tablist">
+          ${[["todos","Todos"],["classico","Clássicos"],["premium","Premium"]].map(([id,l])=>
+            `<button class="chip" role="tab" aria-selected="${S.filtro===id}"
+              onclick="S.filtro='${id}';render()">${l}</button>`).join("")}
+        </div>
+      </div>
+      <div class="grid c2 c3" style="margin-top:1rem">${vis.map(vCardProduto).join("")}</div>
+    </section>
+
+    ${AVALIACOES.length>=MIN_DEPOIMENTOS ? `<section aria-labelledby="t-av">
+      <h2 id="t-av" class="display" style="font-size:1.5rem;font-weight:900">Quem já provou</h2>
+      <div class="dep-carousel" style="margin-top:.5rem">
+        <div class="dep-track">
+          ${[...AVALIACOES, ...AVALIACOES].map(a=>`<figure class="card dep-card">
+            <p>${stars(a.nota)}</p>
+            <blockquote style="margin-top:.5rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</blockquote>
+            <figcaption style="margin-top:.75rem;display:flex;align-items:center;gap:.6rem">
+              ${avatarHtml(a.nome, fotoDe(a.nome))}
+              <span class="muted" style="font-size:.75rem;font-weight:600;line-height:1.35">
+                ${esc(a.nome)} · ${esc(byId(a.pid).nome)}<br>${a.data}</span>
+            </figcaption>
+          </figure>`).join("")}
+        </div>
+      </div>
+    </section>` : ""}
+
+    <section style="background:rgb(232 199 154/.4);border-radius:var(--radius);padding:1.5rem" aria-labelledby="t-fid">
+      <div style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center">
+        <div>
+          <h2 id="t-fid" class="display" style="font-size:1.5rem;font-weight:900">Cartão fidelidade</h2>
+          <p class="muted" style="margin-top:.25rem;font-size:.875rem;max-width:26rem">
+            Cada cone entregue vale um carimbo. Complete o cartão e ganhe a recompensa da casa.</p>
+        </div>
+        <button class="btn btn-primary" onclick="nav('fidelidade')">Ver meu cartão</button>
+      </div>
+    </section>
+
+    <section class="card" style="padding:1.5rem" aria-labelledby="t-sug">
+      <h2 id="t-sug" class="display" style="font-size:1.5rem;font-weight:900">Tem alguma sugestão?</h2>
+      <p class="muted" style="margin-top:.25rem;font-size:.875rem">
+        Quer ver um novo sabor, combinação ou melhoria por aqui? Conte para a gente!</p>
+      ${S.sugestaoOk
+        ? `<p class="ok" role="status" style="margin-top:1rem">Sugestão enviada. Obrigado por ajudar a melhorar a casa! 💚</p>`
+        : `<div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1rem">
+            <textarea id="sug" rows="2" class="field" style="flex:1;min-width:14rem;resize:none"
+              placeholder="Ex: cone de pistache, combo com café..." aria-label="Sua sugestão"></textarea>
+            <button class="btn btn-primary" style="align-self:start"
+              onclick="if(document.getElementById('sug').value.trim()){S.sugestaoOk=true;render()}">Enviar sugestão</button>
+          </div>`}
+    </section>
+  </main>${vFooter()}`;
+}
+function vProduto(){
+  const p = byId(S.param);
+  if (!p) return vHome();
+  const esg = p.estoque<=0;
+  const avs = AVALIACOES.filter(a=>a.pid===p.id);
+  return `${vHeader()}<main class="wrap" style="padding-top:1.5rem">
+    <div class="grid c2" style="gap:2rem">
+      <div class="card" style="aspect-ratio:4/3;max-height:20rem;align-self:start;display:grid;place-items:center;font-size:5.5rem;
+        background:${p.grad};${esg?"filter:saturate(.5)":""}" role="img" aria-label="Foto do cone ${esc(p.nome)}">${p.emoji}</div>
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">${badges(p)}</div>
+        <h1 class="display" style="font-size:2.25rem;font-weight:900">${esc(p.nome)}</h1>
+        <button class="rating-btn" aria-label="Ver as ${p.qtd} avaliações de ${esc(p.nome)}"
+          onclick="abrirAvaliacoes('${p.id}')">${stars(p.nota,p.qtd)}</button>
+        <p style="color:rgb(62 39 35/.7)">${esc(p.desc)}</p>
+        <div class="card" style="padding:1.25rem">
+          <p class="display" style="font-size:1.9rem;font-weight:900">${reais(p.unit)}</p>
+          <p style="margin-top:.25rem;font-size:.875rem;font-weight:600;color:var(--pistache)">
+            ${reais(p.dupla)} na compra de 2</p>
+          <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-top:1rem">
+            <div class="stepper" role="group" aria-label="Quantidade">
+              <button aria-label="Diminuir" onclick="pq(-1)" ${pqv<=1?"disabled":""}>−</button>
+              <span id="pq">${pqv}</span>
+              <button aria-label="Aumentar" onclick="pq(1)" ${pqv>=Math.max(p.estoque,1)?"disabled":""}>+</button>
+            </div>
+            <button class="btn btn-primary" style="flex:1" ${esg?"disabled":""}
+              onclick="addCart('${p.id}',pqv)">${esg?"Esgotado":"Adicionar ao carrinho"}</button>
+          </div>
+          ${!esg && p.estoque<=5 ? `<p style="margin-top:.5rem;font-size:.75rem;font-weight:600;color:var(--framboesa)">
+            Só ${p.estoque} no estoque de hoje.</p>` : ""}
+        </div>
+        <section aria-labelledby="t-avp">
+          <h2 id="t-avp" class="display" style="font-size:1.25rem;font-weight:900">Avaliações</h2>
+          ${avs.length===0
+            ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Seja a primeira pessoa a avaliar este sabor após a compra.</p>`
+            : `<ul style="list-style:none;margin-top:.75rem;display:flex;flex-direction:column;gap:.75rem">
+                ${avs.slice(0,2).map(a=>`<li class="card" style="padding:1rem">
+                  <div style="display:flex;justify-content:space-between"><p>${stars(a.nota)}</p>
+                    <span class="muted" style="font-size:.75rem">${a.data}</span></div>
+                  <p style="margin-top:.25rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</p>
+                  <div style="display:flex;align-items:center;gap:.5rem;margin-top:.6rem">
+                    ${avatarHtml(a.nome, fotoDe(a.nome))}
+                    <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.nome)}</span>
+                  </div>
+                </li>`).join("")}</ul>
+              ${avs.length>2?`<button class="btn btn-ghost" style="margin-top:.75rem"
+                onclick="abrirAvaliacoes('${p.id}')">Ver todas as avaliações (${avs.length})</button>`:""}`}
+        </section>
+      </div>
+    </div>
+    <section style="margin-top:3rem" aria-labelledby="t-outros">
+      <h2 id="t-outros" class="display" style="font-size:1.25rem;font-weight:900">Outros sabores</h2>
+      <div class="mini-row" style="margin-top:.75rem">
+        ${PRODUTOS.filter(x=>x.id!==p.id).map(x=>`<article class="card mini-card"
+          onclick="nav('produto','${x.id}')" role="link" tabindex="0" aria-label="Ver ${esc(x.nome)}"
+          onkeydown="if(event.key==='Enter')nav('produto','${x.id}')">
+          <div class="mini-foto" style="background:${x.grad};${x.estoque<=0?"filter:saturate(.5)":""}"
+            role="img" aria-label="Foto do cone ${esc(x.nome)}">${x.emoji}</div>
+          <div style="padding:.6rem .75rem">
+            <p class="display" style="font-size:.9rem;font-weight:700">${esc(x.nome)}</p>
+            <p style="font-size:.8rem;font-weight:700">
+              ${x.estoque<=0?'<span style="color:var(--framboesa)">Esgotado</span>':reais(x.unit)}</p>
+          </div>
+        </article>`).join("")}
+      </div>
+    </section>
+  </main>${vFooter()}`;
+}
+let pqv = 1;
+function pq(d){ const p=byId(S.param); pqv=Math.min(Math.max(1,pqv+d),Math.max(p.estoque,1)); render(); }
+
+function vBreakdown(pr){
+  return `<dl class="linhas">
+    <div class="muted"><dt>Subtotal individual</dt><dd>${reais(pr.subtotal)}</dd></div>
+    ${pr.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia</dt><dd>− ${reais(pr.economia)}</dd></div>`:""}
+    <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total)}</dd></div>
+  </dl>`;
+}
+function vCarrinho(){
+  const pr = precificar();
+  if (pr.linhas.length===0) return `${vHeader()}<main class="wrap" style="padding-top:1.5rem">
+    <div class="card" style="padding:3.5rem 1.5rem;text-align:center;display:flex;flex-direction:column;gap:.75rem;align-items:center">
+      <span style="font-size:3rem" aria-hidden>🛒</span>
+      <h1 class="display" style="font-size:1.25rem;font-weight:900">Seu carrinho está vazio</h1>
+      <p class="muted" style="font-size:.875rem">Que tal começar pelos queridinhos da casa?</p>
+      <button class="btn btn-primary" onclick="nav('home')">Ver o catálogo</button>
+    </div></main>${vFooter()}`;
+  return `${vHeader()}<main class="wrap split" style="padding-top:1.5rem">
+    <section>
+      <h1 class="display" style="font-size:1.9rem;font-weight:900">Seu pedido</h1>
+      <ul style="list-style:none;margin-top:1rem;display:flex;flex-direction:column;gap:.75rem">
+        ${pr.linhas.map(l=>{const p=byId(l.id);return `<li class="card" style="display:flex;gap:1rem;align-items:center;padding:1rem">
+          <span aria-hidden style="width:4rem;height:4rem;flex-shrink:0;display:grid;place-items:center;
+            border-radius:1rem;font-size:1.8rem;background:${p.grad}">${p.emoji}</span>
+          <div style="flex:1;min-width:0">
+            <p class="display" style="font-weight:700">${esc(p.nome)}</p>
+            <p class="muted" style="font-size:.75rem">${l.q} ${l.q===1?"unidade":"unidades"}</p>
+            <button style="margin-top:.25rem;font-size:.75rem;font-weight:600;color:var(--framboesa);text-decoration:underline"
+              onclick="setQtd('${l.id}',0)">Remover</button>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:end;gap:.5rem">
+            <p class="display" style="font-weight:900">${reais(l.efetivo)}</p>
+            <div class="stepper" role="group" aria-label="Quantidade de ${esc(p.nome)}">
+              <button aria-label="Diminuir" onclick="setQtd('${l.id}',${l.q-1})">−</button>
+              <span>${l.q}</span>
+              <button aria-label="Aumentar" onclick="setQtd('${l.id}',${l.q+1})" ${l.q>=p.estoque?"disabled":""}>+</button>
+            </div>
+          </div>
+        </li>`}).join("")}
+      </ul>
+      ${pr.economia>0?`<p class="carimbo" role="status" style="display:inline-flex;gap:.5rem;margin-top:1rem;
+        padding:.4rem 1rem;font-size:.875rem;font-weight:700;color:var(--pistache)">🎉 Você economizou ${reais(pr.economia)}</p>`:""}
+    </section>
+    <aside class="card" style="padding:1.25rem">
+      ${vBreakdown(pr)}
+      <button class="btn btn-primary" style="width:100%;margin-top:1rem;min-height:3rem" onclick="nav('checkout')">Continuar pedido</button>
+      <p class="muted" style="margin-top:.75rem;text-align:center;font-size:.75rem">Pagamento combinado na entrega, de preferência via Pix.</p>
+    </aside>
+  </main>${vFooter()}`;
+}
+function vCheckout(){
+  if (!S.perfil){ S.voltarPara="checkout"; return vLogin(true); }
+  const pr = precificar();
+  if (pr.linhas.length===0) return vCarrinho();
+  const c = S.checkout;
+  return `${vHeader()}<main class="wrap split" style="padding-top:1.5rem">
+    <div style="display:flex;flex-direction:column;gap:1.25rem">
+      <h1 class="display" style="font-size:1.9rem;font-weight:900">Finalizar pedido</h1>
+      <div class="card" style="padding:1.25rem">
+        <label for="local" class="display" style="font-size:1.1rem;font-weight:700">Qual o local da entrega?</label>
+        <input id="local" class="field" style="margin-top:.75rem" required
+          placeholder="Ex: Banco de Dados, Comercial, TI,..." value="${esc(c.local)}"
+          oninput="S.checkout.local=this.value;atualizarResumo()">
+        <p class="muted" style="margin-top:.5rem;font-size:.75rem">A entrega acontece exclusivamente dentro da empresa.</p>
+      </div>
+      <div class="card" style="padding:1.25rem">
+        <fieldset style="border:none">
+          <legend class="display" style="font-size:1.1rem;font-weight:700">Quando deseja receber?</legend>
+          <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.75rem">
+            <label class="radio-opt ${c.quando==="agora"?"on":""}">
+              <input type="radio" name="quando" ${c.quando==="agora"?"checked":""}
+                onchange="S.checkout.quando='agora';render()">
+              <span style="font-size:.875rem;font-weight:600">Agora</span>
+              <span class="muted" style="font-size:.75rem">entrega assim que possível</span>
+            </label>
+            <label class="radio-opt ${c.quando==="horario"?"on":""}">
+              <input type="radio" name="quando" ${c.quando==="horario"?"checked":""}
+                onchange="S.checkout.quando='horario';render()">
+              <span style="font-size:.875rem;font-weight:600">Em um horário específico</span>
+              ${c.quando==="horario"?`<input type="time" class="field" style="width:auto" aria-label="Horário desejado"
+                value="${c.hora}" onchange="S.checkout.hora=this.value;atualizarResumo()">`:""}
+            </label>
+          </div>
+        </fieldset>
+      </div>
+      ${c.erro?`<p class="alerta" role="alert">${esc(c.erro)}</p>`:""}
+    </div>
+    <aside class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Resumo do pedido</h2>
+      <dl class="linhas" style="margin-top:.75rem">
+        ${pr.linhas.map(l=>`<div><dt>${l.q}× ${esc(byId(l.id).nome)}</dt><dd style="font-weight:600">${reais(l.efetivo)}</dd></div>`).join("")}
+      </dl>
+      <div style="border-top:1px solid rgb(62 39 35/.1);margin-top:.75rem;padding-top:.75rem">${vBreakdown(pr)}</div>
+      <dl class="linhas" style="border-top:1px solid rgb(62 39 35/.1);margin-top:.75rem;padding-top:.75rem">
+        <div><dt class="muted">Entrega</dt><dd style="font-weight:600" id="r-local">${esc(c.local.trim())||"—"}</dd></div>
+        <div><dt class="muted">Receber</dt><dd style="font-weight:600" id="r-quando">${c.quando==="agora"?"Agora":(c.hora?"às "+c.hora:"—")}</dd></div>
+      </dl>
+      <button class="btn btn-primary" style="width:100%;margin-top:1rem;min-height:3rem" id="btn-conf"
+        onclick="this.disabled=true;this.textContent='Confirmando pedido...';setTimeout(confirmarPedido,450)">Confirmar pedido</button>
+    </aside>
+  </main>${vFooter()}`;
+}
+function atualizarResumo(){
+  const c=S.checkout;
+  const l=document.getElementById("r-local"), q=document.getElementById("r-quando");
+  if(l) l.textContent = c.local.trim()||"—";
+  if(q) q.textContent = c.quando==="agora"?"Agora":(c.hora?"às "+c.hora:"—");
+}
+function vConfirmado(){
+  const p = S.pedidos.find(x=>x.numero===S.param);
+  if (!p) return vHome();
+  return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
+    <div class="card" style="padding:2rem;text-align:center">
+      <span class="carimbo" aria-hidden style="margin:0 auto;width:5rem;height:5rem;display:grid;
+        place-items:center;font-size:2.25rem;color:var(--pistache)">✓</span>
+      <h1 class="display" style="margin-top:1rem;font-size:1.9rem;font-weight:900">Pedido realizado com sucesso!</h1>
+      <p class="display" style="margin-top:.5rem;font-size:1.25rem;font-weight:700;color:var(--casquinha)">Pedido #${p.numero}</p>
+      <dl class="linhas" style="margin-top:1.5rem;background:var(--chantilly);border-radius:1rem;padding:1rem;text-align:left">
+        ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
+        ${p.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia</dt><dd>− ${reais(p.economia)}</dd></div>`:""}
+        <div class="total-row display" style="font-size:1.1rem"><dt>Total</dt><dd>${reais(p.total)}</dd></div>
+        <div style="padding-top:.25rem"><dt class="muted">Entrega</dt><dd style="font-weight:600">${esc(p.local)}</dd></div>
+        <div><dt class="muted">Receber</dt><dd style="font-weight:600">${p.quando==="agora"?"Agora":"às "+p.quando}</dd></div>
+      </dl>
+      <p class="muted" style="margin-top:1rem;font-size:.875rem">O pagamento é combinado direto com o vendedor, de preferência via Pix.</p>
+      <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.5rem">
+        <button class="btn btn-verde" style="min-height:3rem;font-weight:700"
+          onclick="alert('No projeto real, este botão abre o WhatsApp com a mensagem do pedido preenchida (wa.me).')">
+          Enviar pedido pelo WhatsApp</button>
+        <button class="btn btn-ghost" style="min-height:3rem;font-weight:700" onclick="nav('pedidos')">Acompanhar meus pedidos</button>
+      </div>
+    </div>
+  </main>${vFooter()}`;
+}
+function vAuthShell(conteudo){
+  return `<main style="min-height:100dvh;display:grid;place-items:center;padding:1rem;position:relative">
+    ${backBtn("position:fixed;top:1rem;left:1rem;z-index:10")}
+    <div style="width:100%;max-width:24rem">
+      <p class="display" style="text-align:center;font-size:1.1rem;font-weight:900;margin-bottom:1rem;cursor:pointer"
+        onclick="nav('home')">🍦 Cones da Casa</p>
+      ${conteudo}
+    </div>
+  </main>`;
+}
+function vLogin(bloqueio){
+  return vAuthShell(`<div class="card" style="padding:1.5rem">
+    <h1 class="display" style="font-size:1.5rem;font-weight:900">Entrar</h1>
+    <p class="muted" style="margin-top:.25rem;font-size:.875rem">
+      ${bloqueio?"Entre para registrar seu pedido — leva segundos.":"Entre com seu WhatsApp e senha."}</p>
+    <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem">
+      <div><label class="label" for="l-tel">WhatsApp</label>
+        <input id="l-tel" class="field" type="tel" inputmode="tel" placeholder="(11) 9 9999-9999"></div>
+      <div><label class="label" for="l-senha">Senha</label>
+        <input id="l-senha" class="field" type="password"
+          onkeydown="if(event.key==='Enter')fazerLogin()"></div>
+      ${S.loginErro?`<p class="alerta" role="alert">${esc(S.loginErro)}</p>`:""}
+      <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
+    </div>
+    <p style="margin-top:1.25rem;text-align:center;font-size:.875rem" class="muted">
+      Ainda não tem conta?
+      <button style="font-weight:700;color:var(--cacau);text-decoration:underline"
+        onclick="nav('cadastro')">Criar conta</button></p>
+  </div>`);
+}
+function vCadastro(){
+  return vAuthShell(`<div class="card" style="padding:1.5rem">
+    <h1 class="display" style="font-size:1.5rem;font-weight:900">Criar conta</h1>
+    <p class="muted" style="margin-top:.25rem;font-size:.875rem">
+      Informe seus dados uma única vez — nos próximos pedidos você não precisa repetir nada.</p>
+    <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem">
+      <div><label class="label" for="r-nome">Nome</label>
+        <input id="r-nome" class="field"></div>
+      <div><label class="label" for="r-tel">WhatsApp</label>
+        <input id="r-tel" class="field" type="tel" inputmode="tel" placeholder="(11) 9 9999-9999"></div>
+      <div><label class="label" for="r-senha">Senha <span class="muted" style="font-weight:400">(mínimo 6 caracteres)</span></label>
+        <input id="r-senha" class="field" type="password" minlength="6"></div>
+      <div><label class="label" for="r-conf">Confirmar senha</label>
+        <input id="r-conf" class="field" type="password" minlength="6"
+          onkeydown="if(event.key==='Enter')fazerCadastro()"></div>
+      ${S.cadastroErro?`<p class="alerta" role="alert">${esc(S.cadastroErro)}</p>`:""}
+      <button class="btn btn-primary" onclick="fazerCadastro()">Criar conta</button>
+    </div>
+    <p style="margin-top:1.25rem;text-align:center;font-size:.875rem" class="muted">
+      Já tem conta?
+      <button style="font-weight:700;color:var(--cacau);text-decoration:underline"
+        onclick="nav('login')">Entrar</button></p>
+    <p class="muted" style="margin-top:1rem;text-align:center;font-size:.72rem">
+      Usamos seus dados só para o pedido e a entrega. Nada é exposto publicamente.</p>
+  </div>`);
+}
+function fazerLogin(){
+  const tel = document.getElementById("l-tel").value.trim();
+  const senha = document.getElementById("l-senha").value;
+  if (!tel || !senha){ S.loginErro="Informe WhatsApp e senha."; return render(); }
+  const conta = S.contas.find(c=>c.tel===tel);
+  if (!conta){ S.loginErro="Não encontramos uma conta com este WhatsApp. Crie uma conta abaixo."; return render(); }
+  if (conta.senha!==senha){ S.loginErro="Senha incorreta."; return render(); }
+  S.perfil = conta; S.loginErro = null;
+  const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
+}
+function fazerCadastro(){
+  const nome = document.getElementById("r-nome").value.trim();
+  const tel = document.getElementById("r-tel").value.trim();
+  const senha = document.getElementById("r-senha").value;
+  const conf = document.getElementById("r-conf").value;
+  if (!nome || !tel){ S.cadastroErro="Nome e WhatsApp são necessários para identificar seu pedido."; return render(); }
+  if (senha.length<6){ S.cadastroErro="A senha deve ter no mínimo 6 caracteres."; return render(); }
+  if (senha!==conf){ S.cadastroErro="As senhas não coincidem."; return render(); }
+  if (S.contas.some(c=>c.tel===tel)){ S.cadastroErro="Já existe uma conta com este WhatsApp. Use a opção Entrar."; return render(); }
+  const conta = { nome, tel, senha, email:"", foto:null };
+  S.contas.push(conta);
+  S.perfil = conta; S.cadastroErro = null;
+  const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
+}
+function vConta(){
+  if (!S.perfil){ S.voltarPara="conta"; return vLogin(false); }
+  return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem;display:flex;flex-direction:column;gap:1.25rem">
+    <h1 class="display" style="font-size:1.9rem;font-weight:900">Minha conta</h1>
+    <nav class="grid c2" aria-label="Seções da conta">
+      <button class="card" style="padding:1rem;text-align:center" onclick="nav('pedidos')">
+        <span style="font-size:1.5rem" aria-hidden>📦</span><p style="margin-top:.25rem;font-size:.875rem;font-weight:700">Meus pedidos</p></button>
+      <button class="card" style="padding:1rem;text-align:center" onclick="nav('fidelidade')">
+        <span style="font-size:1.5rem" aria-hidden>🍦</span><p style="margin-top:.25rem;font-size:.875rem;font-weight:700">Minha fidelidade</p></button>
+    </nav>
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Meu perfil</h2>
+      <div style="display:flex;align-items:center;gap:1rem;margin-top:.75rem">
+        ${avatarHtml(S.perfil.nome, S.perfil.foto, true)}
+        <div style="display:flex;flex-direction:column;gap:.4rem">
+          <label class="btn btn-ghost" style="cursor:pointer">
+            ${S.perfil.foto ? "Trocar foto" : "Adicionar foto"}
+            <input type="file" accept="image/*" style="display:none" onchange="carregarFoto(this)">
+          </label>
+          ${S.perfil.foto ? `<button style="font-size:.75rem;font-weight:600;color:var(--framboesa);text-decoration:underline"
+            onclick="S.perfil.foto=null;render()">Remover foto</button>` : ""}
+          <p class="muted" style="font-size:.72rem;max-width:14rem">Sua foto aparece junto das suas avaliações. Sem foto, mostramos suas iniciais.</p>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1rem">
+        <div><label class="label" for="c-nome">Nome</label>
+          <input id="c-nome" class="field" value="${esc(S.perfil.nome)}"></div>
+        <div><label class="label" for="c-tel">WhatsApp</label>
+          <input id="c-tel" class="field" value="${esc(S.perfil.tel)}"></div>
+        <div><label class="label" for="c-mail">E-mail</label>
+          <input id="c-mail" class="field" value="${esc(S.perfil.email||"")}"></div>
+        <div style="display:flex;gap:.75rem;align-items:center">
+          <button class="btn btn-primary" onclick="
+            Object.assign(S.perfil,{nome:document.getElementById('c-nome').value.trim(),
+                      tel:document.getElementById('c-tel').value.trim(),
+                      email:document.getElementById('c-mail').value.trim()});
+            document.getElementById('salvo-ok').style.display='inline'\">Salvar alterações</button>
+          <span id="salvo-ok" role="status" style="display:none;font-size:.875rem;font-weight:600;color:var(--pistache)">Salvo ✓</span>
+        </div>
+      </div>
+    </section>
+    <button class="btn btn-ghost" onclick="S.perfil=null;nav('home')">Sair da conta</button>
+  </main>${vFooter()}`;
+}
+function vPedidos(){
+  if (!S.perfil){ S.voltarPara="pedidos"; return vLogin(false); }
+  const meus = S.pedidos.filter(p=>p.cliente.nome===S.perfil.nome);
+  return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
+    <h1 class="display" style="font-size:1.9rem;font-weight:900">Meus pedidos</h1>
+    ${meus.length===0
+      ? `<div class="card" style="margin-top:1rem;padding:3.5rem 1.5rem;text-align:center;display:flex;flex-direction:column;gap:.75rem;align-items:center">
+          <span style="font-size:3rem" aria-hidden>📦</span>
+          <h2 class="display" style="font-size:1.25rem;font-weight:900">Nenhum pedido ainda</h2>
+          <p class="muted" style="font-size:.875rem">Seu primeiro cone está a poucos cliques de distância.</p>
+          <button class="btn btn-primary" onclick="nav('home')">Ver o catálogo</button></div>`
+      : `<ul style="list-style:none;margin-top:1rem;display:flex;flex-direction:column;gap:.75rem">
+          ${meus.map(p=>`<li class="card" style="padding:1.25rem">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <p class="display" style="font-weight:900">Pedido #${p.numero}</p>
+              <span class="status st-${p.status.replace(" ","_")}">${p.status}</span>
+            </div>
+            <p class="muted" style="margin-top:.25rem;font-size:.75rem">
+              ${p.criadoEm.toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})} · Entrega: ${esc(p.local)} ·
+              ${p.quando==="agora"?"Agora":"às "+p.quando}</p>
+            <dl class="linhas" style="margin-top:.75rem">
+              ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
+            </dl>
+            <p class="display" style="margin-top:.5rem;border-top:1px solid rgb(62 39 35/.1);padding-top:.5rem;
+              text-align:right;font-weight:900">${reais(p.total)}</p>
+          </li>`).join("")}</ul>`}
+  </main>${vFooter()}`;
+}
+function vFidelidade(){
+  if (!S.perfil){ S.voltarPara="fidelidade"; return vLogin(false); }
+  const d = carimbos(S.perfil.nome);
+  const noCartao = d.total % META_CARIMBOS, completos = Math.floor(d.total/META_CARIMBOS);
+  const faltam = META_CARIMBOS - noCartao;
+  return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem;display:flex;flex-direction:column;gap:1.25rem">
+    <h1 class="display" style="font-size:1.9rem;font-weight:900">Minha fidelidade</h1>
+    <div class="card" style="background:var(--cacau);color:var(--chantilly);padding:1.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <p class="display" style="font-size:1.1rem;font-weight:900">Meu Cartão Fidelidade</p>
+        <span class="carimbo" aria-hidden style="width:2.25rem;height:2.25rem;display:grid;place-items:center;color:var(--casquinha)">🍦</span>
+      </div>
+      <div class="stamps" role="img" aria-label="${noCartao} de ${META_CARIMBOS} carimbos">
+        ${Array.from({length:META_CARIMBOS},(_,i)=>
+          `<span class="s carimbo ${i<noCartao?"on":""}" aria-hidden>${i<noCartao?"🍦":""}</span>`).join("")}
+      </div>
+      <p class="display" style="margin-top:1rem;font-size:1.5rem;font-weight:900">${noCartao}/${META_CARIMBOS} cones</p>
+      <p style="margin-top:.25rem;font-size:.875rem;color:rgb(255 249 242/.7)">
+        ${d.total===0 ? "Seu primeiro cone entregue já vale um carimbo."
+          : `Faltam ${faltam} ${faltam===1?"cone":"cones"} para completar seu cartão.`}</p>
+      ${completos>0?`<p style="margin-top:.5rem;font-size:.75rem;font-weight:700;color:var(--casquinha-claro)">
+        🏆 ${completos} ${completos===1?"cartão completo":"cartões completos"} — fale com a casa para resgatar.</p>`:""}
+    </div>
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Histórico de carimbos</h2>
+      ${d.hist.length===0
+        ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">
+            Ainda sem carimbos — eles aparecem aqui quando um pedido é marcado como <strong>Entregue</strong> no painel.</p>`
+        : `<ul style="list-style:none;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem;font-size:.875rem">
+            ${d.hist.map(h=>`<li style="display:flex;justify-content:space-between;border-bottom:1px solid rgb(62 39 35/.08);padding-bottom:.5rem">
+              <span><strong style="color:var(--pistache)">+${h.n} ${h.n===1?"carimbo":"carimbos"}</strong> · Pedido #${h.pedido}</span>
+              <span class="muted">${h.data}</span></li>`).join("")}</ul>`}
+    </section>
+  </main>${vFooter()}`;
+}
+
+/* ---------- Admin ---------- */
+function vAdminHeader(){
+  const pend = S.pedidos.filter(p=>p.status==="Pendente").length;
+  return `<header class="admin"><div class="inner">
+    <div class="row1">
+      <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
+        ${backBtn("background:transparent;color:var(--chantilly);border-color:rgb(255 249 242/.3);box-shadow:none")}
+        <p class="display" style="font-size:1.1rem;font-weight:900">🍦 Cones da Casa · <span style="color:var(--casquinha-claro)">Painel</span></p>
+      </div>
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <span class="pill-pend" aria-live="polite">Pedidos pendentes: ${pend}</span>
+        <button style="font-size:.75rem;font-weight:600;color:rgb(255 249 242/.7);text-decoration:underline"
+          onclick="nav('home')">Ver loja</button>
+      </div>
+    </div>
+    <nav aria-label="Menu do painel">
+      <button ${S.adminTab==="dash"?'aria-current="page"':""} onclick="S.adminTab='dash';render()">Dashboard</button>
+      <button ${S.adminTab==="pedidos"?'aria-current="page"':""} onclick="S.adminTab='pedidos';render()">Pedidos</button>
+      <span style="margin-left:auto;align-self:center;font-size:.72rem;color:rgb(255 249 242/.4)" class="hide-mobile">
+        Produtos · Clientes · Fidelidade · Relatórios — Onda 2/3</span>
+    </nav>
+  </div></header>`;
+}
+function vAdmin(){
+  return `${vAdminHeader()}<main style="max-width:72rem;margin:0 auto;padding:1.5rem 1rem;background:rgb(246 234 217/.4);min-height:calc(100dvh - 7rem)">
+    ${S.adminTab==="dash" ? vAdminDash() : vAdminPedidos()}
+  </main>`;
+}
+function vAdminDash(){
+  const hoje = new Date().toDateString();
+  const deHoje = S.pedidos.filter(p=>p.criadoEm.toDateString()===hoje && p.status!=="Cancelado");
+  const cones = deHoje.reduce((s,p)=>s+p.itens.reduce((x,i)=>x+i.q,0),0);
+  const fat = deHoje.reduce((s,p)=>s+p.total,0);
+  const pend = S.pedidos.filter(p=>p.status==="Pendente").length;
+  const rank = {};
+  S.pedidos.filter(p=>p.status!=="Cancelado").forEach(p=>p.itens.forEach(i=>rank[i.nome]=(rank[i.nome]||0)+i.q));
+  const ranking = Object.entries(rank).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const esgotados = PRODUTOS.filter(p=>p.estoque<=0);
+  const stat = (r,v,cor="")=>`<div class="card" style="padding:1.25rem">
+    <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">${r}</p>
+    <p class="display" style="margin-top:.25rem;font-size:1.9rem;font-weight:900;${cor}">${v}</p></div>`;
+  return `<div style="display:flex;flex-direction:column;gap:1.25rem">
+    <h1 class="display" style="font-size:1.5rem;font-weight:900">Hoje</h1>
+    <div class="grid c2" style="grid-template-columns:repeat(auto-fit,minmax(9rem,1fr))">
+      ${stat("Pedidos", deHoje.length)}
+      ${stat("Cones vendidos", cones)}
+      ${stat("Faturamento", reais(fat), "color:var(--pistache)")}
+      ${stat("Pendentes", pend, pend>0?"color:var(--framboesa)":"")}
+    </div>
+    <div class="grid c2">
+      <section class="card" style="padding:1.25rem">
+        <h2 class="display" style="font-size:1.1rem;font-weight:700">Mais vendidos (geral)</h2>
+        ${ranking.length===0 ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Sem vendas registradas ainda — faça um pedido na loja para ver os dados chegando.</p>`
+          : `<ol style="list-style:none;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem;font-size:.875rem">
+              ${ranking.map(([n,q],i)=>`<li style="display:flex;justify-content:space-between;border-bottom:1px solid rgb(62 39 35/.08);padding-bottom:.5rem">
+                <span><strong style="color:var(--casquinha)">${i+1}.</strong> ${esc(n)}</span>
+                <span style="font-weight:600">${q} ${q===1?"cone":"cones"}</span></li>`).join("")}</ol>`}
+      </section>
+      <section class="card" style="padding:1.25rem">
+        <h2 class="display" style="font-size:1.1rem;font-weight:700">Atenção no estoque</h2>
+        ${esgotados.length===0 ? `<p style="margin-top:.5rem;font-size:.875rem;color:var(--pistache)">Nenhum produto esgotado. 👌</p>`
+          : `<ul style="list-style:none;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem;font-size:.875rem">
+              ${esgotados.map(p=>`<li style="display:flex;justify-content:space-between">
+                <span>${p.emoji} ${esc(p.nome)}</span><strong style="color:var(--framboesa)">Esgotado</strong></li>`).join("")}</ul>`}
+        <p class="muted" style="margin-top:.75rem;font-size:.72rem">Cadastro e edição de produtos entram na Onda 2 (com Supabase).</p>
+      </section>
+    </div>
+    <button class="btn btn-primary" style="align-self:start;min-height:3rem" onclick="S.adminTab='pedidos';render()">Gerenciar pedidos →</button>
+  </div>`;
+}
+function vAdminPedidos(){
+  const vis = S.pedidos.filter(p=>S.adminFiltro==="todos"||p.status===S.adminFiltro);
+  return `<div style="display:flex;flex-direction:column;gap:1rem">
+    <h1 class="display" style="font-size:1.5rem;font-weight:900">Pedidos</h1>
+    <div class="chips" role="tablist" aria-label="Filtrar pedidos por status">
+      ${["todos",...STATUS].map(f=>`<button class="chip" role="tab" aria-selected="${S.adminFiltro===f}"
+        onclick="S.adminFiltro='${f}';render()">${f==="todos"?"Todos":f}</button>`).join("")}
+    </div>
+    ${vis.length===0
+      ? `<div class="card" style="padding:3.5rem 1.5rem;text-align:center;display:flex;flex-direction:column;gap:.75rem;align-items:center">
+          <span style="font-size:3rem" aria-hidden>📭</span>
+          <h2 class="display" style="font-size:1.25rem;font-weight:900">Nenhum pedido aqui</h2>
+          <p class="muted" style="font-size:.875rem;max-width:24rem">
+            ${S.adminFiltro==="todos"?"Quando um cliente confirmar um pedido, ele aparece nesta lista em tempo real — teste voltando à loja e fazendo um pedido.":`Nenhum pedido com status "${S.adminFiltro}".`}</p>
+          <button class="btn btn-ghost" onclick="nav('home')">Ir para a loja</button></div>`
+      : `<ul style="list-style:none;display:flex;flex-direction:column;gap:.75rem">
+          ${vis.map(p=>`<li class="card" style="padding:1.25rem">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.75rem">
+              <div>
+                <p class="display" style="font-size:1.1rem;font-weight:900">Pedido #${p.numero}</p>
+                <p class="muted" style="font-size:.75rem">${esc(p.cliente.nome)} · ${esc(p.cliente.tel)} ·
+                  ${p.criadoEm.toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</p>
+              </div>
+              <span class="status st-${p.status.replace(" ","_")}">${p.status}</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;margin-top:.75rem">
+              <dl class="linhas" style="flex:1;min-width:12rem;max-width:20rem">
+                ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
+              </dl>
+              <div style="font-size:.875rem;text-align:right">
+                <p class="display" style="font-size:1.1rem;font-weight:900">${reais(p.total)}</p>
+                <p class="muted">📍 ${esc(p.local)}</p>
+                <p class="muted">🕐 ${p.quando==="agora"?"Agora":"às "+p.quando}</p>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:.75rem;border-top:1px solid rgb(62 39 35/.08);margin-top:1rem;padding-top:.75rem">
+              <label for="st-${p.id}" class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Status</label>
+              <select id="st-${p.id}" class="field" style="width:auto;border-radius:9999px;min-height:2.5rem;font-weight:600"
+                onchange="S.pedidos.find(x=>x.id==='${p.id}').status=this.value;render()">
+                ${STATUS.map(s=>`<option ${p.status===s?"selected":""}>${s}</option>`).join("")}
+              </select>
+              ${p.status==="Entregue"?`<span style="font-size:.75rem;font-weight:600;color:var(--pistache)">carimbos de fidelidade creditados</span>`:""}
+            </div>
+          </li>`).join("")}</ul>`}
+  </div>`;
+}
+
+/* ---------- Render ---------- */
+function render(){
+  const views = { home:vHome, produto:vProduto, carrinho:vCarrinho, checkout:vCheckout,
+    confirmado:vConfirmado, login:()=>vLogin(false), cadastro:vCadastro, conta:vConta,
+    pedidos:vPedidos, fidelidade:vFidelidade, admin:vAdmin };
+  if (S.view!=="produto") pqv = 1;
+  document.getElementById("app").innerHTML = (views[S.view]||vHome)();
+  const sw = document.getElementById("switch-btn");
+  sw.textContent = S.view==="admin" ? "← Ver loja" : "Painel admin";
+}
+render();
+</script>
+</body>
+</html>
