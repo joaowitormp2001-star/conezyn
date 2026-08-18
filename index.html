@@ -123,8 +123,13 @@
   .dep-card:hover{transform:scale(1.04)}
   @media(prefers-reduced-motion:reduce){.dep-track{animation:none}.dep-carousel{overflow-x:auto;mask-image:none;-webkit-mask-image:none}}
   .cart-toast{position:fixed;top:1rem;right:1rem;z-index:70;width:min(20rem,calc(100% - 2rem));
-    display:flex;gap:.75rem;align-items:center;padding:.85rem 1rem;animation:ct-in .3s ease-out}
+    padding:1rem 1rem .85rem;animation:ct-in .3s ease-out}
   .cart-toast.out{animation:ct-out .35s ease-in forwards}
+  .ct-close{position:absolute;top:.4rem;left:.4rem;width:1.85rem;height:1.85rem;border-radius:9999px;
+    display:grid;place-items:center;font-size:.9rem;line-height:1;color:rgb(62 39 35/.55)}
+  .ct-close:hover{background:rgb(62 39 35/.08);color:var(--cacau)}
+  .ct-body{display:flex;gap:.75rem;align-items:center;padding-left:1.35rem}
+  .ct-foot{display:flex;justify-content:flex-end;margin-top:.7rem}
   @keyframes ct-in{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
   @keyframes ct-out{to{transform:translateY(-16px);opacity:0}}
   .avatar{width:2.5rem;height:2.5rem;border-radius:9999px;object-fit:cover;flex-shrink:0;
@@ -133,10 +138,16 @@
   .avatar.lg{width:5rem;height:5rem;font-size:1.5rem}
   .back-btn{width:2.75rem;height:2.75rem;flex-shrink:0;display:grid;place-items:center;border-radius:9999px;
     border:1px solid rgb(62 39 35/.15);background:#fff;font-size:1.1rem;box-shadow:var(--shadow)}
-  .mini-card{width:10rem;flex-shrink:0;overflow:hidden;cursor:pointer;transition:transform .15s}
-  .mini-card:hover{transform:translateY(-2px)}
-  .mini-foto{aspect-ratio:4/3;display:grid;place-items:center;font-size:2rem}
-  .mini-row{display:flex;gap:.75rem;overflow-x:auto;padding:.25rem .25rem .75rem}
+  /* linha que ultrapassa a borda direita da tela e pode ser rolada */
+  .bleed-row{margin-right:calc(50% - 50vw);overflow-x:auto;scroll-snap-type:x proximity;
+    display:flex;gap:1rem;padding:.35rem 1rem 1rem .3rem}
+  .bleed-row>*{scroll-snap-align:start}
+  .sabor-card{width:15rem;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;
+    transition:transform .15s}
+  .sabor-card:hover{transform:translateY(-2px)}
+  .sabor-foto{aspect-ratio:4/3;display:grid;place-items:center;font-size:2.75rem;position:relative;cursor:pointer}
+  .av-row{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center}
+  .av-card{width:min(100%,19rem);padding:1.15rem;display:flex;flex-direction:column}
   .modal-overlay{position:fixed;inset:0;z-index:80;background:rgb(62 39 35/.45);
     display:grid;place-items:center;padding:1rem;animation:ov-in .15s ease-out}
   @keyframes ov-in{from{opacity:0}to{opacity:1}}
@@ -213,6 +224,7 @@ const S = {
   contas: [],                  // contas registradas: {nome, tel, senha, email, foto}
   hist: [],                    // pilha de navegação p/ botão voltar
   adminTab: "dash", adminFiltro: "todos",
+  notif: { ativo: false, som: true, log: [] },
 };
 const byId = id => PRODUTOS.find(p => p.id === id);
 const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -289,20 +301,31 @@ function addCart(id, q=1){
 }
 function mostrarCartToast(p, q){
   const slot = document.getElementById("cart-toast-slot");
-  slot.innerHTML = `<div class="cart-toast card" role="status">
-    <span aria-hidden style="width:3rem;height:3rem;flex-shrink:0;display:grid;place-items:center;
-      border-radius:.85rem;font-size:1.4rem;background:${p.grad}">${p.emoji}</span>
-    <div style="min-width:0">
-      <p style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--pistache)">
-        Adicionado ao carrinho</p>
-      <p class="display" style="font-weight:700;line-height:1.2">${q>1?q+"× ":""}${esc(p.nome)}</p>
-      <p class="muted" style="font-size:.75rem">${reais(p.unit)} · em dupla ${reais(p.dupla)}</p>
+  slot.innerHTML = `<div class="cart-toast card" role="status" style="position:fixed">
+    <button class="ct-close" aria-label="Fechar aviso" onclick="fecharCartToast()">✕</button>
+    <div class="ct-body">
+      <span aria-hidden style="width:3rem;height:3rem;flex-shrink:0;display:grid;place-items:center;
+        border-radius:.85rem;font-size:1.4rem;background:${p.grad}">${p.emoji}</span>
+      <div style="min-width:0">
+        <p style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--pistache)">
+          Adicionado ao carrinho</p>
+        <p class="display" style="font-weight:700;line-height:1.2">${q>1?q+"× ":""}${esc(p.nome)}</p>
+        <p class="muted" style="font-size:.75rem">${reais(p.unit)} · em dupla ${reais(p.dupla)}</p>
+      </div>
+    </div>
+    <div class="ct-foot">
+      <button class="btn btn-primary" style="min-height:2.4rem;padding:.4rem 1.1rem;font-size:.8rem"
+        onclick="fecharCartToast();nav('carrinho')">Continuar</button>
     </div>
   </div>`;
   const el = slot.firstElementChild;
   clearTimeout(mostrarCartToast.t1); clearTimeout(mostrarCartToast.t2);
   mostrarCartToast.t1 = setTimeout(()=>{ el.classList.add("out"); }, 4000);
   mostrarCartToast.t2 = setTimeout(()=>{ if (slot.firstElementChild===el) slot.innerHTML=""; }, 4400);
+}
+function fecharCartToast(){
+  clearTimeout(mostrarCartToast.t1); clearTimeout(mostrarCartToast.t2);
+  document.getElementById("cart-toast-slot").innerHTML = "";
 }
 function iniciais(nome){
   const p = String(nome||"").trim().split(/\s+/).filter(Boolean);
@@ -356,6 +379,99 @@ function abrirAvaliacoes(pid){
 }
 function fecharModal(){ document.getElementById("modal-slot").innerHTML = ""; }
 document.addEventListener("keydown", e => { if (e.key==="Escape") fecharModal(); });
+
+/* ============================================================
+   NOTIFICAÇÕES NATIVAS DO SISTEMA (prompt, seção 16.B)
+   Aparecem por cima de qualquer aba ou aplicativo, desde que
+   esta aba continue aberta em algum lugar e o navegador rodando.
+   ============================================================ */
+const notifSuportado = () => typeof window!=="undefined" && "Notification" in window;
+const notifPermissao = () => notifSuportado() ? Notification.permission : "unsupported";
+
+function notifLog(msg){
+  S.notif.log.unshift(new Date().toLocaleTimeString("pt-BR") + " — " + msg);
+  S.notif.log = S.notif.log.slice(0, 6);
+}
+async function ativarNotificacoes(){
+  if (!notifSuportado()){ notifLog("Este navegador não suporta notificações."); return render(); }
+  destravarSom();
+  if (Notification.permission === "denied"){
+    notifLog("Permissão bloqueada pelo navegador — reative no cadeado da barra de endereço.");
+    return render();
+  }
+  const r = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+  S.notif.ativo = (r === "granted");
+  notifLog(r === "granted" ? "Notificações ativadas." : "Permissão não concedida (" + r + ").");
+  render();
+}
+function desativarNotificacoes(){
+  S.notif.ativo = false;
+  notifLog("Notificações desativadas neste painel (a permissão do navegador continua concedida).");
+  render();
+}
+function notificarNativo({ titulo, corpo, tag, aoClicar }){
+  if (!S.notif.ativo || notifPermissao() !== "granted") return false;
+  try {
+    const n = new Notification(titulo, {
+      body: corpo,
+      tag,                      // substitui a anterior de mesma tag em vez de empilhar
+      requireInteraction: true, // permanece na tela até ser fechada (Chrome/Edge)
+      silent: false,
+    });
+    n.onclick = () => { window.focus(); n.close(); if (aoClicar) aoClicar(); };
+    if (S.notif.som) tocarAlerta();
+    return true;
+  } catch (e) {
+    notifLog("Falha ao exibir a notificação: " + e.message);
+    return false;
+  }
+}
+/* Som curto gerado no próprio navegador — sem arquivo externo.
+   Navegadores exigem uma interação anterior do usuário, por isso o destravamento. */
+let audioCtx = null;
+function destravarSom(){
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch { /* sem áudio disponível */ }
+}
+function tocarAlerta(){
+  if (!audioCtx) return;
+  try {
+    const t = audioCtx.currentTime;
+    [880, 1180].forEach((hz, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = hz; o.type = "sine";
+      g.gain.setValueAtTime(0.0001, t + i*0.16);
+      g.gain.exponentialRampToValueAtTime(0.22, t + i*0.16 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i*0.16 + 0.15);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t + i*0.16); o.stop(t + i*0.16 + 0.16);
+    });
+  } catch { /* silencioso */ }
+}
+function testarNotificacao(atrasoSeg = 0){
+  if (notifPermissao() !== "granted" || !S.notif.ativo){
+    notifLog("Ative as notificações antes de testar.");
+    return render();
+  }
+  const disparar = () => {
+    const num = 1048 + Math.floor(Math.random()*50);
+    const ok = notificarNativo({
+      titulo: "🔔 Novo pedido recebido!",
+      corpo: `Pedido #${num} — Teste — R$ 52,00\nEntrega: TI · Receber: agora`,
+      tag: "teste-" + num,
+      aoClicar: () => { S.adminTab = "pedidos"; nav("admin"); },
+    });
+    notifLog(ok ? "Notificação de teste enviada." : "Não foi possível enviar a notificação.");
+    render();
+  };
+  if (atrasoSeg > 0){
+    notifLog(`Teste agendado para ${atrasoSeg}s — troque de aba ou de aplicativo agora.`);
+    render();
+    setTimeout(disparar, atrasoSeg * 1000);
+  } else disparar();
+}
 function setQtd(id, q){
   const p = byId(id);
   if (q<=0) delete S.carrinho[id];
@@ -391,6 +507,15 @@ function confirmarPedido(){
   nav("confirmado", pedido.numero);
 }
 function notificarAdmin(pedido){
+  // Camada 1 — sistema operacional: aparece fora da aba e fora do navegador.
+  notificarNativo({
+    titulo: "🔔 Novo pedido recebido!",
+    corpo: `Pedido #${pedido.numero} — ${pedido.cliente.nome} — ${reais(pedido.total)}\n`
+         + `Entrega: ${pedido.local} · Receber: ${pedido.quando==="agora" ? "agora" : "às "+pedido.quando}`,
+    tag: "pedido-" + pedido.id,
+    aoClicar: () => { S.adminTab = "pedidos"; nav("admin"); },
+  });
+  // Camada 2 — dentro do sistema: toast no painel (prompt, seção 16.A).
   const slot = document.getElementById("toast-slot");
   slot.innerHTML = `
     <div class="toast" role="status">
@@ -468,7 +593,7 @@ function vHome(){
       <span class="big" aria-hidden>🍦</span>
       <p class="carimbo" style="display:inline-block;padding:.25rem .75rem;font-size:.7rem;font-weight:700;
         letter-spacing:.12em;text-transform:uppercase;color:var(--casquinha-claro)">${tagEstoque}</p>
-      <h1 class="display">Cones trufados artesanais, entregues na sua mesa.</h1>
+      <h1 class="display">Cones trufados artesanais, entregues na sua mesa</h1>
       <p style="margin-top:.75rem;font-size:.875rem;color:rgb(255 249 242/.7);max-width:26rem">
         Leve dois cones e pague menos.</p>
       <a href="#catalogo" class="btn" style="margin-top:1.5rem;background:var(--casquinha);color:var(--cacau);font-weight:700">Ver os sabores</a>
@@ -566,39 +691,56 @@ function vProduto(){
           ${!esg && p.estoque<=5 ? `<p style="margin-top:.5rem;font-size:.75rem;font-weight:600;color:var(--framboesa)">
             Só ${p.estoque} no estoque de hoje.</p>` : ""}
         </div>
-        <section aria-labelledby="t-avp">
-          <h2 id="t-avp" class="display" style="font-size:1.25rem;font-weight:900">Avaliações</h2>
-          ${avs.length===0
-            ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Seja a primeira pessoa a avaliar este sabor após a compra.</p>`
-            : `<ul style="list-style:none;margin-top:.75rem;display:flex;flex-direction:column;gap:.75rem">
-                ${avs.slice(0,2).map(a=>`<li class="card" style="padding:1rem">
-                  <div style="display:flex;justify-content:space-between"><p>${stars(a.nota)}</p>
-                    <span class="muted" style="font-size:.75rem">${a.data}</span></div>
-                  <p style="margin-top:.25rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</p>
-                  <div style="display:flex;align-items:center;gap:.5rem;margin-top:.6rem">
-                    ${avatarHtml(a.nome, fotoDe(a.nome))}
-                    <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.nome)}</span>
-                  </div>
-                </li>`).join("")}</ul>
-              ${avs.length>2?`<button class="btn btn-ghost" style="margin-top:.75rem"
-                onclick="abrirAvaliacoes('${p.id}')">Ver todas as avaliações (${avs.length})</button>`:""}`}
-        </section>
       </div>
     </div>
+
+    ${avs.length>0 ? `<section style="margin-top:3rem" aria-labelledby="t-avp">
+      <h2 id="t-avp" class="display" style="font-size:1.25rem;font-weight:900;text-align:center">Avaliações</h2>
+      <div class="av-row" style="margin-top:1rem">
+        ${avs.slice(0,3).map(a=>`<figure class="card av-card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <p>${stars(a.nota)}</p><span class="muted" style="font-size:.75rem">${a.data}</span>
+          </div>
+          <blockquote style="margin-top:.4rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</blockquote>
+          <figcaption style="display:flex;align-items:center;gap:.5rem;margin-top:.8rem">
+            ${avatarHtml(a.nome, fotoDe(a.nome))}
+            <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.nome)}</span>
+          </figcaption>
+        </figure>`).join("")}
+      </div>
+      ${avs.length>3?`<div style="display:flex;justify-content:center;margin-top:1rem">
+        <button class="btn btn-ghost" onclick="abrirAvaliacoes('${p.id}')">
+          Ver todas as avaliações (${avs.length})</button></div>`:""}
+    </section>` : ""}
+
     <section style="margin-top:3rem" aria-labelledby="t-outros">
       <h2 id="t-outros" class="display" style="font-size:1.25rem;font-weight:900">Outros sabores</h2>
-      <div class="mini-row" style="margin-top:.75rem">
-        ${PRODUTOS.filter(x=>x.id!==p.id).map(x=>`<article class="card mini-card"
-          onclick="nav('produto','${x.id}')" role="link" tabindex="0" aria-label="Ver ${esc(x.nome)}"
-          onkeydown="if(event.key==='Enter')nav('produto','${x.id}')">
-          <div class="mini-foto" style="background:${x.grad};${x.estoque<=0?"filter:saturate(.5)":""}"
-            role="img" aria-label="Foto do cone ${esc(x.nome)}">${x.emoji}</div>
-          <div style="padding:.6rem .75rem">
-            <p class="display" style="font-size:.9rem;font-weight:700">${esc(x.nome)}</p>
-            <p style="font-size:.8rem;font-weight:700">
-              ${x.estoque<=0?'<span style="color:var(--framboesa)">Esgotado</span>':reais(x.unit)}</p>
+      <div class="bleed-row" style="margin-top:.5rem">
+        ${PRODUTOS.filter(x=>x.id!==p.id).map(x=>{
+          const xEsg = x.estoque<=0;
+          return `<article class="card sabor-card">
+          <div class="sabor-foto" style="background:${x.grad};${xEsg?"filter:saturate(.5)":""}"
+            role="img" aria-label="Foto do cone ${esc(x.nome)}" onclick="nav('produto','${x.id}')">
+            ${x.emoji}
+            <div style="position:absolute;top:.4rem;left:.4rem;display:flex;gap:.25rem;flex-wrap:wrap">
+              ${badges(x, true)}</div>
           </div>
-        </article>`).join("")}
+          <div style="padding:.85rem;display:flex;flex-direction:column;gap:.45rem;flex:1">
+            <p class="display" style="font-size:1rem;font-weight:700;line-height:1.2">${esc(x.nome)}</p>
+            <p class="muted" style="font-size:.78rem;display:-webkit-box;-webkit-line-clamp:2;
+              -webkit-box-orient:vertical;overflow:hidden">${esc(x.desc)}</p>
+            <button class="rating-btn" style="font-size:.78rem" aria-label="Ver avaliações de ${esc(x.nome)}"
+              onclick="abrirAvaliacoes('${x.id}')">${stars(x.nota, x.qtd)}</button>
+            <p class="display" style="font-size:1.05rem;font-weight:900">${reais(x.unit)}</p>
+            <p style="font-size:.72rem;font-weight:600;color:var(--pistache)">${reais(x.dupla)} na compra de 2</p>
+            <div style="display:flex;gap:.4rem;margin-top:auto;padding-top:.3rem">
+              <button class="btn btn-ghost" style="flex:1;min-height:2.4rem;padding:.35rem .5rem;font-size:.75rem"
+                onclick="nav('produto','${x.id}')">Ver mais</button>
+              <button class="btn btn-primary" style="flex:1;min-height:2.4rem;padding:.35rem .5rem;font-size:.75rem"
+                ${xEsg?"disabled":""} onclick="addCart('${x.id}')">${xEsg?"Esgotado":"Adicionar"}</button>
+            </div>
+          </div>
+        </article>`}).join("")}
       </div>
     </section>
   </main>${vFooter()}`;
@@ -945,15 +1087,85 @@ function vAdminHeader(){
     <nav aria-label="Menu do painel">
       <button ${S.adminTab==="dash"?'aria-current="page"':""} onclick="S.adminTab='dash';render()">Dashboard</button>
       <button ${S.adminTab==="pedidos"?'aria-current="page"':""} onclick="S.adminTab='pedidos';render()">Pedidos</button>
+      <button ${S.adminTab==="notif"?'aria-current="page"':""} onclick="S.adminTab='notif';render()">
+        Notificações ${S.notif.ativo?"🔔":"🔕"}</button>
       <span style="margin-left:auto;align-self:center;font-size:.72rem;color:rgb(255 249 242/.4)" class="hide-mobile">
         Produtos · Clientes · Fidelidade · Relatórios — Onda 2/3</span>
     </nav>
   </div></header>`;
 }
 function vAdmin(){
+  const tabs = { dash: vAdminDash, pedidos: vAdminPedidos, notif: vAdminNotif };
   return `${vAdminHeader()}<main style="max-width:72rem;margin:0 auto;padding:1.5rem 1rem;background:rgb(246 234 217/.4);min-height:calc(100dvh - 7rem)">
-    ${S.adminTab==="dash" ? vAdminDash() : vAdminPedidos()}
+    ${(tabs[S.adminTab] || vAdminDash)()}
   </main>`;
+}
+function vAdminNotif(){
+  const perm = notifPermissao();
+  const estados = {
+    granted: ["ok", "O navegador autorizou as notificações."],
+    denied:  ["alerta", "O navegador bloqueou as notificações. Clique no cadeado na barra de endereço → Notificações → Permitir, e recarregue a página."],
+    default: ["alerta", "O navegador ainda não pediu autorização. Clique em “Ativar notificações”."],
+    unsupported: ["alerta", "Este navegador não suporta notificações do sistema."],
+  };
+  const [cls, txt] = estados[perm] || estados.default;
+  return `<div style="display:flex;flex-direction:column;gap:1.25rem;max-width:44rem">
+    <h1 class="display" style="font-size:1.5rem;font-weight:900">Notificações</h1>
+
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Status</h2>
+      <p class="${cls}" style="margin-top:.75rem">${txt}</p>
+      <p class="${S.notif.ativo?"ok":"alerta"}" style="margin-top:.5rem">
+        ${S.notif.ativo
+          ? "Avisos de novo pedido estão LIGADOS neste painel."
+          : "Avisos de novo pedido estão DESLIGADOS neste painel."}</p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem">
+        ${S.notif.ativo
+          ? `<button class="btn btn-ghost" onclick="desativarNotificacoes()">Desativar notificações</button>`
+          : `<button class="btn btn-primary" onclick="ativarNotificacoes()">Ativar notificações</button>`}
+        <button class="btn btn-ghost" onclick="testarNotificacao(0)" ${S.notif.ativo?"":"disabled"}>Testar agora</button>
+        <button class="btn" style="background:var(--casquinha);color:var(--cacau)"
+          onclick="testarNotificacao(8)" ${S.notif.ativo?"":"disabled"}>Testar em 8s (troque de app)</button>
+      </div>
+
+      <label style="display:flex;align-items:center;gap:.5rem;margin-top:1rem;font-size:.875rem;font-weight:600;cursor:pointer">
+        <input type="checkbox" ${S.notif.som?"checked":""} style="accent-color:var(--cacau)"
+          onchange="S.notif.som=this.checked;destravarSom();render()">
+        Tocar um som ao receber pedido
+      </label>
+    </section>
+
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Para a notificação ficar na tela até você fechar</h2>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        Quem decide isso é o macOS, não o site. Em <strong>Ajustes do Sistema → Notificações →
+        seu navegador</strong>, escolha o estilo <strong>Alertas</strong> (não “Banners”) e ative “Mostrar prévias”.
+        Em Banners, o sistema remove o aviso sozinho em poucos segundos.</p>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        Se o <strong>Foco / Não Perturbe</strong> estiver ligado, nada aparece — libere o navegador nele.
+        No Chrome, evite que a aba do painel seja descartada: clique com o botão direito na aba e escolha <strong>Fixar</strong>.</p>
+    </section>
+
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Limite desta versão</h2>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        O aviso funciona com esta aba aberta em qualquer lugar — em segundo plano, minimizada,
+        com você em outro aplicativo. Se o navegador for <strong>fechado por completo</strong>, nada é disparado:
+        isso exige Web Push com Service Worker e um servidor de envio, previsto para a Onda 2, junto do Supabase.</p>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        Nesta versão de demonstração os pedidos vivem apenas nesta aba, então o teste real do comportamento
+        é o botão “Testar em 8s”. Com o Supabase no ar, o pedido de um cliente chega pelo Realtime e dispara o aviso sozinho.</p>
+    </section>
+
+    ${S.notif.log.length>0?`<section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Histórico recente</h2>
+      <ul style="list-style:none;margin-top:.5rem;display:flex;flex-direction:column;gap:.35rem;font-size:.8rem"
+          class="muted">
+        ${S.notif.log.map(l=>`<li>${esc(l)}</li>`).join("")}
+      </ul>
+    </section>`:""}
+  </div>`;
 }
 function vAdminDash(){
   const hoje = new Date().toDateString();
