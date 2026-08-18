@@ -159,6 +159,21 @@
   .modal{width:100%;max-width:26rem;max-height:82dvh;overflow-y:auto;padding:1.5rem}
   .rating-btn{display:inline-flex;align-items:center;gap:.35rem;border-radius:.5rem;text-align:left}
   .rating-btn:hover{text-decoration:underline}
+  /* dica discreta ao lado do rótulo do campo */
+  .dica{position:relative;display:inline-flex;vertical-align:middle;margin-left:.3rem}
+  .dica-btn{width:1rem;height:1rem;border-radius:9999px;display:grid;place-items:center;
+    font-size:.62rem;font-weight:800;line-height:1;color:rgb(62 39 35/.45);
+    border:1px solid rgb(62 39 35/.3);background:transparent;cursor:help;transition:.15s}
+  .dica:hover .dica-btn,.dica-btn:focus-visible{color:var(--cacau);border-color:var(--cacau)}
+  .dica-bolha{position:absolute;bottom:calc(100% + .45rem);left:50%;transform:translateX(-50%);
+    width:max-content;max-width:14rem;background:var(--cacau);color:var(--chantilly);
+    padding:.5rem .7rem;border-radius:.6rem;font-size:.72rem;font-weight:400;line-height:1.35;
+    text-align:left;box-shadow:var(--shadow);opacity:0;visibility:hidden;transition:.15s;z-index:20;
+    pointer-events:none}
+  .dica-bolha::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    border:5px solid transparent;border-top-color:var(--cacau)}
+  .dica:hover .dica-bolha,.dica-btn:focus-visible+.dica-bolha{opacity:1;visibility:visible}
+  @media(max-width:480px){.dica-bolha{left:0;transform:none}.dica-bolha::after{left:.6rem;transform:none}}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -332,6 +347,37 @@ function fecharCartToast(){
   clearTimeout(mostrarCartToast.t1); clearTimeout(mostrarCartToast.t2);
   document.getElementById("cart-toast-slot").innerHTML = "";
 }
+/* ============================================================
+   TELEFONE / WHATSAPP
+   Guardamos apenas os dígitos; a máscara é só apresentação.
+   Para o Supabase Auth, o número vira um "apelido de e-mail"
+   (ex.: 5511999998888@cones.local) — assim o cliente entra com
+   WhatsApp e senha, sem SMS, sem código e sem custo.
+   ============================================================ */
+function digitos(v){ return String(v||"").replace(/\D/g, ""); }
+
+function mascaraTelefone(v){
+  const d = digitos(v).slice(0, 11);
+  if (d.length <= 2)  return d.length ? "(" + d : "";
+  if (d.length <= 6)  return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,3)} ${d.slice(3,7)}-${d.slice(7)}`;
+}
+/* Aplica a máscara enquanto o usuário digita, preservando o cursor no fim. */
+function aoDigitarTelefone(input){
+  const posFim = input.selectionStart === input.value.length;
+  input.value = mascaraTelefone(input.value);
+  if (posFim) input.setSelectionRange(input.value.length, input.value.length);
+}
+function telefoneValido(v){
+  const d = digitos(v);
+  return d.length === 10 || d.length === 11;
+}
+/* Identificador estável usado no Supabase Auth. */
+function emailApelido(telefone){
+  return "55" + digitos(telefone) + "@cones.local";
+}
+
 function iniciais(nome){
   const p = String(nome||"").trim().split(/\s+/).filter(Boolean);
   if (p.length===0) return "?";
@@ -920,15 +966,18 @@ function vLogin(bloqueio){
   return vAuthShell(`<div class="card" style="padding:1.5rem">
     <h1 class="display" style="font-size:1.5rem;font-weight:900">Entrar</h1>
     <p class="muted" style="margin-top:.25rem;font-size:.875rem">
-      ${bloqueio?"Entre para registrar seu pedido — leva segundos.":"Entre com seu WhatsApp e senha."}</p>
+      ${bloqueio?"Entre para registrar seu pedido — leva segundos.":"Entre com seu e-mail e senha."}</p>
     <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem">
-      <div><label class="label" for="l-tel">WhatsApp</label>
-        <input id="l-tel" class="field" type="tel" inputmode="tel" placeholder="(11) 9 9999-9999"></div>
+      <div><label class="label" for="l-email">E-mail</label>
+        <input id="l-email" class="field" type="email" inputmode="email" autocomplete="email"
+          placeholder="voce@email.com"></div>
       <div><label class="label" for="l-senha">Senha</label>
-        <input id="l-senha" class="field" type="password"
+        <input id="l-senha" class="field" type="password" autocomplete="current-password"
           onkeydown="if(event.key==='Enter')fazerLogin()"></div>
       ${S.loginErro?`<p class="alerta" role="alert">${esc(S.loginErro)}</p>`:""}
       <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
+      <button style="font-size:.8rem;font-weight:600;color:rgb(62 39 35/.6);text-decoration:underline"
+        onclick="recuperarSenha()">Esqueci minha senha</button>
     </div>
     <p style="margin-top:1.25rem;text-align:center;font-size:.875rem" class="muted">
       Ainda não tem conta?
@@ -942,14 +991,22 @@ function vCadastro(){
     <p class="muted" style="margin-top:.25rem;font-size:.875rem">
       Informe seus dados uma única vez — nos próximos pedidos você não precisa repetir nada.</p>
     <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem">
-      <div><label class="label" for="r-nome">Nome</label>
-        <input id="r-nome" class="field"></div>
-      <div><label class="label" for="r-tel">WhatsApp</label>
-        <input id="r-tel" class="field" type="tel" inputmode="tel" placeholder="(11) 9 9999-9999"></div>
-      <div><label class="label" for="r-senha">Senha <span class="muted" style="font-weight:400">(mínimo 6 caracteres)</span></label>
-        <input id="r-senha" class="field" type="password" minlength="6"></div>
+      <div><label class="label" for="r-nome">Nome
+        ${dica("Aparece nas suas avaliações e no seu cartão fidelidade.")}</label>
+        <input id="r-nome" class="field" autocomplete="name" placeholder="Como quer ser chamado"></div>
+      <div><label class="label" for="r-email">E-mail
+        ${dica("É com ele que você entra e recupera a senha, caso esqueça.")}</label>
+        <input id="r-email" class="field" type="email" inputmode="email" autocomplete="email"
+          placeholder="voce@email.com"></div>
+      <div><label class="label" for="r-tel">WhatsApp
+        ${dica("Fica registrado só para falarmos com você sobre o pedido.")}</label>
+        <input id="r-tel" class="field" type="tel" inputmode="tel" autocomplete="tel"
+          placeholder="(11) 9 9999-9999" maxlength="16" oninput="aoDigitarTelefone(this)"></div>
+      <div><label class="label" for="r-senha">Senha
+        ${dica("Mínimo de 6 caracteres. Ela é guardada criptografada — ninguém consegue lê-la.")}</label>
+        <input id="r-senha" class="field" type="password" minlength="6" autocomplete="new-password"></div>
       <div><label class="label" for="r-conf">Confirmar senha</label>
-        <input id="r-conf" class="field" type="password" minlength="6"
+        <input id="r-conf" class="field" type="password" minlength="6" autocomplete="new-password"
           onkeydown="if(event.key==='Enter')fazerCadastro()"></div>
       ${S.cadastroErro?`<p class="alerta" role="alert">${esc(S.cadastroErro)}</p>`:""}
       <button class="btn btn-primary" onclick="fazerCadastro()">Criar conta</button>
@@ -962,26 +1019,54 @@ function vCadastro(){
       Usamos seus dados só para o pedido e a entrega. Nada é exposto publicamente.</p>
   </div>`);
 }
+function emailValido(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v||"").trim()); }
+
+/* Ícone discreto ao lado do rótulo: mostra a explicação no hover
+   e também no foco por teclado / toque no celular. */
+function dica(texto){
+  return `<span class="dica">
+    <button type="button" class="dica-btn" aria-label="Ajuda: ${esc(texto)}">!</button>
+    <span class="dica-bolha" role="tooltip">${esc(texto)}</span>
+  </span>`;
+}
+
 function fazerLogin(){
-  const tel = document.getElementById("l-tel").value.trim();
+  const email = document.getElementById("l-email").value.trim().toLowerCase();
   const senha = document.getElementById("l-senha").value;
-  if (!tel || !senha){ S.loginErro="Informe WhatsApp e senha."; return render(); }
-  const conta = S.contas.find(c=>c.tel===tel);
-  if (!conta){ S.loginErro="Não encontramos uma conta com este WhatsApp. Crie uma conta abaixo."; return render(); }
+  if (!email || !senha){ S.loginErro="Informe e-mail e senha."; return render(); }
+  if (!emailValido(email)){ S.loginErro="Digite um e-mail válido."; return render(); }
+  const conta = S.contas.find(c=>c.email.toLowerCase()===email);
+  if (!conta){ S.loginErro="Não encontramos uma conta com este e-mail. Crie uma conta abaixo."; return render(); }
   if (conta.senha!==senha){ S.loginErro="Senha incorreta."; return render(); }
   S.perfil = conta; S.loginErro = null;
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
+function recuperarSenha(){
+  const email = document.getElementById("l-email").value.trim().toLowerCase();
+  if (!emailValido(email)){
+    S.loginErro = "Digite seu e-mail no campo acima para receber o link de recuperação.";
+    return render();
+  }
+  // Com o Supabase: await sb.auth.resetPasswordForEmail(email)
+  S.loginErro = null;
+  alert("Se existir uma conta com " + email + ", enviaremos um link para redefinir a senha.");
+}
 function fazerCadastro(){
-  const nome = document.getElementById("r-nome").value.trim();
-  const tel = document.getElementById("r-tel").value.trim();
+  const nome  = document.getElementById("r-nome").value.trim();
+  const email = document.getElementById("r-email").value.trim().toLowerCase();
+  const tel   = document.getElementById("r-tel").value.trim();
   const senha = document.getElementById("r-senha").value;
-  const conf = document.getElementById("r-conf").value;
-  if (!nome || !tel){ S.cadastroErro="Nome e WhatsApp são necessários para identificar seu pedido."; return render(); }
+  const conf  = document.getElementById("r-conf").value;
+  if (!nome){ S.cadastroErro="Informe seu nome."; return render(); }
+  if (!emailValido(email)){ S.cadastroErro="Digite um e-mail válido — é por ele que você recupera a senha."; return render(); }
+  if (!telefoneValido(tel)){ S.cadastroErro="Digite o WhatsApp com DDD — 10 ou 11 dígitos."; return render(); }
   if (senha.length<6){ S.cadastroErro="A senha deve ter no mínimo 6 caracteres."; return render(); }
   if (senha!==conf){ S.cadastroErro="As senhas não coincidem."; return render(); }
-  if (S.contas.some(c=>c.tel===tel)){ S.cadastroErro="Já existe uma conta com este WhatsApp. Use a opção Entrar."; return render(); }
-  const conta = { nome, tel, senha, email:"", foto:null };
+  if (S.contas.some(c=>c.email.toLowerCase()===email)){
+    S.cadastroErro="Já existe uma conta com este e-mail. Use a opção Entrar."; return render(); }
+  if (S.contas.some(c=>digitos(c.tel)===digitos(tel))){
+    S.cadastroErro="Já existe uma conta com este WhatsApp."; return render(); }
+  const conta = { nome, email, tel: mascaraTelefone(tel), senha, foto:null };
   S.contas.push(conta);
   S.perfil = conta; S.cadastroErro = null;
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
@@ -1014,7 +1099,8 @@ function vConta(){
         <div><label class="label" for="c-nome">Nome</label>
           <input id="c-nome" class="field" value="${esc(S.perfil.nome)}"></div>
         <div><label class="label" for="c-tel">WhatsApp</label>
-          <input id="c-tel" class="field" value="${esc(S.perfil.tel)}"></div>
+          <input id="c-tel" class="field" type="tel" inputmode="tel" maxlength="16"
+            value="${esc(S.perfil.tel)}" oninput="aoDigitarTelefone(this)"></div>
         <div><label class="label" for="c-mail">E-mail</label>
           <input id="c-mail" class="field" value="${esc(S.perfil.email||"")}"></div>
         <div style="display:flex;gap:.75rem;align-items:center">
