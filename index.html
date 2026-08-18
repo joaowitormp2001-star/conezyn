@@ -7,6 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#3e2723">
 <style>
   :root{
     --cacau:#3e2723; --cacau-claro:#5d4037;
@@ -386,6 +391,17 @@ document.addEventListener("keydown", e => { if (e.key==="Escape") fecharModal();
    esta aba continue aberta em algum lugar e o navegador rodando.
    ============================================================ */
 const notifSuportado = () => typeof window!=="undefined" && "Notification" in window;
+
+/* ---- PERSONALIZAÇÃO DA NOTIFICAÇÃO — edite só aqui ----
+   {numero} {cliente} {total} {local} {quando} são substituídos automaticamente. */
+const NOTIF_TEXTO = {
+  icone: "/icon-192.png",                       // miniatura exibida na notificação
+  titulo: "🍦 Novo pedido — Cones da Casa",
+  corpo: "Pedido #{numero} · {cliente}\n{total} · Entrega: {local} · Receber: {quando}",
+};
+function montarTexto(modelo, dados){
+  return String(modelo).replace(/\{(\w+)\}/g, (_, k) => dados[k] ?? "");
+}
 const notifPermissao = () => notifSuportado() ? Notification.permission : "unsupported";
 
 function notifLog(msg){
@@ -414,6 +430,8 @@ function notificarNativo({ titulo, corpo, tag, aoClicar }){
   try {
     const n = new Notification(titulo, {
       body: corpo,
+      icon: NOTIF_TEXTO.icone,  // miniatura do cone (no macOS aparece ao lado do texto)
+      badge: NOTIF_TEXTO.icone,
       tag,                      // substitui a anterior de mesma tag em vez de empilhar
       requireInteraction: true, // permanece na tela até ser fechada (Chrome/Edge)
       silent: false,
@@ -458,8 +476,10 @@ function testarNotificacao(atrasoSeg = 0){
   const disparar = () => {
     const num = 1048 + Math.floor(Math.random()*50);
     const ok = notificarNativo({
-      titulo: "🔔 Novo pedido recebido!",
-      corpo: `Pedido #${num} — Teste — R$ 52,00\nEntrega: TI · Receber: agora`,
+      titulo: NOTIF_TEXTO.titulo,
+      corpo: montarTexto(NOTIF_TEXTO.corpo, {
+        numero: num, cliente: "Teste", total: "R$ 52,00", local: "TI", quando: "agora",
+      }),
       tag: "teste-" + num,
       aoClicar: () => { S.adminTab = "pedidos"; nav("admin"); },
     });
@@ -509,9 +529,14 @@ function confirmarPedido(){
 function notificarAdmin(pedido){
   // Camada 1 — sistema operacional: aparece fora da aba e fora do navegador.
   notificarNativo({
-    titulo: "🔔 Novo pedido recebido!",
-    corpo: `Pedido #${pedido.numero} — ${pedido.cliente.nome} — ${reais(pedido.total)}\n`
-         + `Entrega: ${pedido.local} · Receber: ${pedido.quando==="agora" ? "agora" : "às "+pedido.quando}`,
+    titulo: NOTIF_TEXTO.titulo,
+    corpo: montarTexto(NOTIF_TEXTO.corpo, {
+      numero: pedido.numero,
+      cliente: pedido.cliente.nome,
+      total: reais(pedido.total),
+      local: pedido.local,
+      quando: pedido.quando === "agora" ? "agora" : "às " + pedido.quando,
+    }),
     tag: "pedido-" + pedido.id,
     aoClicar: () => { S.adminTab = "pedidos"; nav("admin"); },
   });
@@ -1145,6 +1170,18 @@ function vAdminNotif(){
       <p class="muted" style="margin-top:.5rem;font-size:.875rem">
         Se o <strong>Foco / Não Perturbe</strong> estiver ligado, nada aparece — libere o navegador nele.
         No Chrome, evite que a aba do painel seja descartada: clique com o botão direito na aba e escolha <strong>Fixar</strong>.</p>
+    </section>
+
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Personalização do aviso</h2>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        Título e texto são totalmente editáveis (bloco <strong>NOTIF_TEXTO</strong> no código) e já usam
+        o ícone do cone como miniatura. Duas coisas, porém, quem controla é o macOS e não o site:
+        o <strong>ícone grande à esquerda</strong> é sempre o do navegador, e a
+        <strong>linha com o endereço do site</strong> não pode ser removida.</p>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        Para ver o cone no lugar do logo do Chrome, use o <strong>Safari</strong>: nele o aviso sai
+        com o ícone do próprio site.</p>
     </section>
 
     <section class="card" style="padding:1.25rem">
