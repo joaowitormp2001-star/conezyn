@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#3e2723">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --cacau:#3e2723; --cacau-claro:#5d4037;
@@ -193,61 +194,156 @@
    no projeto real isso é localStorage → Supabase.
    ============================================================ */
 
-/* ---------- Dados (espelho de src/lib/data/produtos.ts) ---------- */
-const CL = { unit: 1400, dupla: 1200 }, PR = { unit: 1600, dupla: 1400 };
-const PRODUTOS = [
-  { id:"p-brigadeiro", nome:"Brigadeiro", cat:"classico", ...CL, estoque:12, emoji:"🍫",
-    grad:"linear-gradient(135deg,#5d4037,#3e2723)", tags:["Mais vendido"], destaque:true,
-    desc:"Casquinha crocante com recheio cremoso de brigadeiro e cobertura de granulado belga.", nota:4.8, qtd:27 },
-  { id:"p-kitkat", nome:"KitKat", cat:"classico", ...CL, estoque:8, emoji:"🍪",
-    grad:"linear-gradient(135deg,#8d5a3b,#5d4037)", tags:[], destaque:false,
-    desc:"Recheio trufado ao leite com pedaços generosos de KitKat por dentro e por cima.", nota:4.7, qtd:19 },
-  { id:"p-prestigio", nome:"Prestígio", cat:"classico", ...CL, estoque:10, emoji:"🥥",
-    grad:"linear-gradient(135deg,#6b4f3a,#4e342e)", tags:[], destaque:false,
-    desc:"Trufa de chocolate com coco fresco — a versão em cone do clássico que todo mundo ama.", nota:4.6, qtd:14 },
-  { id:"p-doce", nome:"Doce de Leite", cat:"classico", ...CL, estoque:6, emoji:"🍮",
-    grad:"linear-gradient(135deg,#c8955c,#8d5a3b)", tags:["Novo"], destaque:false,
-    desc:"Doce de leite argentino cremoso com toque de flor de sal na cobertura.", nota:4.9, qtd:8 },
-  { id:"p-ferrero", nome:"Ferrero Rocher", cat:"premium", ...PR, estoque:5, emoji:"🌰",
-    grad:"linear-gradient(135deg,#7a5230,#3e2723)", tags:["Mais vendido"], destaque:true,
-    desc:"Trufa de avelã com Nutella, crocante de avelãs e um Ferrero Rocher inteiro no topo.", nota:4.9, qtd:31 },
-  { id:"p-kinder", nome:"Kinder Bueno", cat:"premium", ...PR, estoque:0, emoji:"🤍",
-    grad:"linear-gradient(135deg,#e8c79a,#c8955c)", tags:[], destaque:true,
-    desc:"Creme de avelã com chocolate branco e pedaços de Kinder Bueno em dose dupla.", nota:4.8, qtd:22 },
-];
-const AVALIACOES = [
-  { pid:"p-brigadeiro", nome:"Mariana", nota:5, txt:"O melhor brigadeiro que já comi em cone. Chegou rapidinho na minha mesa!", data:"05/08/2026" },
-  { pid:"p-brigadeiro", nome:"Carlos", nota:5, txt:"Recheio generoso até o fundo da casquinha. Virou tradição de sexta.", data:"01/08/2026" },
-  { pid:"p-brigadeiro", nome:"Paula", nota:4, txt:"Muito bom! Só queria que tivesse tamanho grande.", data:"28/07/2026" },
-  { pid:"p-ferrero", nome:"Ricardo", nota:5, txt:"Vale cada centavo. O Ferrero inteiro no topo é covardia.", data:"07/08/2026" },
-  { pid:"p-ferrero", nome:"Juliana", nota:5, txt:"Pedi dois na promoção. Perfeito.", data:"03/08/2026" },
-  { pid:"p-kinder", nome:"Fernanda", nota:5, txt:"Meu favorito absoluto. Repõe logo o estoque!", data:"30/07/2026" },
-  { pid:"p-kitkat", nome:"Bruno", nota:4, txt:"Crocância no ponto certo.", data:"29/07/2026" },
-  { pid:"p-doce", nome:"Letícia", nota:5, txt:"A flor de sal no doce de leite muda tudo. Já quero de novo.", data:"08/08/2026" },
-  { pid:"p-prestigio", nome:"André", nota:5, txt:"Coco fresco de verdade, não aquele ralado seco. Aprovadíssimo.", data:"06/08/2026" },
-];
-/* Regra de produção (a implementar): a seção de depoimentos só entra no ar
-   com no mínimo 7 depoimentos REAIS. Os acima são exemplos de visualização. */
+/* ============================================================
+   CONEXÃO COM O SUPABASE
+   A chave publishable é pública por design: quem protege os dados
+   é o Row Level Security, que roda dentro do banco.
+   ============================================================ */
+const SUPABASE_URL  = "https://cdywhgtznomqvhtzcnzk.supabase.co";
+const SUPABASE_KEY  = "sb_publishable_AR2vWWr_u5NiVG-3ovWufg_ujH1fvhr";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* Aparência dos sabores enquanto não houver foto no Storage. */
+const VISUAL = {
+  brigadeiro:      { emoji:"🍫", grad:"linear-gradient(135deg,#5d4037,#3e2723)" },
+  kitkat:          { emoji:"🍪", grad:"linear-gradient(135deg,#8d5a3b,#5d4037)" },
+  prestigio:       { emoji:"🥥", grad:"linear-gradient(135deg,#6b4f3a,#4e342e)" },
+  "doce-de-leite": { emoji:"🍮", grad:"linear-gradient(135deg,#c8955c,#8d5a3b)" },
+  "ferrero-rocher":{ emoji:"🌰", grad:"linear-gradient(135deg,#7a5230,#3e2723)" },
+  "kinder-bueno":  { emoji:"🤍", grad:"linear-gradient(135deg,#e8c79a,#c8955c)" },
+  _padrao:         { emoji:"🍦", grad:"linear-gradient(135deg,#8d5a3b,#3e2723)" },
+};
+
+let PRODUTOS = [];     // preenchido pelo banco
+let AVALIACOES = [];   // idem
+
 const MIN_DEPOIMENTOS = 7;
 const STATUS = ["Pendente","Confirmado","Em preparo","A caminho","Entregue","Cancelado"];
-const META_CARIMBOS = 10, ANTECEDENCIA_MIN = 20;
+let META_CARIMBOS = 10;
+const ANTECEDENCIA_MIN = 20;
 
-/* ---------- Estado (em memória — dura a sessão) ---------- */
+/* ---------- Estado da sessão do navegador ---------- */
 const S = {
   view: "home", param: null,
-  perfil: null,
-  carrinho: {},               // id -> quantidade
-  pedidos: [], seq: 1047,
+  perfil: null,               // { id, nome, tel, email, foto, admin }
+  carrinho: {},
+  pedidos: [],
+  fidelidade: { total: 0, historico: [] },
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
   sugestaoOk: false, loginErro: null, cadastroErro: null, voltarPara: null,
-  contas: [],                  // contas registradas: {nome, tel, senha, email, foto}
-  hist: [],                    // pilha de navegação p/ botão voltar
+  hist: [],
   adminTab: "dash", adminFiltro: "todos",
   notif: { ativo: false, som: true, log: [] },
+  carregando: true, erroBanco: null, ocupado: false,
 };
 const byId = id => PRODUTOS.find(p => p.id === id);
 const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+/* ============================================================
+   CARGA DE DADOS
+   ============================================================ */
+function mapearProduto(row, avaliacao){
+  const v = VISUAL[row.slug] || VISUAL._padrao;
+  const tags = [];
+  if (row.novo) tags.push("Novo");
+  if (row.mais_vendido) tags.push("Mais vendido");
+  return {
+    id: row.id, slug: row.slug, nome: row.nome, desc: row.descricao || "",
+    cat: row.categories?.slug === "premium" ? "premium" : "classico",
+    unit: row.preco_unitario_centavos, dupla: row.preco_dupla_centavos,
+    estoque: row.estoque, destaque: row.destaque, tags,
+    img: row.imagem_url || null, emoji: v.emoji, grad: v.grad,
+    nota: avaliacao?.media != null ? Number(avaliacao.media) : 0,
+    qtd:  avaliacao?.total != null ? Number(avaliacao.total) : 0,
+  };
+}
+
+async function carregarCatalogo(){
+  const [prod, medias, avs, cfg] = await Promise.all([
+    sb.from("products").select("*, categories(slug, nome)").eq("ativo", true).order("nome"),
+    sb.from("produtos_avaliacao").select("*"),
+    sb.from("avaliacoes_publicas").select("*").order("criado_em", { ascending:false }).limit(30),
+    sb.from("settings").select("*").eq("chave","meta_carimbos").maybeSingle(),
+  ]);
+  if (prod.error) throw prod.error;
+
+  const porProduto = Object.fromEntries((medias.data||[]).map(m => [m.produto_id, m]));
+  PRODUTOS = (prod.data||[]).map(r => mapearProduto(r, porProduto[r.id]));
+
+  AVALIACOES = (avs.data||[]).map(a => ({
+    pid: a.produto_id, nome: a.nome || "Cliente", nota: a.nota,
+    txt: a.comentario || "", foto: a.foto_url || null,
+    data: new Date(a.criado_em).toLocaleDateString("pt-BR"),
+  })).filter(a => a.txt.trim().length > 0);
+
+  if (cfg.data?.valor) META_CARIMBOS = Number(cfg.data.valor) || 10;
+}
+
+async function carregarPerfil(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if (!user){ S.perfil = null; return; }
+  const { data } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  S.perfil = {
+    id: user.id,
+    nome: data?.nome || user.user_metadata?.nome || "Cliente",
+    tel: data?.telefone || "",
+    email: data?.email || user.email || "",
+    foto: data?.foto_url || null,
+    admin: data?.papel === "admin",
+  };
+}
+
+function mapearPedido(row){
+  return {
+    id: row.id, numero: row.numero,
+    cliente: { nome: row.profiles?.nome || (S.perfil?.nome ?? "Cliente"),
+               tel:  row.profiles?.telefone || (S.perfil?.tel ?? "") },
+    itens: (row.order_items||[]).map(i => ({
+      produtoId: i.produto_id, nome: i.nome_produto,
+      q: i.quantidade, efetivo: i.preco_efetivo_centavos,
+    })),
+    subtotal: row.subtotal_individual_centavos,
+    economia: row.economia_centavos,
+    total: row.total_centavos,
+    local: row.local_entrega, quando: row.quando,
+    status: row.status, criadoEm: new Date(row.criado_em),
+  };
+}
+
+async function carregarPedidos(){
+  if (!S.perfil){ S.pedidos = []; return; }
+  const campos = S.perfil.admin
+    ? "*, order_items(*), profiles(nome, telefone)"
+    : "*, order_items(*)";
+  const { data, error } = await sb.from("orders").select(campos)
+    .order("numero", { ascending:false }).limit(100);
+  if (error){ console.error(error); return; }
+  S.pedidos = (data||[]).map(mapearPedido);
+}
+
+async function carregarFidelidade(){
+  if (!S.perfil){ S.fidelidade = { total:0, historico:[] }; return; }
+  const { data } = await sb.from("loyalty_transactions").select("*, orders(numero)")
+    .eq("cliente_id", S.perfil.id).order("criado_em", { ascending:false });
+  const hist = (data||[]).map(t => ({
+    pedido: t.orders?.numero ?? "—", n: t.carimbos,
+    data: new Date(t.criado_em).toLocaleDateString("pt-BR"),
+  }));
+  S.fidelidade = { total: hist.reduce((s,h)=>s+h.n,0), historico: hist };
+}
+
+/* Mensagem de erro amigável (prompt, seção 40). */
+function erroAmigavel(e){
+  const m = String(e?.message || e || "");
+  if (/Invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
+  if (/already registered|already been registered/i.test(m)) return "Já existe uma conta com este e-mail.";
+  if (/Password should be/i.test(m)) return "A senha deve ter no mínimo 6 caracteres.";
+  if (/duplicate key.*telefone/i.test(m)) return "Já existe uma conta com este WhatsApp.";
+  if (/Estoque insuficiente|não está disponível|pedido está vazio|Horário inválido|local da entrega/i.test(m)) return m;
+  if (/Failed to fetch|NetworkError/i.test(m)) return "Sem conexão com o servidor. Verifique sua internet.";
+  return "Não conseguimos concluir agora. Tente novamente em alguns instantes.";
+}
 
 /* ---------- Engine de preços (espelho de src/lib/pricing/) ---------- */
 function precificar(){
@@ -294,7 +390,7 @@ function nav(view, param){
   param = param ?? null;
   if (!(S.view===view && S.param===param)) S.hist.push({view:S.view, param:S.param});
   S.view = view; S.param = param;
-  if (view==="checkout"){ S.checkout = { local:"", quando:"agora", hora:"", erro:null }; }
+  if (view==="checkout"){ S.checkout = { local:"", quando:"agora", hora:"", erro:null, idem:null }; }
   if (view==="produto") pqv = 1;
   S.loginErro = null; S.cadastroErro = null;
   render(); window.scrollTo({top:0});
@@ -387,16 +483,25 @@ function avatarHtml(nome, foto, lg=false){
   if (foto) return `<img class="avatar ${lg?"lg":""}" src="${foto}" alt="Foto de ${esc(nome)}">`;
   return `<span class="avatar ${lg?"lg":""}" role="img" aria-label="${esc(nome)}">${esc(iniciais(nome))}</span>`;
 }
-function fotoDe(nome){
-  const conta = S.contas.find(c=>c.nome===nome);
-  return conta?.foto || null;
-}
-function carregarFoto(input){
+async function carregarFoto(input){
   const f = input.files && input.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = () => { S.perfil.foto = r.result; render(); };
-  r.readAsDataURL(f);
+  if (!f || !S.perfil) return;
+  if (f.size > 3 * 1024 * 1024){ alert("A foto precisa ter menos de 3 MB."); return; }
+  const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+  const caminho = `${S.perfil.id}/avatar.${ext}`;
+  const { error } = await sb.storage.from("avatares")
+    .upload(caminho, f, { upsert: true, contentType: f.type });
+  if (error){ alert(erroAmigavel(error)); return; }
+  const { data } = sb.storage.from("avatares").getPublicUrl(caminho);
+  const url = data.publicUrl + "?v=" + Date.now();   // evita cache da foto antiga
+  await sb.from("profiles").update({ foto_url: url }).eq("id", S.perfil.id);
+  S.perfil.foto = url;
+  render();
+}
+async function removerFoto(){
+  if (!S.perfil) return;
+  await sb.from("profiles").update({ foto_url: null }).eq("id", S.perfil.id);
+  S.perfil.foto = null; render();
 }
 function abrirAvaliacoes(pid){
   const p = byId(pid); if (!p) return;
@@ -420,7 +525,7 @@ function abrirAvaliacoes(pid){
                 </div>
                 <p style="margin-top:.25rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</p>
                 <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
-                  ${avatarHtml(a.nome, fotoDe(a.nome))}
+                  ${avatarHtml(a.nome, a.foto)}
                   <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.nome)}</span>
                 </div>
               </li>`).join("")}
@@ -546,9 +651,10 @@ function setQtd(id, q){
 }
 
 /* ---------- Pedido (espelho de src/lib/data/pedidos.ts) ---------- */
-function confirmarPedido(){
+async function confirmarPedido(){
   const c = S.checkout;
   c.erro = null;
+  if (!S.perfil){ S.voltarPara = "checkout"; return nav("login"); }
   if (!c.local.trim()){ c.erro = "Informe o local da entrega dentro da empresa."; return render(); }
   if (c.quando==="horario"){
     if (!/^\d{2}:\d{2}$/.test(c.hora)){ c.erro="Escolha um horário válido."; return render(); }
@@ -558,19 +664,33 @@ function confirmarPedido(){
     if (diff < 0){ c.erro="Esse horário já passou. Escolha um horário mais tarde."; return render(); }
     if (diff < ANTECEDENCIA_MIN){ c.erro=`Precisamos de pelo menos ${ANTECEDENCIA_MIN} minutos para preparar seu pedido.`; return render(); }
   }
-  const pr = precificar();
-  const pedido = {
-    id: Math.random().toString(36).slice(2), numero: ++S.seq,
-    cliente: { nome: S.perfil.nome, tel: S.perfil.tel },
-    itens: pr.linhas.map(l=>({id:l.id, nome:byId(l.id).nome, q:l.q, efetivo:l.efetivo})),
-    subtotal: pr.subtotal, economia: pr.economia, total: pr.total,
-    local: c.local.trim(), quando: c.quando==="agora" ? "agora" : c.hora,
-    status: "Pendente", criadoEm: new Date(),
-  };
-  S.pedidos.unshift(pedido);
+
+  const itens = Object.entries(S.carrinho)
+    .filter(([,q]) => q > 0)
+    .map(([produto_id, quantidade]) => ({ produto_id, quantidade }));
+  if (itens.length === 0){ c.erro = "Seu carrinho está vazio."; return render(); }
+
+  // A chave de idempotência nasce aqui: duplo clique não gera dois pedidos.
+  if (!c.idem) c.idem = crypto.randomUUID();
+
+  const { data, error } = await sb.rpc("place_order", {
+    p_itens: itens,
+    p_local: c.local.trim(),
+    p_quando: c.quando === "agora" ? "agora" : c.hora,
+    p_idempotency_key: c.idem,
+  });
+
+  if (error){
+    c.erro = erroAmigavel(error);
+    c.idem = null;                      // permite nova tentativa
+    await carregarCatalogo();           // reflete estoque que mudou
+    return render();
+  }
+
+  const linha = Array.isArray(data) ? data[0] : data;
   S.carrinho = {};
-  notificarAdmin(pedido);
-  nav("confirmado", pedido.numero);
+  await Promise.all([carregarCatalogo(), carregarPedidos()]);
+  nav("confirmado", linha.numero);
 }
 function notificarAdmin(pedido){
   // Camada 1 — sistema operacional: aparece fora da aba e fora do navegador.
@@ -602,14 +722,9 @@ function notificarAdmin(pedido){
     </div>`;
   setTimeout(()=>{ slot.innerHTML=""; }, 9000);
 }
-function carimbos(nome){
-  const entregues = S.pedidos.filter(p=>p.status==="Entregue" && p.cliente.nome===nome);
-  const hist = entregues.map(p=>({pedido:p.numero, n:p.itens.reduce((s,i)=>s+i.q,0),
-    data:p.criadoEm.toLocaleDateString("pt-BR")}));
-  return { total: hist.reduce((s,h)=>s+h.n,0), hist };
+function carimbos(){
+  return S.fidelidade;
 }
-
-/* ---------- Views ---------- */
 function vHeader(){
   const cones = precificar().cones;
   return `<header class="loja"><div class="wrap inner">
@@ -696,7 +811,7 @@ function vHome(){
             <p>${stars(a.nota)}</p>
             <blockquote style="margin-top:.5rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</blockquote>
             <figcaption style="margin-top:.75rem;display:flex;align-items:center;gap:.6rem">
-              ${avatarHtml(a.nome, fotoDe(a.nome))}
+              ${avatarHtml(a.nome, a.foto)}
               <span class="muted" style="font-size:.75rem;font-weight:600;line-height:1.35">
                 ${esc(a.nome)} · ${esc(byId(a.pid).nome)}<br>${a.data}</span>
             </figcaption>
@@ -726,7 +841,7 @@ function vHome(){
             <textarea id="sug" rows="2" class="field" style="flex:1;min-width:14rem;resize:none"
               placeholder="Ex: cone de pistache, combo com café..." aria-label="Sua sugestão"></textarea>
             <button class="btn btn-primary" style="align-self:start"
-              onclick="if(document.getElementById('sug').value.trim()){S.sugestaoOk=true;render()}">Enviar sugestão</button>
+              onclick="enviarSugestao()">Enviar sugestão</button>
           </div>`}
     </section>
   </main>${vFooter()}`;
@@ -774,7 +889,7 @@ function vProduto(){
           </div>
           <blockquote style="margin-top:.4rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.txt)}”</blockquote>
           <figcaption style="display:flex;align-items:center;gap:.5rem;margin-top:.8rem">
-            ${avatarHtml(a.nome, fotoDe(a.nome))}
+            ${avatarHtml(a.nome, a.foto)}
             <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.nome)}</span>
           </figcaption>
         </figure>`).join("")}
@@ -927,7 +1042,7 @@ function atualizarResumo(){
   if(q) q.textContent = c.quando==="agora"?"Agora":(c.hora?"às "+c.hora:"—");
 }
 function vConfirmado(){
-  const p = S.pedidos.find(x=>x.numero===S.param);
+  const p = S.pedidos.find(x=>String(x.numero)===String(S.param));
   if (!p) return vHome();
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
     <div class="card" style="padding:2rem;text-align:center">
@@ -1030,28 +1145,32 @@ function dica(texto){
   </span>`;
 }
 
-function fazerLogin(){
+async function fazerLogin(){
+  if (S.ocupado) return;
   const email = document.getElementById("l-email").value.trim().toLowerCase();
   const senha = document.getElementById("l-senha").value;
   if (!email || !senha){ S.loginErro="Informe e-mail e senha."; return render(); }
   if (!emailValido(email)){ S.loginErro="Digite um e-mail válido."; return render(); }
-  const conta = S.contas.find(c=>c.email.toLowerCase()===email);
-  if (!conta){ S.loginErro="Não encontramos uma conta com este e-mail. Crie uma conta abaixo."; return render(); }
-  if (conta.senha!==senha){ S.loginErro="Senha incorreta."; return render(); }
-  S.perfil = conta; S.loginErro = null;
+  S.ocupado = true; S.loginErro = null; render();
+  const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+  S.ocupado = false;
+  if (error){ S.loginErro = erroAmigavel(error); return render(); }
+  await carregarPerfil();
+  await Promise.all([carregarPedidos(), carregarFidelidade()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
-function recuperarSenha(){
+async function recuperarSenha(){
   const email = document.getElementById("l-email").value.trim().toLowerCase();
   if (!emailValido(email)){
     S.loginErro = "Digite seu e-mail no campo acima para receber o link de recuperação.";
     return render();
   }
-  // Com o Supabase: await sb.auth.resetPasswordForEmail(email)
   S.loginErro = null;
-  alert("Se existir uma conta com " + email + ", enviaremos um link para redefinir a senha.");
+  await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  alert("Se existir uma conta com " + email + ", enviaremos um link para redefinir a senha.\n\nConfira também a caixa de spam.");
 }
-function fazerCadastro(){
+async function fazerCadastro(){
+  if (S.ocupado) return;
   const nome  = document.getElementById("r-nome").value.trim();
   const email = document.getElementById("r-email").value.trim().toLowerCase();
   const tel   = document.getElementById("r-tel").value.trim();
@@ -1062,14 +1181,43 @@ function fazerCadastro(){
   if (!telefoneValido(tel)){ S.cadastroErro="Digite o WhatsApp com DDD — 10 ou 11 dígitos."; return render(); }
   if (senha.length<6){ S.cadastroErro="A senha deve ter no mínimo 6 caracteres."; return render(); }
   if (senha!==conf){ S.cadastroErro="As senhas não coincidem."; return render(); }
-  if (S.contas.some(c=>c.email.toLowerCase()===email)){
-    S.cadastroErro="Já existe uma conta com este e-mail. Use a opção Entrar."; return render(); }
-  if (S.contas.some(c=>digitos(c.tel)===digitos(tel))){
-    S.cadastroErro="Já existe uma conta com este WhatsApp."; return render(); }
-  const conta = { nome, email, tel: mascaraTelefone(tel), senha, foto:null };
-  S.contas.push(conta);
-  S.perfil = conta; S.cadastroErro = null;
+
+  S.ocupado = true; S.cadastroErro = null; render();
+  const { error } = await sb.auth.signUp({
+    email, password: senha,
+    options: { data: { nome, telefone: mascaraTelefone(tel) } },
+  });
+  S.ocupado = false;
+  if (error){ S.cadastroErro = erroAmigavel(error); return render(); }
+
+  // Se a confirmação de e-mail estiver ligada, não há sessão ainda.
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){
+    S.loginErro = "Conta criada! Confirme seu e-mail e depois entre.";
+    return nav("login");
+  }
+  await carregarPerfil();
+  await Promise.all([carregarPedidos(), carregarFidelidade()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
+}
+async function sair(){
+  await sb.auth.signOut();
+  S.perfil = null; S.pedidos = []; S.fidelidade = { total:0, historico:[] };
+  nav("home");
+}
+async function salvarPerfil(){
+  const nome  = document.getElementById("c-nome").value.trim();
+  const tel   = document.getElementById("c-tel").value.trim();
+  const email = document.getElementById("c-mail").value.trim();
+  if (!nome){ alert("Informe seu nome."); return; }
+  const { error } = await sb.from("profiles")
+    .update({ nome, telefone: mascaraTelefone(tel), email })
+    .eq("id", S.perfil.id);
+  if (error){ alert(erroAmigavel(error)); return; }
+  Object.assign(S.perfil, { nome, tel: mascaraTelefone(tel), email });
+  const aviso = document.getElementById("salvo-ok");
+  if (aviso) aviso.style.display = "inline";
+  render();
 }
 function vConta(){
   if (!S.perfil){ S.voltarPara="conta"; return vLogin(false); }
@@ -1091,7 +1239,7 @@ function vConta(){
             <input type="file" accept="image/*" style="display:none" onchange="carregarFoto(this)">
           </label>
           ${S.perfil.foto ? `<button style="font-size:.75rem;font-weight:600;color:var(--framboesa);text-decoration:underline"
-            onclick="S.perfil.foto=null;render()">Remover foto</button>` : ""}
+            onclick="removerFoto()">Remover foto</button>` : ""}
           <p class="muted" style="font-size:.72rem;max-width:14rem">Sua foto aparece junto das suas avaliações. Sem foto, mostramos suas iniciais.</p>
         </div>
       </div>
@@ -1104,21 +1252,17 @@ function vConta(){
         <div><label class="label" for="c-mail">E-mail</label>
           <input id="c-mail" class="field" value="${esc(S.perfil.email||"")}"></div>
         <div style="display:flex;gap:.75rem;align-items:center">
-          <button class="btn btn-primary" onclick="
-            Object.assign(S.perfil,{nome:document.getElementById('c-nome').value.trim(),
-                      tel:document.getElementById('c-tel').value.trim(),
-                      email:document.getElementById('c-mail').value.trim()});
-            document.getElementById('salvo-ok').style.display='inline'\">Salvar alterações</button>
+          <button class="btn btn-primary" onclick="salvarPerfil()">Salvar alterações</button>
           <span id="salvo-ok" role="status" style="display:none;font-size:.875rem;font-weight:600;color:var(--pistache)">Salvo ✓</span>
         </div>
       </div>
     </section>
-    <button class="btn btn-ghost" onclick="S.perfil=null;nav('home')">Sair da conta</button>
+    <button class="btn btn-ghost" onclick="sair()">Sair da conta</button>
   </main>${vFooter()}`;
 }
 function vPedidos(){
   if (!S.perfil){ S.voltarPara="pedidos"; return vLogin(false); }
-  const meus = S.pedidos.filter(p=>p.cliente.nome===S.perfil.nome);
+  const meus = S.pedidos;   // o RLS do banco já entrega só os do cliente
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
     <h1 class="display" style="font-size:1.9rem;font-weight:900">Meus pedidos</h1>
     ${meus.length===0
@@ -1146,7 +1290,7 @@ function vPedidos(){
 }
 function vFidelidade(){
   if (!S.perfil){ S.voltarPara="fidelidade"; return vLogin(false); }
-  const d = carimbos(S.perfil.nome);
+  const d = carimbos();
   const noCartao = d.total % META_CARIMBOS, completos = Math.floor(d.total/META_CARIMBOS);
   const faltam = META_CARIMBOS - noCartao;
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem;display:flex;flex-direction:column;gap:1.25rem">
@@ -1370,7 +1514,7 @@ function vAdminPedidos(){
             <div style="display:flex;align-items:center;gap:.75rem;border-top:1px solid rgb(62 39 35/.08);margin-top:1rem;padding-top:.75rem">
               <label for="st-${p.id}" class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Status</label>
               <select id="st-${p.id}" class="field" style="width:auto;border-radius:9999px;min-height:2.5rem;font-weight:600"
-                onchange="S.pedidos.find(x=>x.id==='${p.id}').status=this.value;render()">
+                onchange="mudarStatus('${p.id}', this.value)">
                 ${STATUS.map(s=>`<option ${p.status===s?"selected":""}>${s}</option>`).join("")}
               </select>
               ${p.status==="Entregue"?`<span style="font-size:.75rem;font-weight:600;color:var(--pistache)">carimbos de fidelidade creditados</span>`:""}
@@ -1380,16 +1524,119 @@ function vAdminPedidos(){
 }
 
 /* ---------- Render ---------- */
+async function mudarStatus(id, status){
+  const { error } = await sb.from("orders").update({ status }).eq("id", id);
+  if (error){ alert(erroAmigavel(error)); return; }
+  const p = S.pedidos.find(x => x.id === id);
+  if (p) p.status = status;
+  render();
+  if (status === "Entregue" || status === "Cancelado"){
+    await Promise.all([carregarCatalogo(), carregarFidelidade()]);
+    render();
+  }
+}
+
+async function enviarSugestao(){
+  const campo = document.getElementById("sug");
+  const texto = campo ? campo.value.trim() : "";
+  if (texto.length < 3) return;
+  if (!S.perfil){ S.voltarPara = "home"; return nav("login"); }
+  const { error } = await sb.from("suggestions")
+    .insert({ cliente_id: S.perfil.id, texto });
+  if (error){ alert(erroAmigavel(error)); return; }
+  S.sugestaoOk = true; render();
+}
+
+/* Avaliação: o banco só aceita de quem recebeu o produto. */
+async function enviarAvaliacao(produtoId, nota, comentario){
+  if (!S.perfil){ S.voltarPara = "produto"; return nav("login"); }
+  const { error } = await sb.from("reviews").upsert({
+    produto_id: produtoId, cliente_id: S.perfil.id,
+    nota, comentario: comentario || null,
+  }, { onConflict: "produto_id,cliente_id" });
+  if (error){ alert(erroAmigavel(error)); return; }
+  await carregarCatalogo();
+  fecharModal(); render();
+}
+
+/* ============================================================
+   TEMPO REAL — pedido novo chega sem recarregar a página
+   ============================================================ */
+let canalPedidos = null;
+function ligarTempoReal(){
+  if (canalPedidos || !S.perfil?.admin) return;
+  canalPedidos = sb.channel("pedidos-admin")
+    .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "orders" },
+        async () => {
+          const antes = new Set(S.pedidos.map(p => p.id));
+          await carregarPedidos();
+          const novo = S.pedidos.find(p => !antes.has(p.id));
+          if (novo) notificarAdmin(novo);
+          render();
+        })
+    .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders" },
+        async () => { await carregarPedidos(); render(); })
+    .subscribe();
+}
+
+/* ============================================================
+   INICIALIZAÇÃO
+   ============================================================ */
+function vCarregando(){
+  return `<main style="min-height:100dvh;display:grid;place-items:center;padding:2rem;text-align:center">
+    <div>
+      <p style="font-size:3rem" aria-hidden>🍦</p>
+      <p class="display" style="margin-top:.75rem;font-weight:900">Cones da Casa</p>
+      <p class="muted" style="margin-top:.25rem;font-size:.875rem">Carregando o cardápio de hoje...</p>
+    </div>
+  </main>`;
+}
+function vErroBanco(){
+  return `<main style="min-height:100dvh;display:grid;place-items:center;padding:2rem">
+    <div class="card" style="padding:2rem;max-width:26rem;text-align:center">
+      <p style="font-size:2.5rem" aria-hidden>🔌</p>
+      <h1 class="display" style="margin-top:.5rem;font-size:1.25rem;font-weight:900">Não conseguimos carregar o cardápio</h1>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">${esc(S.erroBanco || "")}</p>
+      <button class="btn btn-primary" style="margin-top:1.25rem" onclick="location.reload()">Tentar de novo</button>
+    </div>
+  </main>`;
+}
+
+async function iniciar(){
+  render();
+  try {
+    await carregarPerfil();
+    await carregarCatalogo();
+    if (S.perfil) await Promise.all([carregarPedidos(), carregarFidelidade()]);
+  } catch (e){
+    console.error(e);
+    S.erroBanco = erroAmigavel(e);
+  }
+  S.carregando = false;
+  render();
+
+  // Mantém a sessão em dia entre abas e após expirar o token.
+  sb.auth.onAuthStateChange(async (evento) => {
+    if (evento === "SIGNED_OUT"){ S.perfil = null; S.pedidos = []; render(); }
+  });
+}
+
 function render(){
+  if (S.carregando) { document.getElementById("app").innerHTML = vCarregando(); return; }
+  if (S.erroBanco)  { document.getElementById("app").innerHTML = vErroBanco();  return; }
+  if (S.perfil?.admin) ligarTempoReal();
   const views = { home:vHome, produto:vProduto, carrinho:vCarrinho, checkout:vCheckout,
     confirmado:vConfirmado, login:()=>vLogin(false), cadastro:vCadastro, conta:vConta,
     pedidos:vPedidos, fidelidade:vFidelidade, admin:vAdmin };
   if (S.view!=="produto") pqv = 1;
   document.getElementById("app").innerHTML = (views[S.view]||vHome)();
   const sw = document.getElementById("switch-btn");
+  sw.style.display = S.perfil?.admin ? "inline-flex" : "none";
   sw.textContent = S.view==="admin" ? "← Ver loja" : "Painel admin";
 }
-render();
+iniciar();
 </script>
 </body>
 </html>
