@@ -234,6 +234,7 @@ const S = {
   sugestaoOk: false, loginErro: null, cadastroErro: null, voltarPara: null,
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
+  admin: { produtos: [], avaliacoes: [], sugestoes: [], carregado: false },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, ocupado: false,
 };
@@ -1342,15 +1343,20 @@ function vAdminHeader(){
     <nav aria-label="Menu do painel">
       <button ${S.adminTab==="dash"?'aria-current="page"':""} onclick="S.adminTab='dash';render()">Dashboard</button>
       <button ${S.adminTab==="pedidos"?'aria-current="page"':""} onclick="S.adminTab='pedidos';render()">Pedidos</button>
+      <button ${S.adminTab==="produtos"?'aria-current="page"':""} onclick="abrirAdmin('produtos')">Produtos</button>
+      <button ${S.adminTab==="avaliacoes"?'aria-current="page"':""} onclick="abrirAdmin('avaliacoes')">
+        Avaliações${pendentesAvaliacao()>0?` <span style="background:var(--framboesa);color:#fff;border-radius:9999px;padding:0 .4rem;font-size:.7rem">${pendentesAvaliacao()}</span>`:""}</button>
+      <button ${S.adminTab==="sugestoes"?'aria-current="page"':""} onclick="abrirAdmin('sugestoes')">
+        Sugestões${pendentesSugestao()>0?` <span style="background:var(--casquinha);color:var(--cacau);border-radius:9999px;padding:0 .4rem;font-size:.7rem">${pendentesSugestao()}</span>`:""}</button>
       <button ${S.adminTab==="notif"?'aria-current="page"':""} onclick="S.adminTab='notif';render()">
         Notificações ${S.notif.ativo?"🔔":"🔕"}</button>
-      <span style="margin-left:auto;align-self:center;font-size:.72rem;color:rgb(255 249 242/.4)" class="hide-mobile">
-        Produtos · Clientes · Fidelidade · Relatórios — Onda 2/3</span>
+
     </nav>
   </div></header>`;
 }
 function vAdmin(){
-  const tabs = { dash: vAdminDash, pedidos: vAdminPedidos, notif: vAdminNotif };
+  const tabs = { dash: vAdminDash, pedidos: vAdminPedidos, notif: vAdminNotif,
+                 produtos: vAdminProdutos, avaliacoes: vAdminAvaliacoes, sugestoes: vAdminSugestoes };
   return `${vAdminHeader()}<main style="max-width:72rem;margin:0 auto;padding:1.5rem 1rem;background:rgb(246 234 217/.4);min-height:calc(100dvh - 7rem)">
     ${(tabs[S.adminTab] || vAdminDash)()}
   </main>`;
@@ -1623,10 +1629,263 @@ async function iniciar(){
   });
 }
 
+
+/* ============================================================
+   PAINEL — PRODUTOS, AVALIAÇÕES E SUGESTÕES
+   ============================================================ */
+const pendentesAvaliacao = () => S.admin.avaliacoes.filter(a => !a.aprovada).length;
+const pendentesSugestao  = () => S.admin.sugestoes.filter(g => g.status === "Nova").length;
+
+async function abrirAdmin(aba){
+  S.adminTab = aba; render();
+  await carregarAdmin();
+  render();
+}
+
+async function carregarAdmin(){
+  if (!S.perfil?.admin) return;
+  const [prod, avs, sug] = await Promise.all([
+    sb.from("products").select("*, categories(nome, slug)").order("nome"),
+    sb.from("reviews").select("*, products(nome), profiles(nome)").order("criado_em", { ascending:false }),
+    sb.from("suggestions").select("*, profiles(nome, telefone)").order("criado_em", { ascending:false }),
+  ]);
+  if (!prod.error) S.admin.produtos  = prod.data || [];
+  if (!avs.error)  S.admin.avaliacoes = avs.data || [];
+  if (!sug.error)  S.admin.sugestoes  = sug.data || [];
+  S.admin.carregado = true;
+}
+
+/* ---------- Estoque e cadastro de produtos ---------- */
+async function salvarCampoProduto(id, campo, valor){
+  const { error } = await sb.from("products")
+    .update({ [campo]: valor, atualizado_em: new Date().toISOString() }).eq("id", id);
+  if (error){ alert(erroAmigavel(error)); return false; }
+  const p = S.admin.produtos.find(x => x.id === id);
+  if (p) p[campo] = valor;
+  await carregarCatalogo();
+  render();
+  return true;
+}
+async function ajustarEstoque(id, delta){
+  const p = S.admin.produtos.find(x => x.id === id);
+  if (!p) return;
+  await salvarCampoProduto(id, "estoque", Math.max(0, (p.estoque || 0) + delta));
+}
+async function definirEstoque(id, valor){
+  const n = Math.max(0, parseInt(valor, 10) || 0);
+  await salvarCampoProduto(id, "estoque", n);
+}
+async function definirPreco(id, campo, valorReais){
+  const centavos = Math.round(parseFloat(String(valorReais).replace(",", ".")) * 100);
+  if (!Number.isFinite(centavos) || centavos < 0){ alert("Valor inválido."); return; }
+  const p = S.admin.produtos.find(x => x.id === id);
+  const unit  = campo === "preco_unitario_centavos" ? centavos : p.preco_unitario_centavos;
+  const dupla = campo === "preco_dupla_centavos"    ? centavos : p.preco_dupla_centavos;
+  if (dupla > unit){ alert("O preço em dupla não pode ser maior que o unitário."); render(); return; }
+  await salvarCampoProduto(id, campo, centavos);
+}
+async function zerarTodoEstoque(){
+  if (!confirm("Zerar o estoque de TODOS os sabores? Eles ficarão como Esgotado no site.")) return;
+  const { error } = await sb.from("products").update({ estoque: 0 }).gt("estoque", -1);
+  if (error){ alert(erroAmigavel(error)); return; }
+  await Promise.all([carregarAdmin(), carregarCatalogo()]);
+  render();
+}
+
+function vAdminProdutos(){
+  if (!S.admin.carregado) return `<p class="muted">Carregando produtos...</p>`;
+  const total = S.admin.produtos.reduce((n,p)=>n+(p.estoque||0),0);
+  return `<div style="display:flex;flex-direction:column;gap:1rem">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem">
+      <div>
+        <h1 class="display" style="font-size:1.5rem;font-weight:900">Produtos e estoque</h1>
+        <p class="muted" style="font-size:.875rem">Total no estoque hoje: <strong>${total} cones</strong> — é esse número que aparece no topo da loja.</p>
+      </div>
+      <button class="btn btn-ghost" onclick="zerarTodoEstoque()">Zerar tudo (fim do dia)</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:.75rem">
+      ${S.admin.produtos.map(p=>{
+        const v = VISUAL[p.slug] || VISUAL._padrao;
+        const esg = (p.estoque||0) <= 0;
+        return `<div class="card" style="padding:1rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center">
+          <span aria-hidden style="width:3.5rem;height:3.5rem;flex-shrink:0;display:grid;place-items:center;
+            border-radius:.9rem;font-size:1.6rem;background:${v.grad}">${v.emoji}</span>
+
+          <div style="flex:1;min-width:9rem">
+            <p class="display" style="font-weight:700">${esc(p.nome)}</p>
+            <p class="muted" style="font-size:.75rem">${esc(p.categories?.nome || "")}
+              ${esg?' · <strong style="color:var(--framboesa)">Esgotado</strong>':""}</p>
+          </div>
+
+          <div>
+            <p class="muted" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Estoque</p>
+            <div class="stepper" style="margin-top:.25rem">
+              <button aria-label="Menos um" onclick="ajustarEstoque('${p.id}',-1)">−</button>
+              <input type="number" min="0" value="${p.estoque||0}" aria-label="Quantidade de ${esc(p.nome)}"
+                style="width:3.2rem;text-align:center;border:none;background:transparent;font-weight:700;font-size:.9rem"
+                onchange="definirEstoque('${p.id}', this.value)">
+              <button aria-label="Mais um" onclick="ajustarEstoque('${p.id}',1)">+</button>
+            </div>
+            <div style="display:flex;gap:.25rem;margin-top:.35rem">
+              ${[5,10,20].map(n=>`<button class="btn btn-ghost" style="min-height:1.9rem;padding:.1rem .5rem;font-size:.7rem"
+                onclick="ajustarEstoque('${p.id}',${n})">+${n}</button>`).join("")}
+            </div>
+          </div>
+
+          <div style="display:flex;gap:.5rem">
+            <div>
+              <p class="muted" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Unitário</p>
+              <input class="field" style="width:5.5rem;padding:.4rem .5rem;margin-top:.25rem"
+                value="${(p.preco_unitario_centavos/100).toFixed(2)}" aria-label="Preço unitário de ${esc(p.nome)}"
+                onchange="definirPreco('${p.id}','preco_unitario_centavos',this.value)">
+            </div>
+            <div>
+              <p class="muted" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Em dupla</p>
+              <input class="field" style="width:5.5rem;padding:.4rem .5rem;margin-top:.25rem"
+                value="${(p.preco_dupla_centavos/100).toFixed(2)}" aria-label="Preço em dupla de ${esc(p.nome)}"
+                onchange="definirPreco('${p.id}','preco_dupla_centavos',this.value)">
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:.3rem;font-size:.75rem">
+            ${[["ativo","Visível na loja"],["novo","Novo"],["mais_vendido","Mais vendido"],["destaque","Destaque"]]
+              .map(([campo,rot])=>`<label style="display:flex;align-items:center;gap:.35rem;cursor:pointer">
+                <input type="checkbox" ${p[campo]?"checked":""} style="accent-color:var(--cacau)"
+                  onchange="salvarCampoProduto('${p.id}','${campo}',this.checked)"> ${rot}</label>`).join("")}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+    <p class="muted" style="font-size:.75rem">
+      Toda alteração é salva no banco na hora e já vale para os clientes. O preço do pedido é sempre
+      recalculado no servidor — pedidos antigos guardam o valor da época e não mudam.</p>
+  </div>`;
+}
+
+/* ---------- Moderação de avaliações ---------- */
+async function moderarAvaliacao(id, aprovada){
+  const { error } = await sb.from("reviews").update({ aprovada }).eq("id", id);
+  if (error){ alert(erroAmigavel(error)); return; }
+  const a = S.admin.avaliacoes.find(x => x.id === id);
+  if (a) a.aprovada = aprovada;
+  await carregarCatalogo();
+  render();
+}
+async function excluirAvaliacao(id){
+  if (!confirm("Excluir esta avaliação definitivamente?")) return;
+  const { error } = await sb.from("reviews").delete().eq("id", id);
+  if (error){ alert(erroAmigavel(error)); return; }
+  S.admin.avaliacoes = S.admin.avaliacoes.filter(x => x.id !== id);
+  await carregarCatalogo();
+  render();
+}
+
+function vAdminAvaliacoes(){
+  if (!S.admin.carregado) return `<p class="muted">Carregando avaliações...</p>`;
+  const pend = S.admin.avaliacoes.filter(a => !a.aprovada);
+  const pub  = S.admin.avaliacoes.filter(a =>  a.aprovada);
+
+  const cartao = (a, aguardando) => `<div class="card" style="padding:1rem">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:center">
+      <p>${stars(a.nota)} <span class="muted" style="font-size:.8rem">· ${esc(a.products?.nome || "")}</span></p>
+      <span class="muted" style="font-size:.72rem">${new Date(a.criado_em).toLocaleDateString("pt-BR")}</span>
+    </div>
+    ${a.comentario ? `<p style="margin-top:.4rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.comentario)}”</p>`
+                   : `<p class="muted" style="margin-top:.4rem;font-size:.8rem">(nota sem comentário)</p>`}
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:.75rem;
+                border-top:1px solid rgb(62 39 35/.08);padding-top:.6rem">
+      <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.profiles?.nome || "Cliente")}</span>
+      <span style="margin-left:auto;display:flex;gap:.4rem">
+        ${aguardando
+          ? `<button class="btn" style="background:var(--pistache);color:#fff;min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+               onclick="moderarAvaliacao('${a.id}',true)">Aprovar</button>`
+          : `<button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+               onclick="moderarAvaliacao('${a.id}',false)">Despublicar</button>`}
+        <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+          onclick="excluirAvaliacao('${a.id}')">Excluir</button>
+      </span>
+    </div>
+  </div>`;
+
+  return `<div style="display:flex;flex-direction:column;gap:1.25rem">
+    <div>
+      <h1 class="display" style="font-size:1.5rem;font-weight:900">Avaliações</h1>
+      <p class="muted" style="font-size:.875rem">
+        Só quem comprou e recebeu o produto consegue avaliar. Nada aparece na loja antes de você aprovar.</p>
+    </div>
+
+    <section aria-labelledby="a-pend">
+      <h2 id="a-pend" class="display" style="font-size:1.1rem;font-weight:700">
+        Aguardando aprovação ${pend.length?`(${pend.length})`:""}</h2>
+      ${pend.length===0
+        ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Nenhuma avaliação na fila. 👌</p>`
+        : `<div style="display:flex;flex-direction:column;gap:.75rem;margin-top:.75rem">
+            ${pend.map(a=>cartao(a,true)).join("")}</div>`}
+    </section>
+
+    <section aria-labelledby="a-pub">
+      <h2 id="a-pub" class="display" style="font-size:1.1rem;font-weight:700">
+        Publicadas ${pub.length?`(${pub.length})`:""}</h2>
+      ${pub.length===0
+        ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Ainda não há avaliações publicadas.</p>`
+        : `<div style="display:flex;flex-direction:column;gap:.75rem;margin-top:.75rem">
+            ${pub.map(a=>cartao(a,false)).join("")}</div>`}
+    </section>
+  </div>`;
+}
+
+/* ---------- Sugestões ---------- */
+async function mudarStatusSugestao(id, status){
+  const { error } = await sb.from("suggestions").update({ status }).eq("id", id);
+  if (error){ alert(erroAmigavel(error)); return; }
+  const g = S.admin.sugestoes.find(x => x.id === id);
+  if (g) g.status = status;
+  render();
+}
+
+function vAdminSugestoes(){
+  if (!S.admin.carregado) return `<p class="muted">Carregando sugestões...</p>`;
+  const STATUS_SUG = ["Nova","Em análise","Implementada","Recusada"];
+  const cor = { "Nova":"var(--casquinha)", "Em análise":"var(--cacau-claro)",
+                "Implementada":"var(--pistache)", "Recusada":"var(--framboesa)" };
+  return `<div style="display:flex;flex-direction:column;gap:1rem">
+    <div>
+      <h1 class="display" style="font-size:1.5rem;font-weight:900">Sugestões dos clientes</h1>
+      <p class="muted" style="font-size:.875rem">O que pediram na seção “Tem alguma sugestão?” da loja.</p>
+    </div>
+    ${S.admin.sugestoes.length===0
+      ? `<div class="card" style="padding:3rem 1.5rem;text-align:center">
+          <p style="font-size:2.5rem" aria-hidden>💡</p>
+          <p class="display" style="margin-top:.5rem;font-weight:900">Nenhuma sugestão ainda</p>
+          <p class="muted" style="margin-top:.25rem;font-size:.875rem">Elas aparecem aqui assim que um cliente enviar.</p>
+        </div>`
+      : `<div style="display:flex;flex-direction:column;gap:.75rem">
+          ${S.admin.sugestoes.map(g=>`<div class="card" style="padding:1rem">
+            <p style="font-size:.9rem">“${esc(g.texto)}”</p>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-top:.75rem;
+                        border-top:1px solid rgb(62 39 35/.08);padding-top:.6rem">
+              <span class="muted" style="font-size:.75rem;font-weight:600">
+                ${esc(g.profiles?.nome || "Cliente")}${g.profiles?.telefone?` · ${esc(g.profiles.telefone)}`:""}</span>
+              <span class="muted" style="font-size:.72rem">${new Date(g.criado_em).toLocaleDateString("pt-BR")}</span>
+              <span style="margin-left:auto;display:flex;align-items:center;gap:.5rem">
+                <span style="width:.6rem;height:.6rem;border-radius:9999px;background:${cor[g.status]}"></span>
+                <select class="field" style="width:auto;padding:.3rem .6rem;border-radius:9999px;font-size:.78rem;font-weight:600"
+                  onchange="mudarStatusSugestao('${g.id}', this.value)">
+                  ${STATUS_SUG.map(x=>`<option ${g.status===x?"selected":""}>${x}</option>`).join("")}
+                </select>
+              </span>
+            </div>
+          </div>`).join("")}
+        </div>`}
+  </div>`;
+}
+
 function render(){
   if (S.carregando) { document.getElementById("app").innerHTML = vCarregando(); return; }
   if (S.erroBanco)  { document.getElementById("app").innerHTML = vErroBanco();  return; }
   if (S.perfil?.admin) ligarTempoReal();
+  if (S.perfil?.admin && S.view === "admin" && !S.admin.carregado) carregarAdmin().then(render);
   const views = { home:vHome, produto:vProduto, carrinho:vCarrinho, checkout:vCheckout,
     confirmado:vConfirmado, login:()=>vLogin(false), cadastro:vCadastro, conta:vConta,
     pedidos:vPedidos, fidelidade:vFidelidade, admin:vAdmin };
