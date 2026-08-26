@@ -175,6 +175,29 @@
     border:5px solid transparent;border-top-color:var(--cacau)}
   .dica:hover .dica-bolha,.dica-btn:focus-visible+.dica-bolha{opacity:1;visibility:visible}
   @media(max-width:480px){.dica-bolha{left:0;transform:none}.dica-bolha::after{left:.6rem;transform:none}}
+  /* ---------- Cartão fidelidade (arte conezyn) ---------- */
+  .fid{--roxo:#471C76;--roxo-esc:#3A1267;--laranja:#EB791C;--bege:#A18D80;
+    position:relative;overflow:hidden;border-radius:var(--radius);background:var(--roxo);
+    color:#fff;padding:1.5rem 1.25rem 1.25rem;box-shadow:var(--shadow)}
+  .fid-onda{position:absolute;top:0;left:0;width:100%;height:5.5rem;pointer-events:none}
+  .fid-cone-bg{position:absolute;width:9rem;opacity:.55;pointer-events:none;color:var(--roxo-esc)}
+  .fid-cone-bg.e{left:-3.5rem;bottom:-1rem;transform:rotate(-12deg)}
+  .fid-cone-bg.d{right:-3.5rem;bottom:-2rem;transform:rotate(14deg)}
+  .fid-topo{position:relative;display:flex;align-items:center;justify-content:center;gap:.5rem;
+    font-weight:800;font-size:.95rem}
+  .fid-badge{background:var(--laranja);color:#fff;border-radius:.45rem;padding:.1rem .6rem;
+    font-size:.8rem;font-weight:800}
+  .fid-titulo{position:relative;text-align:center;margin-top:.6rem;font-size:clamp(1.15rem,4.5vw,1.6rem);
+    font-weight:400;line-height:1.15}
+  .fid-titulo strong{font-weight:800}
+  .fid-grade{position:relative;display:grid;grid-template-columns:repeat(5,1fr);gap:.55rem;
+    margin:1.1rem auto 0;max-width:26rem}
+  .fid-selo{aspect-ratio:1;border-radius:9999px;background:#fff;display:grid;place-items:center;position:relative}
+  .fid-selo svg{width:62%;height:62%}
+  .fid-rodape{position:relative;text-align:center;margin-top:1.1rem;font-size:.8rem;opacity:.95}
+  .fid-rodape strong{font-weight:800}
+  .fid-progresso{position:relative;text-align:center;margin-top:.9rem;font-size:.85rem}
+  @media(max-width:420px){.fid-grade{gap:.4rem}}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -1289,6 +1312,60 @@ function vPedidos(){
           </li>`).join("")}</ul>`}
   </main>${vFooter()}`;
 }
+/* Cone desenhado em SVG — usado nos carimbos e no fundo do cartão. */
+function svgCone({ recheio="#A18D80", casquinha="#A18D80", mais=false } = {}){
+  return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <g transform="rotate(-28 24 24)">
+      <path d="M24 6 L34 12 L27 42 L21 42 L14 12 Z" fill="${casquinha}" opacity=".55"/>
+      <ellipse cx="24" cy="10" rx="10.5" ry="5" fill="${recheio}"/>
+    </g>
+    ${mais ? `<g transform="translate(27 26)">
+        <rect x="0" y="5" width="16" height="6" rx="1.5" fill="#EB791C"/>
+        <rect x="5" y="0" width="6" height="16" rx="1.5" fill="#EB791C"/>
+      </g>` : ""}
+  </svg>`;
+}
+
+/* Réplica em código do cartão físico da conezyn. */
+function cartaoFidelidade(carimbos, nome){
+  const noCartao  = carimbos % META_CARIMBOS;
+  const completos = Math.floor(carimbos / META_CARIMBOS);
+  const faltam    = META_CARIMBOS - noCartao;
+
+  const selos = Array.from({ length: META_CARIMBOS }, (_, i) => {
+    const premio  = i === META_CARIMBOS - 1;
+    const marcado = i < noCartao;
+    if (marcado) return `<span class="fid-selo">${svgCone({ recheio:"#471C76", casquinha:"#471C76", mais:premio })}</span>`;
+    if (premio)  return `<span class="fid-selo">${svgCone({ mais:true })}</span>`;
+    return `<span class="fid-selo"></span>`;
+  }).join("");
+
+  return `<div class="fid" role="img" aria-label="Cartão fidelidade: ${noCartao} de ${META_CARIMBOS} carimbos">
+    <svg class="fid-onda" viewBox="0 0 400 80" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 0 H400 V26 C330 58 300 6 232 22 C150 42 120 4 44 26 C28 31 12 32 0 30 Z" fill="#3A1267"/>
+    </svg>
+    <span class="fid-cone-bg e">${svgCone({ recheio:"currentColor", casquinha:"currentColor" })}</span>
+    <span class="fid-cone-bg d">${svgCone({ recheio:"currentColor", casquinha:"currentColor" })}</span>
+
+    <p class="fid-topo">${esc(nome || "Nome")} <span class="fid-badge">Coneiro</span></p>
+    <p class="fid-titulo">Complete e ganhe <strong>um conezyn</strong></p>
+
+    <div class="fid-grade">${selos}</div>
+
+    <p class="fid-progresso">
+      <strong>${noCartao}/${META_CARIMBOS}</strong> —
+      ${carimbos === 0
+        ? "seu primeiro cone entregue já vale um carimbo"
+        : faltam === META_CARIMBOS
+          ? "cartão novo começando"
+          : `faltam ${faltam} ${faltam === 1 ? "cone" : "cones"}`}
+      ${completos > 0 ? `<br><span style="color:#EB791C;font-weight:800">🏆 ${completos} ${completos === 1 ? "cartão completo" : "cartões completos"} para resgatar</span>` : ""}
+    </p>
+
+    <p class="fid-rodape">Siga <strong>@conezyn</strong> no Instagram</p>
+  </div>`;
+}
+
 function vFidelidade(){
   if (!S.perfil){ S.voltarPara="fidelidade"; return vLogin(false); }
   const d = carimbos();
@@ -1296,29 +1373,15 @@ function vFidelidade(){
   const faltam = META_CARIMBOS - noCartao;
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem;display:flex;flex-direction:column;gap:1.25rem">
     <h1 class="display" style="font-size:1.9rem;font-weight:900">Minha fidelidade</h1>
-    <div class="card" style="background:var(--cacau);color:var(--chantilly);padding:1.5rem">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <p class="display" style="font-size:1.1rem;font-weight:900">Meu Cartão Fidelidade</p>
-        <span class="carimbo" aria-hidden style="width:2.25rem;height:2.25rem;display:grid;place-items:center;color:var(--casquinha)">🍦</span>
-      </div>
-      <div class="stamps" role="img" aria-label="${noCartao} de ${META_CARIMBOS} carimbos">
-        ${Array.from({length:META_CARIMBOS},(_,i)=>
-          `<span class="s carimbo ${i<noCartao?"on":""}" aria-hidden>${i<noCartao?"🍦":""}</span>`).join("")}
-      </div>
-      <p class="display" style="margin-top:1rem;font-size:1.5rem;font-weight:900">${noCartao}/${META_CARIMBOS} cones</p>
-      <p style="margin-top:.25rem;font-size:.875rem;color:rgb(255 249 242/.7)">
-        ${d.total===0 ? "Seu primeiro cone entregue já vale um carimbo."
-          : `Faltam ${faltam} ${faltam===1?"cone":"cones"} para completar seu cartão.`}</p>
-      ${completos>0?`<p style="margin-top:.5rem;font-size:.75rem;font-weight:700;color:var(--casquinha-claro)">
-        🏆 ${completos} ${completos===1?"cartão completo":"cartões completos"} — fale com a casa para resgatar.</p>`:""}
-    </div>
+    ${cartaoFidelidade(d.total, S.perfil.nome)}
+
     <section class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Histórico de carimbos</h2>
-      ${d.hist.length===0
+      ${d.historico.length===0
         ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">
             Ainda sem carimbos — eles aparecem aqui quando um pedido é marcado como <strong>Entregue</strong> no painel.</p>`
         : `<ul style="list-style:none;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem;font-size:.875rem">
-            ${d.hist.map(h=>`<li style="display:flex;justify-content:space-between;border-bottom:1px solid rgb(62 39 35/.08);padding-bottom:.5rem">
+            ${d.historico.map(h=>`<li style="display:flex;justify-content:space-between;border-bottom:1px solid rgb(62 39 35/.08);padding-bottom:.5rem">
               <span><strong style="color:var(--pistache)">+${h.n} ${h.n===1?"carimbo":"carimbos"}</strong> · Pedido #${h.pedido}</span>
               <span class="muted">${h.data}</span></li>`).join("")}</ul>`}
     </section>
