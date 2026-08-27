@@ -681,7 +681,7 @@ const KEY = "agua-tracker-v1";
    publicada e recarrega abas antigas (atualizar a cada deploy é
    opcional: qualquer mudança no arquivo muda o hash do Vercel, mas
    manter a data ajuda a depurar) */
-const APP_VERSION = "2026-08-26.4";
+const APP_VERSION = "2026-08-26.5";
 
 /* --- Sino: chaves de controle e alertas para quem recebe --- */
 const SINOS_POR_MEMBRO = "agua-sinos-para-"; /* prefixo + id do membro-alvo */
@@ -2647,7 +2647,7 @@ function AguaTracker() {
       }
       /* cura única para todos os efeitos: só a meta batida liberta */
       const curado = pctMeta >= 1;
-      if (curado && (!ef.travaAte || agora >= ef.travaAte)) return;
+      if (curado) return; /* meta batida liberta, sem exceção */
       ativos[tipo] = ef;
     });
     return ativos;
@@ -3198,14 +3198,9 @@ function AguaTracker() {
         return;
       }
       ef.curas = [...(ef.curas || []), agora];
-      const rapidas = ef.curas.filter((t) => t - ef.desde < 10 * 60 * 1000).length;
-      if (rapidas >= 2 && !ef.travaAte) {
-        ef.travaAte =
-          tipo === "cacto" ? agora + 90 * 60 * 1000 : agora + 3 * 60 * 60 * 1000;
-      }
       /* cura única para todos os efeitos: só a meta batida liberta */
       const curado = pctMeta >= 1;
-      if (curado && (!ef.travaAte || agora >= ef.travaAte)) return;
+      if (curado) return; /* meta batida liberta, sem exceção */
       restantes[tipo] = ef;
     });
     if (Object.keys(restantes).length === 0) delete novo.efeitos[id];
