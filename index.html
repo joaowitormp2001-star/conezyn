@@ -75,8 +75,11 @@
     .split aside{position:sticky;top:6rem}}
   .pcard{display:flex;flex-direction:column;overflow:hidden;transition:transform .15s}
   .pcard:hover{transform:translateY(-2px)}
-  .pcard.esgotado{filter:saturate(.5)}
-  .pfoto{position:relative;aspect-ratio:4/3;display:grid;place-items:center;font-size:3.75rem;cursor:pointer}
+  .pfoto{position:relative;aspect-ratio:4/3;overflow:hidden;cursor:pointer}
+  .pfoto-img{position:absolute;inset:0;display:grid;place-items:center;font-size:3.75rem;
+    transition:transform .45s cubic-bezier(.2,.6,.3,1)}
+  .pcard:hover .pfoto-img{transform:scale(1.08)}
+  @media(prefers-reduced-motion:reduce){.pcard:hover .pfoto-img{transform:none}}
   .pfoto .tags{position:absolute;top:.5rem;left:.5rem;display:flex;flex-wrap:wrap;gap:.25rem}
   .pbody{display:flex;flex-direction:column;gap:.5rem;padding:1rem;flex:1}
   .chips{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.25rem}
@@ -153,7 +156,10 @@
   .sabor-card{width:15rem;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;
     transition:transform .15s}
   .sabor-card:hover{transform:translateY(-2px)}
-  .sabor-foto{aspect-ratio:4/3;display:grid;place-items:center;font-size:2.75rem;position:relative;cursor:pointer}
+  .sabor-foto{aspect-ratio:4/3;position:relative;overflow:hidden;cursor:pointer}
+  .sabor-foto-img{position:absolute;inset:0;display:grid;place-items:center;font-size:2.75rem;
+    transition:transform .45s cubic-bezier(.2,.6,.3,1)}
+  .sabor-card:hover .sabor-foto-img{transform:scale(1.08)}
   .av-row{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center}
   .av-card{width:min(100%,19rem);padding:1.15rem;display:flex;flex-direction:column}
   .modal-overlay{position:fixed;inset:0;z-index:80;background:rgb(62 39 35/.45);
@@ -298,6 +304,7 @@ const S = {
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ocupado: false,
+  qtdCard: {},   // quantidade escolhida em cada card do catálogo
 };
 const byId = id => PRODUTOS.find(p => p.id === id);
 const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -307,6 +314,20 @@ const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BR
    ============================================================ */
 /* Se o produto tem foto no Storage, ela vira o fundo do bloco;
    sem foto, mantém o degradê com emoji. */
+/* Quantidade escolhida direto no card do catálogo. */
+function qtdCard(id){
+  const p = byId(id);
+  const max = p ? p.estoque : 1;
+  const v = S.qtdCard[id] || 1;
+  return Math.max(1, Math.min(v, Math.max(max, 1)));
+}
+function mudarQtdCard(id, delta){
+  const p = byId(id);
+  const novo = qtdCard(id) + delta;
+  S.qtdCard[id] = Math.max(1, Math.min(novo, p ? p.estoque : 1));
+  render();
+}
+
 function fundoFoto(p){
   // Fotos quadradas em molduras 4:3 seriam cortadas em cima e embaixo.
   // Ancoramos no topo: o cone aparece inteiro e o corte sobra na base.
@@ -547,6 +568,7 @@ function toggleAdmin(){
 function addCart(id, q=1){
   const p = byId(id); if (!p || p.estoque<=0) return;
   S.carrinho[id] = Math.min((S.carrinho[id]||0)+q, p.estoque);
+  S.qtdCard[id] = 1;              // o contador do card volta ao início
   mostrarCartToast(p, q);
   render();
 }
@@ -621,11 +643,14 @@ function avatarHtml(nome, foto, lg=false){
 async function carregarFoto(input){
   const f = input.files && input.files[0];
   if (!f || !S.perfil) return;
-  if (f.size > 3 * 1024 * 1024){ alert("A foto precisa ter menos de 3 MB."); return; }
-  const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
-  const caminho = `${S.perfil.id}/avatar.${ext}`;
+  if (!/^image\//.test(f.type)){ alert("Escolha um arquivo de imagem."); return; }
+  // nome fixo em webp: cada troca sobrescreve a anterior, sem acumular arquivos
+  const caminho = `${S.perfil.id}/avatar.webp`;
+  let blob;
+  try { blob = await prepararImagem(f, 480, 0.85); }
+  catch (e) { alert(erroAmigavel(e)); return; }
   const { error } = await sb.storage.from("avatares")
-    .upload(caminho, f, { upsert: true, contentType: f.type });
+    .upload(caminho, blob, { upsert: true, contentType: "image/webp" });
   if (error){ alert(erroAmigavel(error)); return; }
   const { data } = sb.storage.from("avatares").getPublicUrl(caminho);
   const url = data.publicUrl + "?v=" + Date.now();   // evita cache da foto antiga
@@ -635,6 +660,7 @@ async function carregarFoto(input){
 }
 async function removerFoto(){
   if (!S.perfil) return;
+  await sb.storage.from("avatares").remove([`${S.perfil.id}/avatar.webp`]);
   await sb.from("profiles").update({ foto_url: null }).eq("id", S.perfil.id);
   S.perfil.foto = null; render();
 }
@@ -926,10 +952,12 @@ function vFooter(){
 }
 function vCardProduto(p){
   const esg = p.estoque<=0;
-  return `<article class="card pcard ${esg?"esgotado":""}">
-    <div class="pfoto" style="${fundoFoto(p)}" role="img" aria-label="Foto do cone ${esc(p.nome)}"
+  const q = qtdCard(p.id);
+  return `<article class="card pcard">
+    <div class="pfoto" role="img" aria-label="Foto do cone ${esc(p.nome)}"
          onclick="nav('produto','${p.id}')">
-      <span>${conteudoFoto(p)}</span><div class="tags">${badges(p, true)}</div>
+      <div class="pfoto-img" style="${fundoFoto(p)}">${conteudoFoto(p)}</div>
+      <div class="tags">${badges(p, true)}</div>
     </div>
     <div class="pbody">
       <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:start">
@@ -941,8 +969,17 @@ function vCardProduto(p){
         aria-label="Ver as ${p.qtd} avaliações de ${esc(p.nome)}"
         onclick="event.stopPropagation();abrirAvaliacoes('${p.id}')">${stars(p.nota,p.qtd)}</button>
       <p style="font-size:.75rem;font-weight:600;color:var(--pistache)">2 por ${reais(p.dupla*2)} — vale misturar sabores</p>
-      <button class="btn btn-primary" style="margin-top:auto" ${esg?"disabled":""}
-        onclick="addCart('${p.id}')">${esg?"Esgotado":"Adicionar ao carrinho"}</button>
+      <div style="display:flex;gap:.5rem;align-items:center;margin-top:auto">
+        ${esg ? "" : `<div class="stepper" style="flex-shrink:0">
+          <button aria-label="Menos um ${esc(p.nome)}" onclick="mudarQtdCard('${p.id}',-1)"
+            ${q<=1?"disabled":""}>−</button>
+          <span aria-live="polite">${q}</span>
+          <button aria-label="Mais um ${esc(p.nome)}" onclick="mudarQtdCard('${p.id}',1)"
+            ${q>=p.estoque?"disabled":""}>+</button>
+        </div>`}
+        <button class="btn btn-primary" style="flex:1" ${esg?"disabled":""}
+          onclick="addCart('${p.id}', ${q})">${esg?"Esgotado":"Adicionar"}</button>
+      </div>
     </div>
   </article>`;
 }
@@ -1026,13 +1063,22 @@ function vHome(){
 }
 function vProduto(){
   const p = byId(S.param);
-  if (!p) return vHome();
+  if (!p){
+    return `${vHeader()}<main class="wrap" style="padding-top:1.5rem">
+      <div class="card" style="padding:3rem 1.5rem;text-align:center">
+        <p style="font-size:2.5rem" aria-hidden>🫥</p>
+        <h1 class="display" style="margin-top:.5rem;font-size:1.25rem;font-weight:900">Sabor não encontrado</h1>
+        <p class="muted" style="margin-top:.4rem;font-size:.875rem">
+          Ele pode ter saído do cardápio de hoje.</p>
+        <button class="btn btn-primary" style="margin-top:1.1rem" onclick="nav('home')">Ver o catálogo</button>
+      </div></main>${vFooter()}`;
+  }
   const esg = p.estoque<=0;
   const avs = AVALIACOES.filter(a=>a.pid===p.id);
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem">
     <div class="grid c2" style="gap:2rem">
       <div class="card" style="aspect-ratio:4/3;max-height:20rem;align-self:start;display:grid;place-items:center;font-size:5.5rem;
-        ${fundoFoto(p)};${esg?"filter:saturate(.5)":""}" role="img" aria-label="Foto do cone ${esc(p.nome)}">${conteudoFoto(p)}</div>
+        ${fundoFoto(p)}" role="img" aria-label="Foto do cone ${esc(p.nome)}">${conteudoFoto(p)}</div>
       <div style="display:flex;flex-direction:column;gap:1rem">
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">${badges(p)}</div>
         <h1 class="display" style="font-size:2.25rem;font-weight:900">${esc(p.nome)}</h1>
@@ -1083,9 +1129,9 @@ function vProduto(){
         ${PRODUTOS.filter(x=>x.id!==p.id).map(x=>{
           const xEsg = x.estoque<=0;
           return `<article class="card sabor-card">
-          <div class="sabor-foto" style="${fundoFoto(x)};${xEsg?"filter:saturate(.5)":""}"
-            role="img" aria-label="Foto do cone ${esc(x.nome)}" onclick="nav('produto','${x.id}')">
-            ${conteudoFoto(x)}
+          <div class="sabor-foto" role="img" aria-label="Foto do cone ${esc(x.nome)}"
+            onclick="nav('produto','${x.id}')">
+            <div class="sabor-foto-img" style="${fundoFoto(x)}">${conteudoFoto(x)}</div>
             <div style="position:absolute;top:.4rem;left:.4rem;display:flex;gap:.25rem;flex-wrap:wrap">
               ${badges(x, true)}</div>
           </div>
@@ -1331,10 +1377,7 @@ function vConfirmado(){
       </dl>
       ${blocoPix(p)}
       <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.5rem">
-        <button class="btn btn-verde" style="min-height:3rem;font-weight:700"
-          onclick="alert('No projeto real, este botão abre o WhatsApp com a mensagem do pedido preenchida (wa.me).')">
-          Enviar pedido pelo WhatsApp</button>
-        <button class="btn btn-ghost" style="min-height:3rem;font-weight:700" onclick="nav('pedidos')">Acompanhar meus pedidos</button>
+        <button class="btn btn-primary" style="min-height:3rem;font-weight:700" onclick="nav('pedidos')">Acompanhar meus pedidos</button>
       </div>
     </div>
   </main>${vFooter()}`;
@@ -2153,8 +2196,10 @@ async function enviarFotoProduto(input, produtoId, slug){
   }
 }
 
-async function removerFotoProduto(produtoId){
+async function removerFotoProduto(produtoId, slug){
   if (!confirm("Remover a foto deste sabor? Volta a aparecer o desenho padrão.")) return;
+  // apaga o arquivo do Storage, não só a referência no banco
+  await sb.storage.from("produtos").remove([`${slug}.webp`]);
   await salvarCampoProduto(produtoId, "imagem_url", null);
 }
 
@@ -2227,7 +2272,7 @@ function vAdminProdutos(){
                   onchange="enviarFotoProduto(this,'${p.id}','${p.slug}')">
               </label>
               ${p.imagem_url ? `<button style="font-size:.7rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
-                onclick="removerFotoProduto('${p.id}')">remover</button>` : ""}
+                onclick="removerFotoProduto('${p.id}','${p.slug}')">remover</button>` : ""}
             </div>
           </div>
 
