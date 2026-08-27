@@ -92,9 +92,10 @@
   .radio-opt.on{border-color:var(--cacau);background:#fff}
   .radio-opt input[type=radio]{accent-color:var(--cacau)}
   .status{display:inline-flex;border-radius:9999px;padding:.25rem .75rem;font-size:.72rem;font-weight:700}
-  .st-Pendente{background:var(--casquinha-claro)} .st-Confirmado{background:var(--chantilly-esc)}
-  .st-Em_preparo{background:var(--casquinha);color:#fff} .st-A_caminho{background:var(--cacau-claro);color:#fff}
-  .st-Entregue{background:var(--pistache);color:#fff} .st-Cancelado{background:var(--framboesa);color:#fff}
+  .st-Pedido_feito{background:var(--casquinha-claro);color:var(--cacau)}
+  .st-Entregue{background:var(--cacau-claro);color:#fff}
+  .st-Pagamento_concluído{background:var(--pistache);color:#fff}
+  .st-Cancelado{background:var(--framboesa);color:#fff}
   header.admin{position:sticky;top:0;z-index:40;background:var(--cacau);color:var(--chantilly);
     border-bottom:1px solid rgb(62 39 35 / .1)}
   header.admin .inner{max-width:72rem;margin:0 auto;padding:.75rem 1rem}
@@ -195,6 +196,16 @@
     gap:clamp(.7rem,2.2vw,1.6rem);margin:2rem auto 0;max-width:44rem}
   .fid-selo{aspect-ratio:1;border-radius:9999px;background:#fff;display:grid;place-items:center}
   .fid-selo svg{width:66%;height:66%}
+  /* brilho suave sobre o roxo */
+  .fid::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(120% 80% at 18% -10%, rgba(255,255,255,.22), transparent 55%),
+      radial-gradient(90% 70% at 105% 115%, rgba(235,121,28,.20), transparent 60%),
+      linear-gradient(160deg, rgba(255,255,255,.08) 0%, transparent 38%, rgba(0,0,0,.14) 100%)}
+  .fid::after{content:"";position:absolute;left:-30%;top:-60%;width:55%;height:220%;
+    pointer-events:none;transform:rotate(18deg);
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.10), transparent)}
+  .fid>*{position:relative;z-index:1}
   @media(max-width:520px){.fid{padding:1.5rem 1.15rem 1.75rem}.fid-grade{gap:.6rem;margin-top:1.4rem}}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
@@ -239,7 +250,8 @@ let PRODUTOS = [];     // preenchido pelo banco
 let AVALIACOES = [];   // idem
 
 const MIN_DEPOIMENTOS = 7;
-const STATUS = ["Pendente","Confirmado","Em preparo","A caminho","Entregue","Cancelado"];
+const STATUS = ["Pedido feito","Entregue","Pagamento concluído"];   // fluxo normal
+const STATUS_TODOS = [...STATUS, "Cancelado"];                       // + saída de emergência
 let META_CARIMBOS = 10;
 const ANTECEDENCIA_MIN = 20;
 
@@ -327,6 +339,7 @@ function mapearPedido(row){
     })),
     subtotal: row.subtotal_individual_centavos,
     economia: row.economia_centavos,
+    brinde: row.desconto_fidelidade_centavos || 0,
     total: row.total_centavos,
     local: row.local_entrega, quando: row.quando,
     status: row.status, criadoEm: new Date(row.criado_em),
@@ -1044,6 +1057,9 @@ function vCheckout(){
     </div>
     <aside class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Resumo do pedido</h2>
+      ${S.fidelidade.total >= META_CARIMBOS ? `<p style="margin-top:.5rem;background:rgba(235,121,28,.12);
+        color:#B4590F;border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
+        🎁 Seu cartão está completo — 1 cone deste pedido sai de graça. O desconto entra ao confirmar.</p>` : ""}
       <dl class="linhas" style="margin-top:.75rem">
         ${pr.linhas.map(l=>`<div><dt>${l.q}× ${esc(byId(l.id).nome)}</dt><dd style="font-weight:600">${reais(l.efetivo)}</dd></div>`).join("")}
       </dl>
@@ -1074,7 +1090,9 @@ function vConfirmado(){
       <p class="display" style="margin-top:.5rem;font-size:1.25rem;font-weight:700;color:var(--casquinha)">Pedido #${p.numero}</p>
       <dl class="linhas" style="margin-top:1.5rem;background:var(--chantilly);border-radius:1rem;padding:1rem;text-align:left">
         ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
-        ${p.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia</dt><dd>− ${reais(p.economia)}</dd></div>`:""}
+        ${p.brinde>0?`<div style="font-weight:700;color:#B4590F">
+          <dt>🎁 Brinde do cartão fidelidade</dt><dd>− ${reais(p.brinde)}</dd></div>`:""}
+        ${p.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia total</dt><dd>− ${reais(p.economia)}</dd></div>`:""}
         <div class="total-row display" style="font-size:1.1rem"><dt>Total</dt><dd>${reais(p.total)}</dd></div>
         <div style="padding-top:.25rem"><dt class="muted">Entrega</dt><dd style="font-weight:600">${esc(p.local)}</dd></div>
         <div><dt class="muted">Receber</dt><dd style="font-weight:600">${p.quando==="agora"?"Agora":"às "+p.quando}</dd></div>
@@ -1314,6 +1332,8 @@ function vPedidos(){
             <dl class="linhas" style="margin-top:.75rem">
               ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
             </dl>
+            ${p.brinde>0?`<p style="margin-top:.4rem;font-size:.75rem;font-weight:700;color:#B4590F">
+              🎁 Brinde do cartão fidelidade: − ${reais(p.brinde)}</p>`:""}
             <p class="display" style="margin-top:.5rem;border-top:1px solid rgb(62 39 35/.1);padding-top:.5rem;
               text-align:right;font-weight:900">${reais(p.total)}</p>
           </li>`).join("")}</ul>`}
@@ -1340,7 +1360,7 @@ function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
       : "";
   return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <g transform="rotate(-28 24 24)">
-      <path d="M24 6 L34 12 L27 42 L21 42 L14 12 Z" fill="${casquinha}" opacity=".55"/>
+      <path d="M24 6 L34 12 L25.6 41.4 Q24 44.4 22.4 41.4 L14 12 Z" fill="${casquinha}" opacity=".55"/>
       <ellipse cx="24" cy="10" rx="10.5" ry="5" fill="${recheio}"/>
     </g>
     ${enfeite}
@@ -1401,7 +1421,7 @@ function vFidelidade(){
 
 /* ---------- Admin ---------- */
 function vAdminHeader(){
-  const pend = S.pedidos.filter(p=>p.status==="Pendente").length;
+  const pend = S.pedidos.filter(p=>p.status==="Pedido feito").length;
   return `<header class="admin"><div class="inner">
     <div class="row1">
       <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
@@ -1519,7 +1539,7 @@ function vAdminDash(){
   const deHoje = S.pedidos.filter(p=>p.criadoEm.toDateString()===hoje && p.status!=="Cancelado");
   const cones = deHoje.reduce((s,p)=>s+p.itens.reduce((x,i)=>x+i.q,0),0);
   const fat = deHoje.reduce((s,p)=>s+p.total,0);
-  const pend = S.pedidos.filter(p=>p.status==="Pendente").length;
+  const pend = S.pedidos.filter(p=>p.status==="Pedido feito").length;
   const rank = {};
   S.pedidos.filter(p=>p.status!=="Cancelado").forEach(p=>p.itens.forEach(i=>rank[i.nome]=(rank[i.nome]||0)+i.q));
   const ranking = Object.entries(rank).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -1561,7 +1581,7 @@ function vAdminPedidos(){
   return `<div style="display:flex;flex-direction:column;gap:1rem">
     <h1 class="display" style="font-size:1.5rem;font-weight:900">Pedidos</h1>
     <div class="chips" role="tablist" aria-label="Filtrar pedidos por status">
-      ${["todos",...STATUS].map(f=>`<button class="chip" role="tab" aria-selected="${S.adminFiltro===f}"
+      ${["todos",...STATUS_TODOS].map(f=>`<button class="chip" role="tab" aria-selected="${S.adminFiltro===f}"
         onclick="S.adminFiltro='${f}';render()">${f==="todos"?"Todos":f}</button>`).join("")}
     </div>
     ${vis.length===0
@@ -1595,9 +1615,9 @@ function vAdminPedidos(){
               <label for="st-${p.id}" class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Status</label>
               <select id="st-${p.id}" class="field" style="width:auto;border-radius:9999px;min-height:2.5rem;font-weight:600"
                 onchange="mudarStatus('${p.id}', this.value)">
-                ${STATUS.map(s=>`<option ${p.status===s?"selected":""}>${s}</option>`).join("")}
+                ${STATUS_TODOS.map(s=>`<option ${p.status===s?"selected":""}>${s}</option>`).join("")}
               </select>
-              ${p.status==="Entregue"?`<span style="font-size:.75rem;font-weight:600;color:var(--pistache)">carimbos de fidelidade creditados</span>`:""}
+              ${p.status==="Pagamento concluído"?`<span style="font-size:.75rem;font-weight:600;color:var(--pistache)">carimbos creditados ✓</span>`:""}
             </div>
           </li>`).join("")}</ul>`}
   </div>`;
