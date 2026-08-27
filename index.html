@@ -177,61 +177,51 @@
   .dica:hover .dica-bolha,.dica-btn:focus-visible+.dica-bolha{opacity:1;visibility:visible}
   @media(max-width:480px){.dica-bolha{left:0;transform:none}.dica-bolha::after{left:.6rem;transform:none}}
   /* ---------- Cartão fidelidade (arte conezyn) ---------- */
-  .fid{--roxo:#471C76;--roxo-esc:#3A1267;--roxo-claro:#5C2E96;
-    --dourado:#E8C79A;--laranja:#EB791C;--verde:#2E9E4F;
+  .fid{
+    /* roxo dessaturado: dá espaço para a cor de destaque respirar */
+    --roxo:#4A3A6E;--roxo-esc:#332750;--roxo-claro:#5D4A87;
+    --destaque:#FFD9A0;--verde:#3FBF7F;
     font-family:"Montserrat",system-ui,sans-serif;
-    position:relative;overflow:hidden;width:100%;
-    padding:2.1rem 1.5rem 2.2rem;
+    position:relative;overflow:hidden;width:100%;max-width:30rem;margin-inline:auto;
+    padding:2.1rem 1.6rem 2.3rem;
     border-radius:1.4rem;border:1px solid rgba(255,255,255,.16);
-    background:linear-gradient(158deg,var(--roxo-claro) 0%,var(--roxo) 46%,var(--roxo-esc) 100%);
+    background:linear-gradient(158deg,var(--roxo-claro) 0%,var(--roxo) 48%,var(--roxo-esc) 100%);
     color:#fff;
-    box-shadow:0 14px 34px -14px rgba(58,18,103,.65),
-               inset 0 1px 0 rgba(255,255,255,.24)}
-  .fid-onda{position:absolute;top:0;left:0;width:100%;height:5rem;pointer-events:none;z-index:0;opacity:.9}
-  .fid-cone-bg{position:absolute;width:8rem;opacity:.45;pointer-events:none;color:var(--roxo-esc);z-index:0}
+    box-shadow:0 14px 34px -14px rgba(51,39,80,.6), inset 0 1px 0 rgba(255,255,255,.22)}
+  .fid-onda{position:absolute;top:0;left:0;width:100%;height:5rem;pointer-events:none;z-index:0;opacity:.85}
+  .fid-cone-bg{position:absolute;width:8rem;opacity:.4;pointer-events:none;color:var(--roxo-esc);z-index:0}
   .fid-cone-bg.e{left:-3rem;bottom:-2.5rem;transform:rotate(-12deg)}
   .fid-cone-bg.d{right:-3rem;bottom:-3rem;transform:rotate(14deg)}
 
   .fid-topo{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;
-    gap:.55rem;font-weight:800;font-size:1rem;letter-spacing:.01em}
-  .fid-badge{background:var(--dourado);color:var(--roxo-esc);border-radius:.45rem;
-    padding:.12rem .7rem;font-size:.85rem;font-weight:800;letter-spacing:.02em;
-    box-shadow:0 1px 0 rgba(255,255,255,.35) inset}
+    gap:.55rem;font-weight:800;font-size:1rem}
+  .fid-badge{background:var(--destaque);color:#332750;border-radius:.45rem;
+    padding:.12rem .7rem;font-size:.85rem;font-weight:800;
+    box-shadow:0 1px 0 rgba(255,255,255,.4) inset}
   .fid-titulo{position:relative;z-index:2;text-align:center;margin-top:.6rem;
-    font-size:clamp(1.2rem,3vw,1.7rem);font-weight:400;line-height:1.15}
-  .fid-titulo strong{font-weight:800;color:var(--dourado)}
+    font-size:clamp(1.2rem,3vw,1.6rem);font-weight:400;line-height:1.15}
+  .fid-titulo strong{font-weight:800;color:var(--destaque)}
 
-  /* colunas do tamanho do círculo: espaçamento igual na horizontal e na vertical */
   .fid-grade{position:relative;z-index:2;display:grid;
-    grid-template-columns:repeat(5,minmax(0,4.2rem));justify-content:center;
-    gap:.8rem;margin:1.3rem auto 0}
+    grid-template-columns:repeat(5,minmax(0,4rem));justify-content:center;
+    gap:1.15rem;margin:1.5rem auto 0}
   .fid-selo{aspect-ratio:1;width:100%;border-radius:9999px;background:#fff;
     display:grid;place-items:center;
-    box-shadow:0 2px 6px -2px rgba(0,0,0,.35), inset 0 -2px 4px -2px rgba(71,28,118,.25)}
-  .fid-selo.vazio{background:rgba(255,255,255,.92)}
+    box-shadow:0 2px 6px -2px rgba(0,0,0,.35), inset 0 -2px 4px -2px rgba(74,58,110,.28)}
   .fid-selo svg{width:66%;height:66%}
 
-  /* luz */
   .fid::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
     background:
-      radial-gradient(120% 80% at 18% -10%, rgba(255,255,255,.20), transparent 55%),
-      radial-gradient(90% 70% at 105% 115%, rgba(232,199,154,.16), transparent 60%),
-      linear-gradient(160deg, rgba(255,255,255,.07) 0%, transparent 40%, rgba(0,0,0,.16) 100%)}
+      radial-gradient(120% 80% at 18% -10%, rgba(255,255,255,.18), transparent 55%),
+      radial-gradient(90% 70% at 105% 115%, rgba(255,217,160,.14), transparent 60%),
+      linear-gradient(160deg, rgba(255,255,255,.06) 0%, transparent 42%, rgba(0,0,0,.15) 100%)}
   .fid::after{content:"";position:absolute;left:-30%;top:-60%;width:55%;height:220%;
     pointer-events:none;z-index:1;transform:rotate(18deg);
-    background:linear-gradient(90deg, transparent, rgba(255,255,255,.09), transparent)}
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent)}
 
   @media(max-width:520px){
-    .fid{padding:1.7rem 1rem 1.8rem}
-    .fid-grade{grid-template-columns:repeat(5,minmax(0,3.3rem));gap:.55rem;margin-top:1.1rem}}
-  /* trilha de etapas do cadastro */
-  .etapas{display:flex;align-items:center;gap:.4rem;margin-bottom:1.1rem}
-  .etapa-bolha{flex:1;height:.3rem;border-radius:9999px;background:rgb(62 39 35/.12)}
-  .etapa-bolha.on{background:var(--cacau)}
-  .etapa-num{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.5);letter-spacing:.04em;
-    text-transform:uppercase;margin-bottom:.35rem;display:block}
-  .ficha-card{border:1px solid rgb(62 39 35/.15);background:var(--chantilly);
-    border-radius:.9rem;padding:1rem;margin-top:.25rem}
+    .fid{padding:1.7rem 1rem 1.9rem}
+    .fid-grade{grid-template-columns:repeat(5,minmax(0,3.1rem));gap:.7rem;margin-top:1.2rem}}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -289,11 +279,12 @@ const S = {
   fidelidade: { total: 0, historico: [] },
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
+  presente: { ativo:false, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false },
   sugestaoOk: false, loginErro: null, cadastroErro: null, voltarPara: null,
   cad: { etapa: 1, tel: "", nome: "", email: "", ficha: null, checando: false },
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
-  admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], carregado: false },
+  admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, ocupado: false,
 };
@@ -367,6 +358,9 @@ function mapearPedido(row){
     subtotal: row.subtotal_individual_centavos,
     economia: row.economia_centavos,
     brinde: row.desconto_fidelidade_centavos || 0,
+    presente: !!row.presente,
+    destinatario: row.destinatario_nome || "",
+    destinatarioSetor: row.destinatario_setor || "",
     total: row.total_centavos,
     local: row.local_entrega, quando: row.quando,
     status: row.status, criadoEm: new Date(row.criado_em),
@@ -452,7 +446,8 @@ function nav(view, param){
   param = param ?? null;
   if (!(S.view===view && S.param===param)) S.hist.push({view:S.view, param:S.param});
   S.view = view; S.param = param;
-  if (view==="checkout"){ S.checkout = { local: S.perfil?.setor || "", quando:"agora", hora:"", erro:null, idem:null }; }
+  if (view==="checkout"){ S.checkout = { local: S.perfil?.setor || "", quando:"agora", hora:"", erro:null, idem:null };
+    S.presente = { ativo:false, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false }; }
   if (view==="produto") pqv = 1;
   if (view==="cadastro") S.cad = { etapa:1, tel:"", nome:"", email:"", ficha:null, checando:false };
   S.loginErro = null; S.cadastroErro = null;
@@ -714,6 +709,34 @@ function setQtd(id, q){
 }
 
 /* ---------- Pedido (espelho de src/lib/data/pedidos.ts) ---------- */
+function alternarPresente(ativo){
+  S.presente = { ativo, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false };
+  render();
+}
+let buscaTimer = null;
+function buscarDestinatario(termo){
+  const p = S.presente;
+  p.termo = termo; p.escolhido = null;
+  clearTimeout(buscaTimer);
+  if (termo.trim().length < 3){ p.sugestoes = []; p.buscando = false; return render(); }
+  p.buscando = true;
+  buscaTimer = setTimeout(async () => {
+    const { data, error } = await sb.rpc("buscar_destinatarios", { p_termo: termo.trim() });
+    p.sugestoes = error ? [] : (data || []);
+    p.buscando = false;
+    render();
+  }, 350);
+}
+function escolherDestinatario(i){
+  const d = S.presente.sugestoes[i];
+  if (!d) return;
+  S.presente.escolhido = d;
+  S.presente.termo = d.nome;
+  S.presente.setor = d.setor || S.presente.setor;
+  S.presente.sugestoes = [];
+  render();
+}
+
 async function confirmarPedido(){
   const c = S.checkout;
   c.erro = null;
@@ -736,11 +759,21 @@ async function confirmarPedido(){
   // A chave de idempotência nasce aqui: duplo clique não gera dois pedidos.
   if (!c.idem) c.idem = crypto.randomUUID();
 
+  const pr = S.presente;
+  if (pr.ativo){
+    const nome = pr.escolhido ? pr.escolhido.nome : pr.termo.trim();
+    if (nome.length < 2){ c.erro = "Informe para quem é o presente."; return render(); }
+  }
+
   const { data, error } = await sb.rpc("place_order", {
     p_itens: itens,
     p_local: c.local.trim(),
     p_quando: c.quando === "agora" ? "agora" : c.hora,
     p_idempotency_key: c.idem,
+    p_presente: !!pr.ativo,
+    p_destinatario_nome: pr.ativo ? (pr.escolhido ? pr.escolhido.nome : pr.termo.trim()) : null,
+    p_destinatario_setor: pr.ativo ? (pr.setor.trim() || null) : null,
+    p_destinatario_id: pr.ativo && pr.escolhido ? pr.escolhido.id : null,
   });
 
   if (error){
@@ -1061,6 +1094,49 @@ function vCheckout(){
           oninput="S.checkout.local=this.value;atualizarResumo()">
         <p class="muted" style="margin-top:.5rem;font-size:.75rem">A entrega acontece exclusivamente dentro da empresa.</p>
       </div>
+      <div class="card" style="padding:1.25rem">
+        <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
+          <input type="checkbox" ${S.presente.ativo?"checked":""} style="accent-color:var(--cacau);width:1.1rem;height:1.1rem"
+            onchange="alternarPresente(this.checked)">
+          <span class="display" style="font-size:1.1rem;font-weight:700">🎁 É um presente para outra pessoa</span>
+        </label>
+        ${S.presente.ativo ? `
+          <p class="muted" style="font-size:.78rem;margin-top:.5rem">
+            Você paga e a gente entrega no setor de quem vai receber.</p>
+          <div style="position:relative;margin-top:.6rem">
+            <label class="label" for="pr-nome">Para quem?</label>
+            <input id="pr-nome" class="field" autocomplete="off" placeholder="Digite o nome"
+              value="${esc(S.presente.escolhido ? S.presente.escolhido.nome : S.presente.termo)}"
+              oninput="buscarDestinatario(this.value)">
+            ${S.presente.sugestoes.length > 0 ? `
+              <ul style="list-style:none;position:absolute;z-index:20;left:0;right:0;margin-top:.25rem;
+                background:#fff;border-radius:.75rem;box-shadow:var(--shadow);overflow:hidden">
+                ${S.presente.sugestoes.map((d,i)=>`<li>
+                  <button style="display:block;width:100%;text-align:left;padding:.6rem .8rem;font-size:.85rem"
+                    onmouseover="this.style.background='var(--chantilly-esc)'"
+                    onmouseout="this.style.background='transparent'"
+                    onclick="escolherDestinatario(${i})">
+                    <strong>${esc(d.nome)}</strong>
+                    ${d.setor?`<span class="muted"> · 📍 ${esc(d.setor)}</span>`:""}
+                    ${d.origem==="conta"?`<span class="badge b-classico" style="margin-left:.3rem">tem conta</span>`:""}
+                  </button></li>`).join("")}
+              </ul>` : ""}
+            ${S.presente.buscando?`<p class="muted" style="font-size:.72rem;margin-top:.3rem">procurando...</p>`:""}
+          </div>
+          <div style="margin-top:.6rem">
+            <label class="label" for="pr-setor">Setor de quem recebe</label>
+            <input id="pr-setor" class="field" placeholder="Ex: Comercial, TI,..."
+              value="${esc(S.presente.setor)}" oninput="S.presente.setor=this.value">
+          </div>
+          ${S.presente.escolhido && S.presente.escolhido.origem==="conta"
+            ? `<p class="ok" style="margin-top:.6rem">Essa pessoa tem conta — ela vai receber um aviso no site.</p>`
+            : S.presente.termo || S.presente.escolhido
+              ? `<p class="muted" style="font-size:.75rem;margin-top:.6rem">
+                  Sem conta na plataforma? Sem problema — entregamos pelo nome e setor.</p>`
+              : ""}
+        ` : ""}
+      </div>
+
       <div class="card" style="padding:1.25rem">
         <fieldset style="border:none">
           <legend class="display" style="font-size:1.1rem;font-weight:700">Quando deseja receber?</legend>
@@ -1447,6 +1523,8 @@ function vPedidos(){
             <dl class="linhas" style="margin-top:.75rem">
               ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
             </dl>
+            ${p.presente?`<p style="margin-top:.4rem;font-size:.75rem;font-weight:700;color:var(--cacau-claro)">
+              🎁 Presente para ${esc(p.destinatario || "")}</p>`:""}
             ${p.brinde>0?`<p style="margin-top:.4rem;font-size:.75rem;font-weight:700;color:#B4590F">
               🎁 Brinde do cartão fidelidade: − ${reais(p.brinde)}</p>`:""}
             <p class="display" style="margin-top:.5rem;border-top:1px solid rgb(62 39 35/.1);padding-top:.5rem;
@@ -1462,14 +1540,14 @@ function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
   const enfeite =
     marca === "mais"
       ? `<g transform="translate(32 31)">
-           <path d="${cruz}" fill="#E8C79A" stroke="#fff" stroke-width="3.2"
+           <path d="${cruz}" fill="#FFD9A0" stroke="#fff" stroke-width="3.2"
                  stroke-linejoin="round" paint-order="stroke"/>
          </g>`
       : marca === "check"
       ? `<g transform="translate(29 23)">
            <path d="${tique}" fill="none" stroke="#fff" stroke-width="8.5"
                  stroke-linecap="round" stroke-linejoin="round"/>
-           <path d="${tique}" fill="none" stroke="#2E9E4F" stroke-width="4.2"
+           <path d="${tique}" fill="none" stroke="#3FBF7F" stroke-width="4.2"
                  stroke-linecap="round" stroke-linejoin="round"/>
          </g>`
       : "";
@@ -1494,7 +1572,7 @@ function cartaoFidelidade(carimbos, nome){
     // o último círculo carrega a marca: + enquanto falta, ✓ quando completa
     const marca = ultimo ? (completo ? "check" : "mais") : null;
     return marcado
-      ? `<span class="fid-selo">${svgCone({ recheio:"#471C76", casquinha:"#471C76", marca })}</span>`
+      ? `<span class="fid-selo">${svgCone({ recheio:"#4A3A6E", casquinha:"#4A3A6E", marca })}</span>`
       : `<span class="fid-selo">${ultimo ? svgCone({ marca }) : ""}</span>`;
   }).join("");
 
@@ -1713,6 +1791,8 @@ function vAdminPedidos(){
             <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.75rem">
               <div>
                 <p class="display" style="font-size:1.1rem;font-weight:900">Pedido #${p.numero}</p>
+                ${p.presente?`<p style="font-size:.78rem;font-weight:700;color:var(--cacau-claro)">
+                  🎁 Presente para ${esc(p.destinatario)}${p.destinatarioSetor?" · 📍 "+esc(p.destinatarioSetor):""}</p>`:""}
                 <p class="muted" style="font-size:.75rem">${esc(p.cliente.nome)} · ${esc(p.cliente.tel)} ·
                   ${p.criadoEm.toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</p>
               </div>
@@ -1821,12 +1901,44 @@ function vErroBanco(){
   </main>`;
 }
 
+/* Avisa quem recebeu um presente, na primeira vez que abrir o site. */
+async function checarPresentes(){
+  if (!S.perfil) return;
+  const { data, error } = await sb.rpc("meus_presentes");
+  if (error || !data) return;
+  const novos = data.filter(p => !p.visto);
+  if (novos.length === 0) return;
+
+  const p = novos[0];
+  document.getElementById("modal-slot").innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)fecharPresente('${p.id}')">
+      <div class="modal card" role="dialog" aria-modal="true" style="text-align:center;max-width:22rem">
+        <p style="font-size:3rem" aria-hidden>🎁</p>
+        <h2 class="display" style="font-size:1.4rem;font-weight:900;margin-top:.25rem">Você ganhou cones!</h2>
+        <p style="margin-top:.6rem;font-size:.95rem">
+          <strong>${esc(p.de)}</strong> mandou um presente para você:</p>
+        <p class="display" style="margin-top:.4rem;font-size:1.1rem;font-weight:800;color:var(--casquinha)">
+          ${esc(p.sabores || "cones")}</p>
+        ${novos.length > 1 ? `<p class="muted" style="margin-top:.5rem;font-size:.78rem">
+          E mais ${novos.length - 1} presente(s) esperando por você.</p>` : ""}
+        <button class="btn btn-primary" style="width:100%;margin-top:1.25rem"
+          onclick="fecharPresente('${p.id}')">Que delícia, obrigado!</button>
+      </div>
+    </div>`;
+}
+async function fecharPresente(id){
+  fecharModal();
+  await sb.rpc("marcar_presente_visto", { p_pedido: id });
+  setTimeout(checarPresentes, 400);
+}
+
 async function iniciar(){
   render();
   try {
     await carregarPerfil();
     await carregarCatalogo();
     if (S.perfil) await Promise.all([carregarPedidos(), carregarFidelidade()]);
+    if (S.perfil) checarPresentes();
   } catch (e){
     console.error(e);
     S.erroBanco = erroAmigavel(e);
@@ -1855,18 +1967,20 @@ async function abrirAdmin(aba){
 
 async function carregarAdmin(){
   if (!S.perfil?.admin) return;
-  const [prod, avs, sug, cli, fic] = await Promise.all([
+  const [prod, avs, sug, cli, fic, comp] = await Promise.all([
     sb.from("products").select("*, categories(nome, slug)").order("nome"),
     sb.from("reviews").select("*, products(nome), profiles(nome)").order("criado_em", { ascending:false }),
     sb.from("suggestions").select("*, profiles(nome, telefone)").order("criado_em", { ascending:false }),
     sb.from("clientes_admin").select("*").order("nome"),
-    sb.from("pre_clientes").select("*").order("nome"),
+    sb.from("fichas_admin").select("*").order("nome"),
+    sb.from("pre_compras").select("*").order("data_entrega", { ascending:false }),
   ]);
   if (!prod.error) S.admin.produtos  = prod.data || [];
   if (!avs.error)  S.admin.avaliacoes = avs.data || [];
   if (!sug.error)  S.admin.sugestoes  = sug.data || [];
   if (!cli.error)  S.admin.clientes   = cli.data || [];
   if (!fic.error)  S.admin.fichas     = fic.data || [];
+  if (!comp.error) S.admin.compras    = comp.data || [];
   S.admin.carregado = true;
 }
 
@@ -2150,6 +2264,40 @@ async function importarFichas(){
         (ruins.length ? `\n\n${ruins.length} linha(s) ignorada(s):\n` + ruins.join("\n") : ""));
 }
 
+async function addCompraFicha(fichaId){
+  const q = parseInt(document.getElementById("hc-qtd-"+fichaId).value, 10);
+  const sab = document.getElementById("hc-sab-"+fichaId).value.trim();
+  const ent = document.getElementById("hc-ent-"+fichaId).value || null;
+  const pag = document.getElementById("hc-pag-"+fichaId).value || null;
+  if (!Number.isFinite(q) || q <= 0){ alert("Informe a quantidade de cones."); return; }
+  const { error } = await sb.from("pre_compras").insert({
+    pre_cliente_id: fichaId, quantidade: q, sabores: sab || null,
+    data_entrega: ent, data_pagamento: pag,
+  });
+  if (error){ alert(erroAmigavel(error)); return; }
+  await carregarAdmin(); render();
+}
+async function excluirCompraFicha(id){
+  if (!confirm("Excluir este registro de compra?")) return;
+  const { error } = await sb.from("pre_compras").delete().eq("id", id);
+  if (error){ alert(erroAmigavel(error)); return; }
+  await carregarAdmin(); render();
+}
+function abrirFicha(id){
+  S.admin.fichaAberta = S.admin.fichaAberta === id ? null : id;
+  render();
+}
+async function vincularFichaConta(fichaId){
+  const sel = document.getElementById("vinc-" + fichaId);
+  const clienteId = sel && sel.value;
+  if (!clienteId){ alert("Escolha a conta que corresponde a esta ficha."); return; }
+  const nomeConta = sel.options[sel.selectedIndex].text;
+  if (!confirm(`Vincular esta ficha à conta de ${nomeConta}?\n\nOs cones do histórico viram carimbos de fidelidade.`)) return;
+  const { error } = await sb.rpc("vincular_ficha", { p_ficha: fichaId, p_cliente: clienteId });
+  if (error){ alert(erroAmigavel(error)); return; }
+  await carregarAdmin(); render();
+}
+
 function vAdminClientes(){
   if (!S.admin.carregado) return `<p class="muted">Carregando clientes...</p>`;
   const cadastrados = S.admin.clientes;
@@ -2220,17 +2368,75 @@ function vAdminClientes(){
       ${pendentes.length === 0
         ? `<p class="muted" style="margin-top:.75rem;font-size:.875rem">Nenhuma ficha aguardando.</p>`
         : `<div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.75rem">
-            ${pendentes.map(f => `<div class="card" style="padding:.75rem 1rem;display:flex;
-                gap:.75rem;align-items:center">
-              <div style="flex:1;min-width:0">
-                <p style="font-weight:700;font-size:.9rem">${esc(f.nome)}</p>
-                <p class="muted" style="font-size:.75rem">${esc(mascaraTelefone(f.telefone))}
-                  ${f.setor ? " · 📍 " + esc(f.setor) : ""}</p>
+            ${pendentes.map(f => {
+              const compras = S.admin.compras.filter(c => c.pre_cliente_id === f.id);
+              const aberta = S.admin.fichaAberta === f.id;
+              return `<div class="card" style="padding:.75rem 1rem">
+              <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+                <div style="flex:1;min-width:0">
+                  <p style="font-weight:700;font-size:.9rem">${esc(f.nome)}</p>
+                  <p class="muted" style="font-size:.75rem">${esc(mascaraTelefone(f.telefone))}
+                    ${f.setor ? " · 📍 " + esc(f.setor) : ""}
+                    ${f.total_cones ? " · 🍦 " + f.total_cones + " cone(s)" : ""}</p>
+                </div>
+                <span class="badge b-novo">aguardando</span>
+                <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+                  onclick="abrirFicha('${f.id}')">${aberta ? "Fechar" : "Detalhes"}</button>
+                <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
+                  padding:.25rem .8rem;font-size:.75rem" onclick="excluirFicha('${f.id}')">Excluir</button>
               </div>
-              <span class="badge b-novo">aguardando</span>
-              <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
-                padding:.25rem .8rem;font-size:.75rem" onclick="excluirFicha('${f.id}')">Excluir</button>
-            </div>`).join("")}
+
+              ${aberta ? `<div style="border-top:1px solid rgb(62 39 35/.08);margin-top:.75rem;padding-top:.75rem">
+
+                <p style="font-weight:700;font-size:.8rem">Compras anteriores</p>
+                ${compras.length === 0
+                  ? `<p class="muted" style="font-size:.75rem;margin-top:.25rem">Nenhuma registrada.</p>`
+                  : `<ul style="list-style:none;margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem">
+                      ${compras.map(c => `<li style="display:flex;gap:.5rem;align-items:center;font-size:.78rem;
+                          border-bottom:1px solid rgb(62 39 35/.06);padding-bottom:.3rem">
+                        <span style="flex:1">
+                          <strong>${c.quantidade} cone(s)</strong>
+                          ${c.sabores ? " · " + esc(c.sabores) : ""}
+                          <span class="muted">
+                            ${c.data_entrega ? " · entrega " + new Date(c.data_entrega+"T12:00").toLocaleDateString("pt-BR") : ""}
+                            ${c.data_pagamento ? " · pago " + new Date(c.data_pagamento+"T12:00").toLocaleDateString("pt-BR") : ""}
+                          </span>
+                        </span>
+                        <button style="color:var(--framboesa);font-size:.72rem;font-weight:700"
+                          onclick="excluirCompraFicha('${c.id}')">remover</button>
+                      </li>`).join("")}
+                    </ul>`}
+
+                <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;align-items:end">
+                  <label style="font-size:.72rem;font-weight:600">Cones
+                    <input id="hc-qtd-${f.id}" class="field" type="number" min="1"
+                      style="width:5rem;padding:.35rem .5rem;display:block;margin-top:.15rem"></label>
+                  <label style="font-size:.72rem;font-weight:600;flex:1;min-width:8rem">Sabores
+                    <input id="hc-sab-${f.id}" class="field" placeholder="Brigadeiro, Ferrero"
+                      style="padding:.35rem .5rem;display:block;margin-top:.15rem"></label>
+                  <label style="font-size:.72rem;font-weight:600">Entrega
+                    <input id="hc-ent-${f.id}" class="field" type="date"
+                      style="padding:.35rem .5rem;display:block;margin-top:.15rem"></label>
+                  <label style="font-size:.72rem;font-weight:600">Pagamento
+                    <input id="hc-pag-${f.id}" class="field" type="date"
+                      style="padding:.35rem .5rem;display:block;margin-top:.15rem"></label>
+                  <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+                    onclick="addCompraFicha('${f.id}')">Registrar</button>
+                </div>
+
+                <p style="font-weight:700;font-size:.8rem;margin-top:1rem">Vincular a uma conta existente</p>
+                <p class="muted" style="font-size:.72rem">
+                  Use quando a pessoa já criou conta com outro WhatsApp. Os cones do histórico viram carimbos.</p>
+                <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap">
+                  <select id="vinc-${f.id}" class="field" style="flex:1;min-width:11rem;padding:.4rem .6rem">
+                    <option value="">Escolha a conta...</option>
+                    ${S.admin.clientes.map(c => `<option value="${c.id}">${esc(c.nome)}${c.setor?" — "+esc(c.setor):""}</option>`).join("")}
+                  </select>
+                  <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
+                    onclick="vincularFichaConta('${f.id}')">Vincular</button>
+                </div>
+              </div>` : ""}
+            </div>`}).join("")}
           </div>`}
     </section>
   </div>`;
