@@ -297,7 +297,7 @@ const S = {
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false },
   notif: { ativo: false, som: true, log: [] },
-  carregando: true, erroBanco: null, ocupado: false,
+  carregando: true, erroBanco: null, erroPedidos: null, ocupado: false,
 };
 const byId = id => PRODUTOS.find(p => p.id === id);
 const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -391,12 +391,19 @@ function mapearPedido(row){
 
 async function carregarPedidos(){
   if (!S.perfil){ S.pedidos = []; return; }
+  // orders tem DUAS ligações com profiles (cliente e destinatário do presente),
+  // então é preciso dizer explicitamente qual delas embutir.
   const campos = S.perfil.admin
-    ? "*, order_items(*), profiles(nome, telefone)"
+    ? "*, order_items(*), profiles!orders_cliente_id_fkey(nome, telefone)"
     : "*, order_items(*)";
   const { data, error } = await sb.from("orders").select(campos)
     .order("numero", { ascending:false }).limit(100);
-  if (error){ console.error(error); return; }
+  if (error){
+    console.error("carregarPedidos:", error);
+    S.erroPedidos = erroAmigavel(error);
+    return;
+  }
+  S.erroPedidos = null;
   S.pedidos = (data||[]).map(mapearPedido);
 }
 
@@ -804,6 +811,11 @@ function escolherDestinatario(i){
   S.presente.termo = d.nome;
   S.presente.setor = d.setor || S.presente.setor;
   S.presente.sugestoes = [];
+  render();
+}
+
+async function recarregarPedidos(){
+  await carregarPedidos();
   render();
 }
 
@@ -1272,10 +1284,11 @@ function blocoPix(p){
         Aponte a câmera do app do banco. O valor de <strong>${reais(p.total)}</strong> já vem preenchido.</p>
 
       <label class="label" style="margin-top:.9rem;font-size:.75rem">Ou use o Pix copia e cola</label>
-      <textarea readonly rows="3" class="field" style="font-size:.68rem;resize:none;word-break:break-all"
+      <textarea id="pix-codigo" readonly rows="3" class="field"
+        style="font-size:.68rem;resize:none;word-break:break-all"
         onclick="this.select()">${esc(codigo)}</textarea>
       <button class="btn btn-ghost" style="width:100%;margin-top:.4rem"
-        onclick="copiarPix(${JSON.stringify(codigo)}, this)">Copiar código Pix</button>
+        onclick="copiarPix(document.getElementById('pix-codigo').value, this)">Copiar código Pix</button>
     ` : `<p class="ok" style="margin-top:.75rem">Este pedido saiu de graça pelo cartão fidelidade. Nada a pagar 🎉</p>`}
 
     <p class="muted" style="font-size:.78rem;margin-top:.9rem;text-align:center">
@@ -1285,7 +1298,22 @@ function blocoPix(p){
 
 function vConfirmado(){
   const p = S.pedidos.find(x=>String(x.numero)===String(S.param));
-  if (!p) return vHome();
+  if (!p){
+    return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
+      <div class="card" style="padding:2rem;text-align:center">
+        <span aria-hidden style="font-size:2.5rem">✅</span>
+        <h1 class="display" style="margin-top:.5rem;font-size:1.5rem;font-weight:900">
+          Pedido #${esc(S.param)} registrado!</h1>
+        <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+          ${S.erroPedidos ? esc(S.erroPedidos)
+            : "Não conseguimos carregar a nota agora, mas seu pedido foi salvo."}</p>
+        <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.25rem">
+          <button class="btn btn-primary" onclick="recarregarPedidos()">Tentar carregar a nota</button>
+          <button class="btn btn-ghost" onclick="nav('pedidos')">Ver meus pedidos</button>
+        </div>
+      </div>
+    </main>${vFooter()}`;
+  }
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
     <div class="card" style="padding:2rem;text-align:center">
       <span class="carimbo" aria-hidden style="margin:0 auto;width:5rem;height:5rem;display:grid;
