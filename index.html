@@ -294,6 +294,15 @@ const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BR
 /* ============================================================
    CARGA DE DADOS
    ============================================================ */
+/* Se o produto tem foto no Storage, ela vira o fundo do bloco;
+   sem foto, mantém o degradê com emoji. */
+function fundoFoto(p){
+  return p.img
+    ? `background-image:url('${p.img}');background-size:cover;background-position:center`
+    : `background:${p.grad}`;
+}
+function conteudoFoto(p){ return p.img ? "" : p.emoji; }
+
 function mapearProduto(row, avaliacao){
   const v = VISUAL[row.slug] || VISUAL._padrao;
   const tags = [];
@@ -479,7 +488,7 @@ function mostrarCartToast(p, q){
     <button class="ct-close" aria-label="Fechar aviso" onclick="fecharCartToast()">✕</button>
     <div class="ct-body">
       <span aria-hidden style="width:3rem;height:3rem;flex-shrink:0;display:grid;place-items:center;
-        border-radius:.85rem;font-size:1.4rem;background:${p.grad}">${p.emoji}</span>
+        border-radius:.85rem;font-size:1.4rem;${fundoFoto(p)}">${conteudoFoto(p)}</span>
       <div style="min-width:0">
         <p style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--pistache)">
           Adicionado ao carrinho</p>
@@ -845,9 +854,9 @@ function vFooter(){
 function vCardProduto(p){
   const esg = p.estoque<=0;
   return `<article class="card pcard ${esg?"esgotado":""}">
-    <div class="pfoto" style="background:${p.grad}" role="img" aria-label="Foto do cone ${esc(p.nome)}"
+    <div class="pfoto" style="${fundoFoto(p)}" role="img" aria-label="Foto do cone ${esc(p.nome)}"
          onclick="nav('produto','${p.id}')">
-      <span>${p.emoji}</span><div class="tags">${badges(p, true)}</div>
+      <span>${conteudoFoto(p)}</span><div class="tags">${badges(p, true)}</div>
     </div>
     <div class="pbody">
       <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:start">
@@ -950,7 +959,7 @@ function vProduto(){
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem">
     <div class="grid c2" style="gap:2rem">
       <div class="card" style="aspect-ratio:4/3;max-height:20rem;align-self:start;display:grid;place-items:center;font-size:5.5rem;
-        background:${p.grad};${esg?"filter:saturate(.5)":""}" role="img" aria-label="Foto do cone ${esc(p.nome)}">${p.emoji}</div>
+        ${fundoFoto(p)};${esg?"filter:saturate(.5)":""}" role="img" aria-label="Foto do cone ${esc(p.nome)}">${conteudoFoto(p)}</div>
       <div style="display:flex;flex-direction:column;gap:1rem">
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">${badges(p)}</div>
         <h1 class="display" style="font-size:2.25rem;font-weight:900">${esc(p.nome)}</h1>
@@ -1001,9 +1010,9 @@ function vProduto(){
         ${PRODUTOS.filter(x=>x.id!==p.id).map(x=>{
           const xEsg = x.estoque<=0;
           return `<article class="card sabor-card">
-          <div class="sabor-foto" style="background:${x.grad};${xEsg?"filter:saturate(.5)":""}"
+          <div class="sabor-foto" style="${fundoFoto(x)};${xEsg?"filter:saturate(.5)":""}"
             role="img" aria-label="Foto do cone ${esc(x.nome)}" onclick="nav('produto','${x.id}')">
-            ${x.emoji}
+            ${conteudoFoto(x)}
             <div style="position:absolute;top:.4rem;left:.4rem;display:flex;gap:.25rem;flex-wrap:wrap">
               ${badges(x, true)}</div>
           </div>
@@ -1052,7 +1061,7 @@ function vCarrinho(){
       <ul style="list-style:none;margin-top:1rem;display:flex;flex-direction:column;gap:.75rem">
         ${pr.linhas.map(l=>{const p=byId(l.id);return `<li class="card" style="display:flex;gap:1rem;align-items:center;padding:1rem">
           <span aria-hidden style="width:4rem;height:4rem;flex-shrink:0;display:grid;place-items:center;
-            border-radius:1rem;font-size:1.8rem;background:${p.grad}">${p.emoji}</span>
+            border-radius:1rem;font-size:1.8rem;${fundoFoto(p)}">${conteudoFoto(p)}</span>
           <div style="flex:1;min-width:0">
             <p class="display" style="font-weight:700">${esc(p.nome)}</p>
             <p class="muted" style="font-size:.75rem">${l.q} ${l.q===1?"unidade":"unidades"}</p>
@@ -1985,6 +1994,51 @@ async function carregarAdmin(){
 }
 
 /* ---------- Estoque e cadastro de produtos ---------- */
+/* Redimensiona e comprime no navegador antes de enviar.
+   Foto de celular tem 3-5 MB; isso derruba o catálogo no 4G. */
+function prepararImagem(file, maxLado = 1200, qualidade = 0.82){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+      const w = Math.round(img.width * escala), h = Math.round(img.height * escala);
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      cv.toBlob(b => b ? resolve(b) : reject(new Error("Falha ao processar a imagem")),
+                "image/webp", qualidade);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => reject(new Error("Arquivo de imagem inválido"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function enviarFotoProduto(input, produtoId, slug){
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)){ alert("Escolha um arquivo de imagem."); return; }
+  const rotulo = document.getElementById("up-" + produtoId);
+  if (rotulo) rotulo.textContent = "Enviando...";
+  try {
+    const blob = await prepararImagem(f);
+    const caminho = `${slug}.webp`;
+    const { error } = await sb.storage.from("produtos")
+      .upload(caminho, blob, { upsert: true, contentType: "image/webp" });
+    if (error) throw error;
+    const { data } = sb.storage.from("produtos").getPublicUrl(caminho);
+    await salvarCampoProduto(produtoId, "imagem_url", data.publicUrl + "?v=" + Date.now());
+  } catch (e) {
+    alert(erroAmigavel(e));
+    if (rotulo) rotulo.textContent = "Enviar foto";
+  }
+}
+
+async function removerFotoProduto(produtoId){
+  if (!confirm("Remover a foto deste sabor? Volta a aparecer o desenho padrão.")) return;
+  await salvarCampoProduto(produtoId, "imagem_url", null);
+}
+
 async function salvarCampoProduto(id, campo, valor){
   const { error } = await sb.from("products")
     .update({ [campo]: valor, atualizado_em: new Date().toISOString() }).eq("id", id);
@@ -2039,12 +2093,23 @@ function vAdminProdutos(){
         const esg = (p.estoque||0) <= 0;
         return `<div class="card" style="padding:1rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center">
           <span aria-hidden style="width:3.5rem;height:3.5rem;flex-shrink:0;display:grid;place-items:center;
-            border-radius:.9rem;font-size:1.6rem;background:${v.grad}">${v.emoji}</span>
+            border-radius:.9rem;font-size:1.6rem;overflow:hidden;
+            ${p.imagem_url ? `background-image:url('${p.imagem_url}');background-size:cover;background-position:center`
+                           : `background:${v.grad}`}">${p.imagem_url ? "" : v.emoji}</span>
 
           <div style="flex:1;min-width:9rem">
             <p class="display" style="font-weight:700">${esc(p.nome)}</p>
             <p class="muted" style="font-size:.75rem">${esc(p.categories?.nome || "")}
               ${esg?' · <strong style="color:var(--framboesa)">Esgotado</strong>':""}</p>
+            <div style="display:flex;gap:.4rem;align-items:center;margin-top:.3rem">
+              <label class="btn btn-ghost" style="min-height:1.9rem;padding:.1rem .6rem;font-size:.7rem;cursor:pointer">
+                <span id="up-${p.id}">${p.imagem_url ? "Trocar foto" : "Enviar foto"}</span>
+                <input type="file" accept="image/*" style="display:none"
+                  onchange="enviarFotoProduto(this,'${p.id}','${p.slug}')">
+              </label>
+              ${p.imagem_url ? `<button style="font-size:.7rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
+                onclick="removerFotoProduto('${p.id}')">remover</button>` : ""}
+            </div>
           </div>
 
           <div>
