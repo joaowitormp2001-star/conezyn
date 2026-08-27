@@ -224,6 +224,14 @@
   @media(max-width:520px){
     .fid{padding:1.7rem 1rem 1.8rem}
     .fid-grade{grid-template-columns:repeat(5,minmax(0,3.3rem));gap:.55rem;margin-top:1.1rem}}
+  /* trilha de etapas do cadastro */
+  .etapas{display:flex;align-items:center;gap:.4rem;margin-bottom:1.1rem}
+  .etapa-bolha{flex:1;height:.3rem;border-radius:9999px;background:rgb(62 39 35/.12)}
+  .etapa-bolha.on{background:var(--cacau)}
+  .etapa-num{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.5);letter-spacing:.04em;
+    text-transform:uppercase;margin-bottom:.35rem;display:block}
+  .ficha-card{border:1px solid rgb(62 39 35/.15);background:var(--chantilly);
+    border-radius:.9rem;padding:1rem;margin-top:.25rem}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -282,9 +290,10 @@ const S = {
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
   sugestaoOk: false, loginErro: null, cadastroErro: null, voltarPara: null,
+  cad: { etapa: 1, tel: "", nome: "", email: "", ficha: null, checando: false },
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
-  admin: { produtos: [], avaliacoes: [], sugestoes: [], carregado: false },
+  admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], carregado: false },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, ocupado: false,
 };
@@ -341,6 +350,7 @@ async function carregarPerfil(){
     tel: data?.telefone || "",
     email: data?.email || user.email || "",
     foto: data?.foto_url || null,
+    setor: data?.setor || "",
     admin: data?.papel === "admin",
   };
 }
@@ -442,8 +452,9 @@ function nav(view, param){
   param = param ?? null;
   if (!(S.view===view && S.param===param)) S.hist.push({view:S.view, param:S.param});
   S.view = view; S.param = param;
-  if (view==="checkout"){ S.checkout = { local:"", quando:"agora", hora:"", erro:null, idem:null }; }
+  if (view==="checkout"){ S.checkout = { local: S.perfil?.setor || "", quando:"agora", hora:"", erro:null, idem:null }; }
   if (view==="produto") pqv = 1;
+  if (view==="cadastro") S.cad = { etapa:1, tel:"", nome:"", email:"", ficha:null, checando:false };
   S.loginErro = null; S.cadastroErro = null;
   render(); window.scrollTo({top:0});
 }
@@ -1157,49 +1168,141 @@ function vLogin(bloqueio){
         onclick="nav('cadastro')">Criar conta</button></p>
   </div>`);
 }
+/* ============================================================
+   CADASTRO EM 4 ETAPAS
+   1. WhatsApp  →  2. Confirmação da ficha (se houver)
+   3. Nome e e-mail  →  4. Senha
+   ============================================================ */
+function trilha(n){
+  const total = 4;
+  return `<div class="etapas" role="progressbar" aria-valuenow="${n}" aria-valuemin="1" aria-valuemax="${total}"
+      aria-label="Etapa ${n} de ${total}">
+    ${Array.from({length: total}, (_, i) =>
+      `<span class="etapa-bolha ${i < n ? "on" : ""}"></span>`).join("")}
+  </div>
+  <span class="etapa-num">Etapa ${n} de ${total}</span>`;
+}
+
 function vCadastro(){
-  return vAuthShell(`<div class="card" style="padding:1.5rem">
-    <h1 class="display" style="font-size:1.5rem;font-weight:900">Criar conta</h1>
-    <p class="muted" style="margin-top:.25rem;font-size:.875rem">
-      Informe seus dados uma única vez — nos próximos pedidos você não precisa repetir nada.</p>
-    <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem">
+  const c = S.cad;
+  const corpo =
+    c.etapa === 1 ? `
+      <label class="label" for="r-tel">Qual o seu WhatsApp?
+        ${dica("Usamos para falar com você sobre o pedido. Se você já é cliente, a gente te reconhece por ele.")}</label>
+      <input id="r-tel" class="field" type="tel" inputmode="tel" autocomplete="tel"
+        placeholder="(11) 9 9999-9999" maxlength="16" value="${esc(c.tel)}"
+        oninput="aoDigitarTelefone(this)" onkeydown="if(event.key==='Enter')etapaTelefone()">
+      ${S.cadastroErro?`<p class="alerta" role="alert" style="margin-top:.75rem">${esc(S.cadastroErro)}</p>`:""}
+      <button class="btn btn-primary" style="width:100%;margin-top:1rem" ${c.checando?"disabled":""}
+        onclick="etapaTelefone()">${c.checando ? "Verificando..." : "Continuar"}</button>`
+
+  : c.etapa === 2 ? `
+      <p style="font-size:.9rem">Achamos seu cadastro por aqui. É você?</p>
+      <div class="ficha-card">
+        <p class="display" style="font-size:1.2rem;font-weight:900">${esc(c.ficha.primeiro_nome)}</p>
+        ${c.ficha.setor
+          ? `<p class="muted" style="font-size:.85rem;margin-top:.15rem">📍 ${esc(c.ficha.setor)}</p>`
+          : ""}
+        <p class="muted" style="font-size:.8rem;margin-top:.4rem">${esc(mascaraTelefone(c.tel))}</p>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:1rem"
+        onclick="confirmarFicha(true)">Sim, sou eu</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:.5rem"
+        onclick="confirmarFicha(false)">Não sou eu</button>`
+
+  : c.etapa === 3 ? `
       <div><label class="label" for="r-nome">Nome
         ${dica("Aparece nas suas avaliações e no seu cartão fidelidade.")}</label>
-        <input id="r-nome" class="field" autocomplete="name" placeholder="Como quer ser chamado"></div>
-      <div><label class="label" for="r-email">E-mail
+        <input id="r-nome" class="field" autocomplete="name" value="${esc(c.nome)}"
+          placeholder="Como quer ser chamado"></div>
+      <div style="margin-top:.75rem"><label class="label" for="r-email">E-mail
         ${dica("É com ele que você entra e recupera a senha, caso esqueça.")}</label>
         <input id="r-email" class="field" type="email" inputmode="email" autocomplete="email"
-          placeholder="voce@email.com"></div>
-      <div><label class="label" for="r-tel">WhatsApp
-        ${dica("Fica registrado só para falarmos com você sobre o pedido.")}</label>
-        <input id="r-tel" class="field" type="tel" inputmode="tel" autocomplete="tel"
-          placeholder="(11) 9 9999-9999" maxlength="16" oninput="aoDigitarTelefone(this)"></div>
-      <div><label class="label" for="r-senha">Senha
+          value="${esc(c.email)}" placeholder="voce@email.com"
+          onkeydown="if(event.key==='Enter')etapaDados()"></div>
+      ${S.cadastroErro?`<p class="alerta" role="alert" style="margin-top:.75rem">${esc(S.cadastroErro)}</p>`:""}
+      <button class="btn btn-primary" style="width:100%;margin-top:1rem" onclick="etapaDados()">Continuar</button>`
+
+  : `
+      <div><label class="label" for="r-senha">Crie uma senha
         ${dica("Mínimo de 6 caracteres. Ela é guardada criptografada — ninguém consegue lê-la.")}</label>
         <input id="r-senha" class="field" type="password" minlength="6" autocomplete="new-password"></div>
-      <div><label class="label" for="r-conf">Confirmar senha</label>
+      <div style="margin-top:.75rem"><label class="label" for="r-conf">Confirmar senha</label>
         <input id="r-conf" class="field" type="password" minlength="6" autocomplete="new-password"
           onkeydown="if(event.key==='Enter')fazerCadastro()"></div>
-      ${S.cadastroErro?`<p class="alerta" role="alert">${esc(S.cadastroErro)}</p>`:""}
-      <button class="btn btn-primary" onclick="fazerCadastro()">Criar conta</button>
-    </div>
-    <p style="margin-top:1.25rem;text-align:center;font-size:.875rem" class="muted">
+      ${S.cadastroErro?`<p class="alerta" role="alert" style="margin-top:.75rem">${esc(S.cadastroErro)}</p>`:""}
+      <button class="btn btn-primary" style="width:100%;margin-top:1rem" ${S.ocupado?"disabled":""}
+        onclick="fazerCadastro()">${S.ocupado ? "Criando conta..." : "Criar conta"}</button>`;
+
+  return vAuthShell(`<div class="card" style="padding:1.5rem">
+    ${trilha(c.etapa)}
+    <h1 class="display" style="font-size:1.4rem;font-weight:900;margin-bottom:.9rem">
+      ${c.etapa === 1 ? "Criar conta"
+      : c.etapa === 2 ? "Confirme quem é você"
+      : c.etapa === 3 ? "Seus dados"
+      : "Quase lá"}</h1>
+    ${corpo}
+    ${c.etapa > 1 ? `<button style="display:block;margin:1rem auto 0;font-size:.8rem;font-weight:600;
+      color:rgb(62 39 35/.6);text-decoration:underline" onclick="voltarEtapa()">Voltar</button>` : ""}
+    <p style="margin-top:1.1rem;text-align:center;font-size:.875rem" class="muted">
       Já tem conta?
       <button style="font-weight:700;color:var(--cacau);text-decoration:underline"
         onclick="nav('login')">Entrar</button></p>
-    <p class="muted" style="margin-top:1rem;text-align:center;font-size:.72rem">
-      Usamos seus dados só para o pedido e a entrega. Nada é exposto publicamente.</p>
   </div>`);
 }
-function emailValido(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v||"").trim()); }
 
-/* Ícone discreto ao lado do rótulo: mostra a explicação no hover
-   e também no foco por teclado / toque no celular. */
-function dica(texto){
-  return `<span class="dica">
-    <button type="button" class="dica-btn" aria-label="Ajuda: ${esc(texto)}">!</button>
-    <span class="dica-bolha" role="tooltip">${esc(texto)}</span>
-  </span>`;
+/* Etapa 1 — procura o WhatsApp na lista que o administrador cadastrou. */
+async function etapaTelefone(){
+  const c = S.cad;
+  c.tel = document.getElementById("r-tel").value.trim();
+  if (!telefoneValido(c.tel)){
+    S.cadastroErro = "Digite o WhatsApp com DDD — 10 ou 11 dígitos.";
+    return render();
+  }
+  S.cadastroErro = null; c.checando = true; render();
+
+  const { data, error } = await sb.rpc("consultar_precadastro", { p_telefone: c.tel });
+  c.checando = false;
+
+  const ficha = !error && Array.isArray(data) ? data[0] : null;
+  if (ficha){ c.ficha = ficha; c.etapa = 2; }
+  else { c.ficha = null; c.etapa = 3; }
+  render();
+}
+
+/* Etapa 2 — a pessoa confirma (ou nega) que a ficha é dela. */
+function confirmarFicha(sim){
+  const c = S.cad;
+  if (sim){
+    c.nome = c.ficha.primeiro_nome;   // pré-preenchido, mas editável
+  } else {
+    c.ficha = null; c.nome = "";
+  }
+  c.etapa = 3;
+  S.cadastroErro = null;
+  render();
+}
+
+/* Etapa 3 — nome e e-mail. */
+function etapaDados(){
+  const c = S.cad;
+  c.nome  = document.getElementById("r-nome").value.trim();
+  c.email = document.getElementById("r-email").value.trim().toLowerCase();
+  if (!c.nome){ S.cadastroErro = "Informe seu nome."; return render(); }
+  if (!emailValido(c.email)){
+    S.cadastroErro = "Digite um e-mail válido — é por ele que você recupera a senha.";
+    return render();
+  }
+  S.cadastroErro = null; c.etapa = 4; render();
+}
+
+function voltarEtapa(){
+  const c = S.cad;
+  S.cadastroErro = null;
+  if (c.etapa === 4) c.etapa = 3;
+  else if (c.etapa === 3) c.etapa = c.ficha ? 2 : 1;
+  else if (c.etapa === 2) c.etapa = 1;
+  render();
 }
 
 async function fazerLogin(){
@@ -1228,27 +1331,22 @@ async function recuperarSenha(){
 }
 async function fazerCadastro(){
   if (S.ocupado) return;
-  const nome  = document.getElementById("r-nome").value.trim();
-  const email = document.getElementById("r-email").value.trim().toLowerCase();
-  const tel   = document.getElementById("r-tel").value.trim();
+  const c = S.cad;
   const senha = document.getElementById("r-senha").value;
   const conf  = document.getElementById("r-conf").value;
-  if (!nome){ S.cadastroErro="Informe seu nome."; return render(); }
-  if (!emailValido(email)){ S.cadastroErro="Digite um e-mail válido — é por ele que você recupera a senha."; return render(); }
-  if (!telefoneValido(tel)){ S.cadastroErro="Digite o WhatsApp com DDD — 10 ou 11 dígitos."; return render(); }
-  if (senha.length<6){ S.cadastroErro="A senha deve ter no mínimo 6 caracteres."; return render(); }
-  if (senha!==conf){ S.cadastroErro="As senhas não coincidem."; return render(); }
+  if (senha.length < 6){ S.cadastroErro = "A senha deve ter no mínimo 6 caracteres."; return render(); }
+  if (senha !== conf){ S.cadastroErro = "As senhas não coincidem."; return render(); }
 
   S.ocupado = true; S.cadastroErro = null; render();
   const { error } = await sb.auth.signUp({
-    email, password: senha,
-    options: { data: { nome, telefone: mascaraTelefone(tel) } },
+    email: c.email, password: senha,
+    options: { data: { nome: c.nome, telefone: mascaraTelefone(c.tel) } },
   });
   S.ocupado = false;
   if (error){ S.cadastroErro = erroAmigavel(error); return render(); }
 
-  // Se a confirmação de e-mail estiver ligada, não há sessão ainda.
   const { data:{ session } } = await sb.auth.getSession();
+  S.cad = { etapa:1, tel:"", nome:"", email:"", ficha:null, checando:false };
   if (!session){
     S.loginErro = "Conta criada! Confirme seu e-mail e depois entre.";
     return nav("login");
@@ -1455,6 +1553,7 @@ function vAdminHeader(){
       <button ${S.adminTab==="dash"?'aria-current="page"':""} onclick="S.adminTab='dash';render()">Dashboard</button>
       <button ${S.adminTab==="pedidos"?'aria-current="page"':""} onclick="S.adminTab='pedidos';render()">Pedidos</button>
       <button ${S.adminTab==="produtos"?'aria-current="page"':""} onclick="abrirAdmin('produtos')">Produtos</button>
+      <button ${S.adminTab==="clientes"?'aria-current="page"':""} onclick="abrirAdmin('clientes')">Clientes</button>
       <button ${S.adminTab==="avaliacoes"?'aria-current="page"':""} onclick="abrirAdmin('avaliacoes')">
         Avaliações${pendentesAvaliacao()>0?` <span style="background:var(--framboesa);color:#fff;border-radius:9999px;padding:0 .4rem;font-size:.7rem">${pendentesAvaliacao()}</span>`:""}</button>
       <button ${S.adminTab==="sugestoes"?'aria-current="page"':""} onclick="abrirAdmin('sugestoes')">
@@ -1467,7 +1566,8 @@ function vAdminHeader(){
 }
 function vAdmin(){
   const tabs = { dash: vAdminDash, pedidos: vAdminPedidos, notif: vAdminNotif,
-                 produtos: vAdminProdutos, avaliacoes: vAdminAvaliacoes, sugestoes: vAdminSugestoes };
+                 produtos: vAdminProdutos, avaliacoes: vAdminAvaliacoes, sugestoes: vAdminSugestoes,
+                 clientes: vAdminClientes };
   return `${vAdminHeader()}<main style="max-width:72rem;margin:0 auto;padding:1.5rem 1rem;background:rgb(246 234 217/.4);min-height:calc(100dvh - 7rem)">
     ${(tabs[S.adminTab] || vAdminDash)()}
   </main>`;
@@ -1755,14 +1855,18 @@ async function abrirAdmin(aba){
 
 async function carregarAdmin(){
   if (!S.perfil?.admin) return;
-  const [prod, avs, sug] = await Promise.all([
+  const [prod, avs, sug, cli, fic] = await Promise.all([
     sb.from("products").select("*, categories(nome, slug)").order("nome"),
     sb.from("reviews").select("*, products(nome), profiles(nome)").order("criado_em", { ascending:false }),
     sb.from("suggestions").select("*, profiles(nome, telefone)").order("criado_em", { ascending:false }),
+    sb.from("clientes_admin").select("*").order("nome"),
+    sb.from("pre_clientes").select("*").order("nome"),
   ]);
   if (!prod.error) S.admin.produtos  = prod.data || [];
   if (!avs.error)  S.admin.avaliacoes = avs.data || [];
   if (!sug.error)  S.admin.sugestoes  = sug.data || [];
+  if (!cli.error)  S.admin.clientes   = cli.data || [];
+  if (!fic.error)  S.admin.fichas     = fic.data || [];
   S.admin.carregado = true;
 }
 
@@ -1989,6 +2093,146 @@ function vAdminSugestoes(){
             </div>
           </div>`).join("")}
         </div>`}
+  </div>`;
+}
+
+/* ============================================================
+   PAINEL — CLIENTES
+   Duas origens: quem criou a própria conta e as fichas que você
+   cadastrou. A ficha não é usuário: ela só espera a pessoa se
+   cadastrar com o mesmo WhatsApp para ser reconhecida.
+   ============================================================ */
+async function salvarFicha(){
+  const nome  = document.getElementById("f-nome").value.trim();
+  const tel   = document.getElementById("f-tel").value.trim();
+  const setor = document.getElementById("f-setor").value.trim();
+  if (!nome || !telefoneValido(tel)){
+    alert("Informe o nome e um WhatsApp com DDD."); return;
+  }
+  const { error } = await sb.from("pre_clientes")
+    .insert({ nome, telefone: digitos(tel), setor: setor || null });
+  if (error){
+    alert(/duplicate|unique/i.test(error.message)
+      ? "Já existe uma ficha com este WhatsApp." : erroAmigavel(error));
+    return;
+  }
+  await carregarAdmin(); render();
+}
+
+async function excluirFicha(id){
+  if (!confirm("Excluir esta ficha? O cliente não será mais reconhecido ao se cadastrar.")) return;
+  const { error } = await sb.from("pre_clientes").delete().eq("id", id);
+  if (error){ alert(erroAmigavel(error)); return; }
+  await carregarAdmin(); render();
+}
+
+/* Importa várias fichas de uma vez.
+   Uma por linha, no formato:  Nome ; WhatsApp ; Setor  */
+async function importarFichas(){
+  const txt = document.getElementById("f-lote").value.trim();
+  if (!txt){ alert("Cole a lista antes de importar."); return; }
+  const linhas = txt.split("\n").map(l => l.trim()).filter(Boolean);
+  const fichas = [];
+  const ruins = [];
+  linhas.forEach((l, i) => {
+    const partes = l.split(/[;\t|]/).map(p => p.trim());
+    const nome = partes[0], tel = digitos(partes[1] || ""), setor = partes[2] || null;
+    if (!nome || tel.length < 10) { ruins.push(`linha ${i+1}: ${l}`); return; }
+    fichas.push({ nome, telefone: tel, setor });
+  });
+  if (fichas.length === 0){ alert("Nenhuma linha válida encontrada.\n\n" + ruins.join("\n")); return; }
+
+  const { error } = await sb.from("pre_clientes").upsert(fichas, { onConflict: "telefone" });
+  if (error){ alert(erroAmigavel(error)); return; }
+  document.getElementById("f-lote").value = "";
+  await carregarAdmin(); render();
+  alert(`${fichas.length} ficha(s) importada(s).` +
+        (ruins.length ? `\n\n${ruins.length} linha(s) ignorada(s):\n` + ruins.join("\n") : ""));
+}
+
+function vAdminClientes(){
+  if (!S.admin.carregado) return `<p class="muted">Carregando clientes...</p>`;
+  const cadastrados = S.admin.clientes;
+  const pendentes   = S.admin.fichas.filter(f => !f.vinculado_a);
+  const vinculadas  = S.admin.fichas.filter(f =>  f.vinculado_a);
+
+  return `<div style="display:flex;flex-direction:column;gap:1.5rem">
+    <div>
+      <h1 class="display" style="font-size:1.5rem;font-weight:900">Clientes</h1>
+      <p class="muted" style="font-size:.875rem">
+        ${cadastrados.length} com conta ativa · ${pendentes.length} ficha(s) aguardando cadastro ·
+        ${vinculadas.length} ficha(s) já reconhecida(s)</p>
+    </div>
+
+    <section aria-labelledby="c-ativos">
+      <h2 id="c-ativos" class="display" style="font-size:1.1rem;font-weight:700">Contas ativas</h2>
+      ${cadastrados.length === 0
+        ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Nenhum cliente se cadastrou ainda.</p>`
+        : `<div style="display:flex;flex-direction:column;gap:.6rem;margin-top:.75rem">
+            ${cadastrados.map(c => `<div class="card" style="padding:.9rem 1rem;display:flex;flex-wrap:wrap;
+                gap:.75rem;align-items:center">
+              ${avatarHtml(c.nome, null)}
+              <div style="flex:1;min-width:10rem">
+                <p style="font-weight:700">${esc(c.nome)}
+                  ${c.veio_de_pre_cadastro
+                    ? `<span class="badge b-classico" style="margin-left:.35rem">reconhecido</span>` : ""}</p>
+                <p class="muted" style="font-size:.75rem">${esc(c.telefone || "—")}
+                  ${c.setor ? " · 📍 " + esc(c.setor) : ""}</p>
+                <p class="muted" style="font-size:.72rem">${esc(c.email || "")}</p>
+              </div>
+              <div style="text-align:right;font-size:.78rem">
+                <p><strong>${c.total_pedidos}</strong> pedido(s)</p>
+                <p class="muted">${reais(c.total_gasto_centavos)}</p>
+                <p style="color:var(--pistache);font-weight:700">${c.carimbos} carimbo(s)</p>
+              </div>
+            </div>`).join("")}
+          </div>`}
+    </section>
+
+    <section aria-labelledby="c-fichas">
+      <h2 id="c-fichas" class="display" style="font-size:1.1rem;font-weight:700">
+        Fichas que você cadastrou</h2>
+      <p class="muted" style="font-size:.8rem;margin-top:.25rem">
+        Não são usuários. Quando a pessoa criar a conta com o mesmo WhatsApp,
+        o site mostra o nome e o setor para ela confirmar.</p>
+
+      <div class="card" style="padding:1rem;margin-top:.75rem">
+        <p style="font-weight:700;font-size:.85rem">Adicionar uma ficha</p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem">
+          <input id="f-nome" class="field" style="flex:2;min-width:9rem" placeholder="Nome completo">
+          <input id="f-tel" class="field" style="flex:1.4;min-width:9rem" type="tel" maxlength="16"
+            placeholder="(11) 9 9999-9999" oninput="aoDigitarTelefone(this)">
+          <input id="f-setor" class="field" style="flex:1.2;min-width:8rem" placeholder="Setor (ex: TI)">
+          <button class="btn btn-primary" onclick="salvarFicha()">Adicionar</button>
+        </div>
+
+        <details style="margin-top:.9rem">
+          <summary style="cursor:pointer;font-size:.82rem;font-weight:700">Importar vários de uma vez</summary>
+          <p class="muted" style="font-size:.75rem;margin-top:.5rem">
+            Uma pessoa por linha, separando com ponto e vírgula:<br>
+            <code>Maria Silva; (11) 98888-7777; Comercial</code></p>
+          <textarea id="f-lote" rows="5" class="field" style="margin-top:.5rem;resize:vertical"
+            placeholder="Maria Silva; (11) 98888-7777; Comercial&#10;Carlos Souza; 11977776666; TI"></textarea>
+          <button class="btn btn-ghost" style="margin-top:.5rem" onclick="importarFichas()">Importar lista</button>
+        </details>
+      </div>
+
+      ${pendentes.length === 0
+        ? `<p class="muted" style="margin-top:.75rem;font-size:.875rem">Nenhuma ficha aguardando.</p>`
+        : `<div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.75rem">
+            ${pendentes.map(f => `<div class="card" style="padding:.75rem 1rem;display:flex;
+                gap:.75rem;align-items:center">
+              <div style="flex:1;min-width:0">
+                <p style="font-weight:700;font-size:.9rem">${esc(f.nome)}</p>
+                <p class="muted" style="font-size:.75rem">${esc(mascaraTelefone(f.telefone))}
+                  ${f.setor ? " · 📍 " + esc(f.setor) : ""}</p>
+              </div>
+              <span class="badge b-novo">aguardando</span>
+              <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
+                padding:.25rem .8rem;font-size:.75rem" onclick="excluirFicha('${f.id}')">Excluir</button>
+            </div>`).join("")}
+          </div>`}
+    </section>
   </div>`;
 }
 
