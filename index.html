@@ -13,6 +13,7 @@
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#3e2723">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
   :root{
     --cacau:#3e2723; --cacau-claro:#5d4037;
@@ -246,6 +247,16 @@
    A chave publishable é pública por design: quem protege os dados
    é o Row Level Security, que roda dentro do banco.
    ============================================================ */
+/* ---------- Pix ----------
+   Chave: o WhatsApp do vendedor. Confirme no seu banco que este
+   número está cadastrado como chave Pix, senão o QR não funciona. */
+const PIX = {
+  chave: "+5511996479452",
+  nome: "Conezyn",
+  cidade: "Sao Paulo",
+  whatsapp: "5511996479452",
+};
+
 const SUPABASE_URL  = "https://cdywhgtznomqvhtzcnzk.supabase.co";
 const SUPABASE_KEY  = "sb_publishable_AR2vWWr_u5NiVG-3ovWufg_ujH1fvhr";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -297,8 +308,10 @@ const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BR
 /* Se o produto tem foto no Storage, ela vira o fundo do bloco;
    sem foto, mantém o degradê com emoji. */
 function fundoFoto(p){
+  // Fotos quadradas em molduras 4:3 seriam cortadas em cima e embaixo.
+  // Ancoramos no topo: o cone aparece inteiro e o corte sobra na base.
   return p.img
-    ? `background-image:url('${p.img}');background-size:cover;background-position:center`
+    ? `background-image:url('${p.img}');background-size:cover;background-position:center 8%`
     : `background:${p.grad}`;
 }
 function conteudoFoto(p){ return p.img ? "" : p.emoji; }
@@ -408,6 +421,54 @@ function erroAmigavel(e){
   if (/Estoque insuficiente|não está disponível|pedido está vazio|Horário inválido|local da entrega/i.test(m)) return m;
   if (/Failed to fetch|NetworkError/i.test(m)) return "Sem conexão com o servidor. Verifique sua internet.";
   return "Não conseguimos concluir agora. Tente novamente em alguns instantes.";
+}
+
+/* ============================================================
+   PIX — gera o "copia e cola" (BR Code) e o QR estático
+   ============================================================ */
+function crc16(str){
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++){
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++){
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+const semAcento = t => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, "");
+const campoEmv = (id, valor) => id + String(valor.length).padStart(2, "0") + valor;
+
+function payloadPix({ valorCentavos = 0, txid = "***" } = {}){
+  const gui = campoEmv("00", "BR.GOV.BCB.PIX") + campoEmv("01", PIX.chave);
+  let p = campoEmv("00", "01");
+  p += campoEmv("26", gui);
+  p += campoEmv("52", "0000");
+  p += campoEmv("53", "986");
+  if (valorCentavos > 0) p += campoEmv("54", (valorCentavos / 100).toFixed(2));
+  p += campoEmv("58", "BR");
+  p += campoEmv("59", semAcento(PIX.nome).toUpperCase().slice(0, 25));
+  p += campoEmv("60", semAcento(PIX.cidade).toUpperCase().slice(0, 15));
+  p += campoEmv("62", campoEmv("05", String(txid).slice(0, 25)));
+  p += "6304";
+  return p + crc16(p);
+}
+
+function svgQr(texto, tamanho = 5){
+  try {
+    const qr = qrcode(0, "M");
+    qr.addData(texto);
+    qr.make();
+    return qr.createSvgTag({ cellSize: tamanho, margin: 2 });
+  } catch { return ""; }
+}
+
+function copiarPix(codigo, botao){
+  navigator.clipboard.writeText(codigo).then(() => {
+    const antes = botao.textContent;
+    botao.textContent = "Copiado ✓";
+    setTimeout(() => { botao.textContent = antes; }, 2000);
+  }).catch(() => alert("Não foi possível copiar. Selecione o código manualmente."));
 }
 
 /* ---------- Engine de preços (espelho de src/lib/pricing/) ---------- */
@@ -1192,6 +1253,36 @@ function atualizarResumo(){
   if(l) l.textContent = c.local.trim()||"—";
   if(q) q.textContent = c.quando==="agora"?"Agora":(c.hora?"às "+c.hora:"—");
 }
+/* Bloco de pagamento da nota do pedido: QR do Pix + copia e cola + WhatsApp. */
+function blocoPix(p){
+  const codigo = payloadPix({ valorCentavos: p.total, txid: "PEDIDO" + p.numero });
+  const qr = svgQr(codigo, 4);
+  return `<div class="card" style="margin-top:1.25rem;padding:1.25rem;background:var(--chantilly);
+      border:1px solid rgb(62 39 35/.12);box-shadow:none">
+    <p class="display" style="font-weight:800;font-size:1.05rem">Pagamento</p>
+    <p class="muted" style="font-size:.8rem;margin-top:.2rem">
+      Pague por Pix na hora ou combine direto com o vendedor na entrega.</p>
+
+    ${p.total > 0 ? `
+      <div style="display:flex;justify-content:center;margin-top:.9rem">
+        <div style="background:#fff;padding:.6rem;border-radius:.9rem;line-height:0;
+          box-shadow:var(--shadow)">${qr}</div>
+      </div>
+      <p style="text-align:center;font-size:.78rem;margin-top:.5rem" class="muted">
+        Aponte a câmera do app do banco. O valor de <strong>${reais(p.total)}</strong> já vem preenchido.</p>
+
+      <label class="label" style="margin-top:.9rem;font-size:.75rem">Ou use o Pix copia e cola</label>
+      <textarea readonly rows="3" class="field" style="font-size:.68rem;resize:none;word-break:break-all"
+        onclick="this.select()">${esc(codigo)}</textarea>
+      <button class="btn btn-ghost" style="width:100%;margin-top:.4rem"
+        onclick="copiarPix(${JSON.stringify(codigo)}, this)">Copiar código Pix</button>
+    ` : `<p class="ok" style="margin-top:.75rem">Este pedido saiu de graça pelo cartão fidelidade. Nada a pagar 🎉</p>`}
+
+    <p class="muted" style="font-size:.78rem;margin-top:.9rem;text-align:center">
+      Chave Pix (WhatsApp): <strong style="color:var(--cacau)">${esc(mascaraTelefone(PIX.whatsapp.slice(2)))}</strong></p>
+  </div>`;
+}
+
 function vConfirmado(){
   const p = S.pedidos.find(x=>String(x.numero)===String(S.param));
   if (!p) return vHome();
@@ -1210,7 +1301,7 @@ function vConfirmado(){
         <div style="padding-top:.25rem"><dt class="muted">Entrega</dt><dd style="font-weight:600">${esc(p.local)}</dd></div>
         <div><dt class="muted">Receber</dt><dd style="font-weight:600">${p.quando==="agora"?"Agora":"às "+p.quando}</dd></div>
       </dl>
-      <p class="muted" style="margin-top:1rem;font-size:.875rem">O pagamento é combinado direto com o vendedor, de preferência via Pix.</p>
+      ${blocoPix(p)}
       <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.5rem">
         <button class="btn btn-verde" style="min-height:3rem;font-weight:700"
           onclick="alert('No projeto real, este botão abre o WhatsApp com a mensagem do pedido preenchida (wa.me).')">
@@ -2094,7 +2185,7 @@ function vAdminProdutos(){
         return `<div class="card" style="padding:1rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center">
           <span aria-hidden style="width:3.5rem;height:3.5rem;flex-shrink:0;display:grid;place-items:center;
             border-radius:.9rem;font-size:1.6rem;overflow:hidden;
-            ${p.imagem_url ? `background-image:url('${p.imagem_url}');background-size:cover;background-position:center`
+            ${p.imagem_url ? `background-image:url('${p.imagem_url}');background-size:cover;background-position:center 8%`
                            : `background:${v.grad}`}">${p.imagem_url ? "" : v.emoji}</span>
 
           <div style="flex:1;min-width:9rem">
