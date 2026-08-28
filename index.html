@@ -1429,6 +1429,17 @@ function vLogin(bloqueio){
         onclick="nav('cadastro')">Criar conta</button></p>
   </div>`);
 }
+function emailValido(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v||"").trim()); }
+
+/* Ícone discreto ao lado do rótulo: mostra a explicação no hover
+   e também no foco por teclado / toque no celular. */
+function dica(texto){
+  return `<span class="dica">
+    <button type="button" class="dica-btn" aria-label="Ajuda: ${esc(texto)}">!</button>
+    <span class="dica-bolha" role="tooltip">${esc(texto)}</span>
+  </span>`;
+}
+
 /* ============================================================
    CADASTRO EM 4 ETAPAS
    1. WhatsApp  →  2. Confirmação da ficha (se houver)
