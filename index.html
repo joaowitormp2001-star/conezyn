@@ -268,8 +268,10 @@ const SUPABASE_KEY  = "sb_publishable_AR2vWWr_u5NiVG-3ovWufg_ujH1fvhr";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* Aparência dos sabores enquanto não houver foto no Storage. */
+/* `pos` ajusta o enquadramento da foto de cada sabor.
+   Menor = mostra mais o topo do cone. Padrão: "center 8%". */
 const VISUAL = {
-  brigadeiro:      { emoji:"🍫", grad:"linear-gradient(135deg,#5d4037,#3e2723)" },
+  brigadeiro:      { emoji:"🍫", grad:"linear-gradient(135deg,#5d4037,#3e2723)", pos:"center top" },
   kitkat:          { emoji:"🍪", grad:"linear-gradient(135deg,#8d5a3b,#5d4037)" },
   prestigio:       { emoji:"🥥", grad:"linear-gradient(135deg,#6b4f3a,#4e342e)" },
   "doce-de-leite": { emoji:"🍮", grad:"linear-gradient(135deg,#c8955c,#8d5a3b)" },
@@ -332,7 +334,7 @@ function fundoFoto(p){
   // Fotos quadradas em molduras 4:3 seriam cortadas em cima e embaixo.
   // Ancoramos no topo: o cone aparece inteiro e o corte sobra na base.
   return p.img
-    ? `background-image:url('${p.img}');background-size:cover;background-position:center 8%`
+    ? `background-image:url('${p.img}');background-size:cover;background-position:${p.pos || "center 8%"}`
     : `background:${p.grad}`;
 }
 function conteudoFoto(p){ return p.img ? "" : p.emoji; }
@@ -347,7 +349,7 @@ function mapearProduto(row, avaliacao){
     cat: row.categories?.slug === "premium" ? "premium" : "classico",
     unit: row.preco_unitario_centavos, dupla: row.preco_dupla_centavos,
     estoque: row.estoque, destaque: row.destaque, tags,
-    img: row.imagem_url || null, emoji: v.emoji, grad: v.grad,
+    img: row.imagem_url || null, emoji: v.emoji, grad: v.grad, pos: v.pos || "center 8%",
     nota: avaliacao?.media != null ? Number(avaliacao.media) : 0,
     qtd:  avaliacao?.total != null ? Number(avaliacao.total) : 0,
   };
