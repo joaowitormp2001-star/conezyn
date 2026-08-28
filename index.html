@@ -305,7 +305,7 @@ const S = {
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false },
   notif: { ativo: false, som: true, log: [] },
-  carregando: true, erroBanco: null, erroPedidos: null, ocupado: false,
+  carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
   qtdCard: {},   // quantidade escolhida em cada card do catálogo
 };
 const byId = id => PRODUTOS.find(p => p.id === id);
@@ -444,6 +444,18 @@ async function carregarFidelidade(){
 /* Mensagem de erro amigável (prompt, seção 40). */
 function erroAmigavel(e){
   const m = String(e?.message || e || "");
+  if (m) console.error("Erro bruto:", e);
+  S.ultimoErro = m;
+  if (/Database error saving new user/i.test(m))
+    return "Não foi possível criar a conta. Verifique se este WhatsApp ou e-mail já foi usado.";
+  if (/rate limit|only request this after|too many/i.test(m))
+    return "Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.";
+  if (/Signups not allowed|signup is disabled/i.test(m))
+    return "O cadastro está desativado no painel do Supabase (Authentication → Providers).";
+  if (/Email address .* invalid|invalid format/i.test(m))
+    return "Este e-mail foi recusado pelo servidor. Tente outro endereço.";
+  if (/confirm|not confirmed/i.test(m))
+    return "Confirme seu e-mail antes de entrar.";
   if (/Invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
   if (/already registered|already been registered/i.test(m)) return "Já existe uma conta com este e-mail.";
   if (/Password should be/i.test(m)) return "A senha deve ter no mínimo 6 caracteres.";
@@ -1479,7 +1491,9 @@ function vCadastro(){
       <div style="margin-top:.75rem"><label class="label" for="r-conf">Confirmar senha</label>
         <input id="r-conf" class="field" type="password" minlength="6" autocomplete="new-password"
           onkeydown="if(event.key==='Enter')fazerCadastro()"></div>
-      ${S.cadastroErro?`<p class="alerta" role="alert" style="margin-top:.75rem">${esc(S.cadastroErro)}</p>`:""}
+      ${S.cadastroErro?`<p class="alerta" role="alert" style="margin-top:.75rem">${esc(S.cadastroErro)}
+        ${S.ultimoErro?`<br><span style="font-weight:400;font-size:.72rem;opacity:.8">
+          Detalhe técnico: ${esc(S.ultimoErro)}</span>`:""}</p>`:""}
       <button class="btn btn-primary" style="width:100%;margin-top:1rem" ${S.ocupado?"disabled":""}
         onclick="fazerCadastro()">${S.ocupado ? "Criando conta..." : "Criar conta"}</button>`;
 
@@ -1510,9 +1524,18 @@ async function etapaTelefone(){
   }
   S.cadastroErro = null; c.checando = true; render();
 
-  const { data, error } = await sb.rpc("consultar_precadastro", { p_telefone: c.tel });
+  const [pre, uso] = await Promise.all([
+    sb.rpc("consultar_precadastro", { p_telefone: c.tel }),
+    sb.rpc("telefone_em_uso", { p_telefone: c.tel }),
+  ]);
   c.checando = false;
 
+  if (uso && uso.data === true){
+    S.cadastroErro = "Este WhatsApp já pertence a uma conta. Use a opção Entrar, ou cadastre outro número.";
+    return render();
+  }
+
+  const { data, error } = pre;
   const ficha = !error && Array.isArray(data) ? data[0] : null;
   if (ficha){ c.ficha = ficha; c.etapa = 2; }
   else { c.ficha = null; c.etapa = 3; }
