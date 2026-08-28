@@ -229,6 +229,12 @@
   @media(max-width:520px){
     .fid{padding:1.7rem 1rem 1.9rem}
     .fid-grade{grid-template-columns:repeat(5,minmax(0,3.1rem));gap:.7rem;margin-top:1.2rem}}
+  .campo-senha{position:relative}
+  .campo-senha .field{padding-right:2.8rem}
+  .olho{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);
+    width:2rem;height:2rem;display:grid;place-items:center;border-radius:9999px;
+    font-size:1rem;line-height:1;color:rgb(62 39 35/.5)}
+  .olho:hover{background:rgb(62 39 35/.07);color:var(--cacau)}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -831,27 +837,70 @@ function alternarPresente(ativo){
   render();
 }
 let buscaTimer = null;
+
+/* A lista de sugestões é desenhada SOZINHA, sem re-renderizar a tela.
+   Chamar render() a cada tecla destruía o campo e tirava o foco. */
+function desenharSugestoes(){
+  const caixa = document.getElementById("pr-sugestoes");
+  if (!caixa) return;
+  const p = S.presente;
+
+  if (p.buscando && p.sugestoes.length === 0){
+    caixa.innerHTML = `<p class="muted" style="font-size:.72rem;margin-top:.3rem">procurando...</p>`;
+    return;
+  }
+  if (p.sugestoes.length === 0){ caixa.innerHTML = ""; return; }
+
+  caixa.innerHTML = `<ul style="list-style:none;position:absolute;z-index:20;left:0;right:0;margin-top:.25rem;
+      background:#fff;border-radius:.75rem;box-shadow:var(--shadow);overflow:hidden">
+    ${p.sugestoes.map((d,i)=>`<li>
+      <button type="button" style="display:block;width:100%;text-align:left;padding:.6rem .8rem;font-size:.85rem"
+        onmouseover="this.style.background='var(--chantilly-esc)'"
+        onmouseout="this.style.background='transparent'"
+        onmousedown="event.preventDefault()"
+        onclick="escolherDestinatario(${i})">
+        <strong>${esc(d.nome)}</strong>
+        ${d.setor?`<span class="muted"> · 📍 ${esc(d.setor)}</span>`:""}
+        ${d.origem==="conta"?`<span class="badge b-classico" style="margin-left:.3rem">tem conta</span>`:""}
+      </button></li>`).join("")}
+  </ul>`;
+}
+
 function buscarDestinatario(termo){
   const p = S.presente;
   p.termo = termo; p.escolhido = null;
   clearTimeout(buscaTimer);
-  if (termo.trim().length < 3){ p.sugestoes = []; p.buscando = false; return render(); }
+
+  if (termo.trim().length < 3){
+    p.sugestoes = []; p.buscando = false;
+    return desenharSugestoes();
+  }
   p.buscando = true;
+  desenharSugestoes();
+
   buscaTimer = setTimeout(async () => {
-    const { data, error } = await sb.rpc("buscar_destinatarios", { p_termo: termo.trim() });
+    const alvo = termo.trim();
+    const { data, error } = await sb.rpc("buscar_destinatarios", { p_termo: alvo });
+    if (S.presente.termo.trim() !== alvo) return;   // o texto já mudou: descarta
     p.sugestoes = error ? [] : (data || []);
     p.buscando = false;
-    render();
+    desenharSugestoes();
   }, 350);
 }
+
 function escolherDestinatario(i){
   const d = S.presente.sugestoes[i];
   if (!d) return;
   S.presente.escolhido = d;
   S.presente.termo = d.nome;
-  S.presente.setor = d.setor || S.presente.setor;
+  if (d.setor) S.presente.setor = d.setor;
   S.presente.sugestoes = [];
-  render();
+
+  const campoNome = document.getElementById("pr-nome");
+  if (campoNome) campoNome.value = d.nome;
+  const campoSetor = document.getElementById("pr-setor");
+  if (campoSetor && d.setor) campoSetor.value = d.setor;
+  desenharSugestoes();
 }
 
 async function recarregarPedidos(){
@@ -1250,20 +1299,7 @@ function vCheckout(){
             <input id="pr-nome" class="field" autocomplete="off" placeholder="Digite o nome"
               value="${esc(S.presente.escolhido ? S.presente.escolhido.nome : S.presente.termo)}"
               oninput="buscarDestinatario(this.value)">
-            ${S.presente.sugestoes.length > 0 ? `
-              <ul style="list-style:none;position:absolute;z-index:20;left:0;right:0;margin-top:.25rem;
-                background:#fff;border-radius:.75rem;box-shadow:var(--shadow);overflow:hidden">
-                ${S.presente.sugestoes.map((d,i)=>`<li>
-                  <button style="display:block;width:100%;text-align:left;padding:.6rem .8rem;font-size:.85rem"
-                    onmouseover="this.style.background='var(--chantilly-esc)'"
-                    onmouseout="this.style.background='transparent'"
-                    onclick="escolherDestinatario(${i})">
-                    <strong>${esc(d.nome)}</strong>
-                    ${d.setor?`<span class="muted"> · 📍 ${esc(d.setor)}</span>`:""}
-                    ${d.origem==="conta"?`<span class="badge b-classico" style="margin-left:.3rem">tem conta</span>`:""}
-                  </button></li>`).join("")}
-              </ul>` : ""}
-            ${S.presente.buscando?`<p class="muted" style="font-size:.72rem;margin-top:.3rem">procurando...</p>`:""}
+            <div id="pr-sugestoes"></div>
           </div>
           <div style="margin-top:.6rem">
             <label class="label" for="pr-setor">Setor de quem recebe</label>
@@ -1416,8 +1452,7 @@ function vLogin(bloqueio){
         <input id="l-email" class="field" type="email" inputmode="email" autocomplete="email"
           placeholder="voce@email.com"></div>
       <div><label class="label" for="l-senha">Senha</label>
-        <input id="l-senha" class="field" type="password" autocomplete="current-password"
-          onkeydown="if(event.key==='Enter')fazerLogin()"></div>
+        ${campoSenha("l-senha", `autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()"`)}</div>
       ${S.loginErro?`<p class="alerta" role="alert">${esc(S.loginErro)}</p>`:""}
       <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
       <button style="font-size:.8rem;font-weight:600;color:rgb(62 39 35/.6);text-decoration:underline"
@@ -1429,6 +1464,25 @@ function vLogin(bloqueio){
         onclick="nav('cadastro')">Criar conta</button></p>
   </div>`);
 }
+/* Campo de senha com botão de mostrar/ocultar. */
+function campoSenha(id, extra = ""){
+  return `<div class="campo-senha">
+    <input id="${id}" class="field" type="password" minlength="6" ${extra}>
+    <button type="button" class="olho" aria-label="Mostrar senha" title="Mostrar senha"
+      onclick="alternarSenha('${id}', this)">👁</button>
+  </div>`;
+}
+function alternarSenha(id, botao){
+  const campo = document.getElementById(id);
+  if (!campo) return;
+  const oculta = campo.type === "password";
+  campo.type = oculta ? "text" : "password";
+  botao.textContent = oculta ? "🙈" : "👁";
+  botao.setAttribute("aria-label", oculta ? "Ocultar senha" : "Mostrar senha");
+  botao.setAttribute("title", oculta ? "Ocultar senha" : "Mostrar senha");
+  campo.focus();
+}
+
 function emailValido(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v||"").trim()); }
 
 /* Ícone discreto ao lado do rótulo: mostra a explicação no hover
@@ -1498,10 +1552,9 @@ function vCadastro(){
   : `
       <div><label class="label" for="r-senha">Crie uma senha
         ${dica("Mínimo de 6 caracteres. Ela é guardada criptografada — ninguém consegue lê-la.")}</label>
-        <input id="r-senha" class="field" type="password" minlength="6" autocomplete="new-password"></div>
+        ${campoSenha("r-senha", 'autocomplete="new-password"')}</div>
       <div style="margin-top:.75rem"><label class="label" for="r-conf">Confirmar senha</label>
-        <input id="r-conf" class="field" type="password" minlength="6" autocomplete="new-password"
-          onkeydown="if(event.key==='Enter')fazerCadastro()"></div>
+        ${campoSenha("r-conf", `autocomplete="new-password" onkeydown="if(event.key==='Enter')fazerCadastro()"`)}</div>
       ${S.cadastroErro?`<p class="alerta" role="alert" style="margin-top:.75rem">${esc(S.cadastroErro)}
         ${S.ultimoErro?`<br><span style="font-weight:400;font-size:.72rem;opacity:.8">
           Detalhe técnico: ${esc(S.ultimoErro)}</span>`:""}</p>`:""}
