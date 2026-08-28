@@ -306,6 +306,7 @@ const MIN_DEPOIMENTOS = 7;
 const STATUS = ["Pedido feito","Entregue","Pagamento concluído"];   // fluxo normal
 const STATUS_TODOS = [...STATUS, "Cancelado"];                       // + saída de emergência
 let META_CARIMBOS = 10;
+const MARCA = { logo: null };
 const ANTECEDENCIA_MIN = 20;
 
 /* ---------- Estado da sessão do navegador ---------- */
@@ -349,6 +350,23 @@ function mudarQtdCard(id, delta){
   render();
 }
 
+/* Ícone de carrinho minimalista, em traço. */
+function iconeCarrinho(tam = 20){
+  return `<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+    stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.5 3h2.2l2.1 10.4a1.6 1.6 0 0 0 1.6 1.3h8.1a1.6 1.6 0 0 0 1.6-1.3L19.5 7H6"/>
+    <circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17" cy="19.5" r="1.4"/>
+  </svg>`;
+}
+
+/* Logo da loja: imagem enviada pelo administrador ou o selo padrão. */
+function logoMarca(){
+  return MARCA.logo
+    ? `<img src="${MARCA.logo}" alt="Cones da Casa" style="height:2.5rem;width:auto;
+         max-width:9rem;object-fit:contain;display:block">`
+    : `<span class="selo carimbo">🍦</span>`;
+}
+
 function fundoFoto(p){
   // Fotos quadradas em molduras 4:3 seriam cortadas em cima e embaixo.
   // Ancoramos no topo: o cone aparece inteiro e o corte sobra na base.
@@ -379,7 +397,7 @@ async function carregarCatalogo(){
     sb.from("products").select("*, categories(slug, nome)").eq("ativo", true).order("nome"),
     sb.from("produtos_avaliacao").select("*"),
     sb.from("avaliacoes_publicas").select("*").order("criado_em", { ascending:false }).limit(30),
-    sb.from("settings").select("*").eq("chave","meta_carimbos").maybeSingle(),
+    sb.from("settings").select("*"),
   ]);
   if (prod.error) throw prod.error;
 
@@ -392,7 +410,9 @@ async function carregarCatalogo(){
     data: new Date(a.criado_em).toLocaleDateString("pt-BR"),
   })).filter(a => a.txt.trim().length > 0);
 
-  if (cfg.data?.valor) META_CARIMBOS = Number(cfg.data.valor) || 10;
+  const conf = Object.fromEntries((cfg.data || []).map(c => [c.chave, c.valor]));
+  if (conf.meta_carimbos) META_CARIMBOS = Number(conf.meta_carimbos) || 10;
+  MARCA.logo = conf.logo_url || null;
 }
 
 async function carregarPerfil(){
@@ -1008,12 +1028,13 @@ function vHeader(){
     <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
       ${S.view!=="home" ? backBtn() : ""}
       <a href="#" class="logo display" onclick="nav('home');return false">
-        <span class="selo carimbo">🍦</span>Cones da Casa</a>
+        ${logoMarca()}${MARCA.logo ? "" : "Cones da Casa"}</a>
     </div>
     <nav style="display:flex;align-items:center;gap:.5rem">
       <button class="btn" style="font-weight:600" onclick="nav(S.perfil?'conta':'login')">
         ${S.perfil ? "Olá, "+esc(S.perfil.nome.split(" ")[0]) : "Entrar"}</button>
-      <button class="cart-btn" aria-label="Carrinho" onclick="nav('carrinho')">🛒
+      <button class="cart-btn" aria-label="Carrinho com ${cones} ${cones===1?"cone":"cones"}"
+        onclick="nav('carrinho')">${iconeCarrinho(20)}
         ${cones>0?`<span class="cart-count">${cones}</span>`:""}</button>
     </nav>
   </div></header>`;
@@ -1446,8 +1467,10 @@ function vAuthShell(conteudo){
   return `<main style="min-height:100dvh;display:grid;place-items:center;padding:1rem;position:relative">
     ${backBtn("position:fixed;top:1rem;left:1rem;z-index:10")}
     <div style="width:100%;max-width:24rem">
-      <p class="display" style="text-align:center;font-size:1.1rem;font-weight:900;margin-bottom:1rem;cursor:pointer"
-        onclick="nav('home')">🍦 Cones da Casa</p>
+      <div style="display:flex;justify-content:center;align-items:center;gap:.4rem;margin-bottom:1rem;cursor:pointer"
+        onclick="nav('home')">
+        ${logoMarca()}<span class="display" style="font-size:1.1rem;font-weight:900">
+          ${MARCA.logo ? "" : "Cones da Casa"}</span></div>
       ${conteudo}
     </div>
   </main>`;
@@ -1999,6 +2022,53 @@ function vAdminNotif(){
     </section>`:""}
   </div>`;
 }
+const LOGO_WEBP = "marca/logo.webp";
+const LOGO_SVG  = "marca/logo.svg";
+
+async function enviarLogo(input){
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)){ alert("Escolha um arquivo de imagem."); return; }
+  const rotulo = document.getElementById("logo-rotulo");
+  if (rotulo) rotulo.textContent = "Enviando...";
+  try {
+    // SVG é vetor: sobe do jeito que está, sem rasterizar.
+    const ehSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name);
+    if (ehSvg && f.size > 500 * 1024) throw new Error("O SVG precisa ter menos de 500 KB.");
+
+    const corpo = ehSvg ? f : await prepararImagem(f, 400, 0.92);
+    const caminho = ehSvg ? LOGO_SVG : LOGO_WEBP;
+    const tipo = ehSvg ? "image/svg+xml" : "image/webp";
+
+    const up = await sb.storage.from("produtos")
+      .upload(caminho, corpo, { upsert: true, contentType: tipo });
+    if (up.error) throw up.error;
+
+    // remove o formato antigo, para não ficarem duas logos no Storage
+    await sb.storage.from("produtos").remove([ehSvg ? LOGO_WEBP : LOGO_SVG]);
+
+    const { data } = sb.storage.from("produtos").getPublicUrl(caminho);
+    const url = data.publicUrl + "?v=" + Date.now();
+    const { error } = await sb.from("settings")
+      .upsert({ chave: "logo_url", valor: url }, { onConflict: "chave" });
+    if (error) throw error;
+    MARCA.logo = url;
+    render();
+  } catch (e) {
+    alert(erroAmigavel(e));
+    if (rotulo) rotulo.textContent = "Enviar logo";
+  }
+}
+
+async function removerLogo(){
+  if (!confirm("Voltar para a logo padrão?")) return;
+  await sb.storage.from("produtos").remove([LOGO_WEBP, LOGO_SVG]);
+  const { error } = await sb.from("settings").delete().eq("chave", "logo_url");
+  if (error){ alert(erroAmigavel(error)); return; }
+  MARCA.logo = null;
+  render();
+}
+
 function vAdminDash(){
   const hoje = new Date().toDateString();
   const deHoje = S.pedidos.filter(p=>p.criadoEm.toDateString()===hoje && p.status!=="Cancelado");
@@ -2038,6 +2108,27 @@ function vAdminDash(){
         <p class="muted" style="margin-top:.75rem;font-size:.72rem">Cadastro e edição de produtos entram na Onda 2 (com Supabase).</p>
       </section>
     </div>
+    <section class="card" style="padding:1.25rem" aria-labelledby="marca">
+      <h2 id="marca" class="display" style="font-size:1.1rem;font-weight:700">Logo da loja</h2>
+      <p class="muted" style="font-size:.8rem;margin-top:.25rem">
+        Aparece no topo do site e nas telas de entrada. Ideal: horizontal, com fundo transparente.
+        <strong>SVG é o melhor formato</strong> — fica nítido em qualquer tela e sobe sem conversão.
+        PNG e JPG também servem.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:1rem;margin-top:.9rem">
+        <div style="background:var(--cacau);border-radius:.8rem;padding:.6rem 1rem;display:grid;place-items:center;min-width:9rem">
+          ${MARCA.logo
+            ? `<img src="${MARCA.logo}" alt="Logo atual" style="height:2.5rem;max-width:8rem;object-fit:contain;display:block">`
+            : `<span style="color:var(--chantilly);font-size:1.4rem">🍦</span>`}
+        </div>
+        <label class="btn btn-ghost" style="cursor:pointer">
+          <span id="logo-rotulo">${MARCA.logo ? "Trocar logo" : "Enviar logo"}</span>
+          <input type="file" accept="image/*" style="display:none" onchange="enviarLogo(this)">
+        </label>
+        ${MARCA.logo ? `<button style="font-size:.78rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
+          onclick="removerLogo()">voltar ao padrão</button>` : ""}
+      </div>
+    </section>
+
     <button class="btn btn-primary" style="align-self:start;min-height:3rem" onclick="S.adminTab='pedidos';render()">Gerenciar pedidos →</button>
   </div>`;
 }
@@ -2592,6 +2683,20 @@ async function importarFichas(){
         (ruins.length ? `\n\n${ruins.length} linha(s) ignorada(s):\n` + ruins.join("\n") : ""));
 }
 
+/* Clique num sabor: acrescenta ao campo e soma 1 na quantidade. */
+function addSabor(fichaId, produtoId){
+  const prod = byId(produtoId);
+  const nome = prod ? prod.nome : "";
+  if (!nome) return;
+  const campo = document.getElementById("hc-sab-" + fichaId);
+  const qtd   = document.getElementById("hc-qtd-" + fichaId);
+  if (!campo) return;
+  const atuais = campo.value.split(",").map(t => t.trim()).filter(Boolean);
+  if (!atuais.includes(nome)) atuais.push(nome);
+  campo.value = atuais.join(", ");
+  if (qtd) qtd.value = Math.max(1, (parseInt(qtd.value, 10) || 0) + 1);
+}
+
 async function addCompraFicha(fichaId){
   const q = parseInt(document.getElementById("hc-qtd-"+fichaId).value, 10);
   const sab = document.getElementById("hc-sab-"+fichaId).value.trim();
@@ -2603,6 +2708,7 @@ async function addCompraFicha(fichaId){
     data_entrega: ent, data_pagamento: pag,
   });
   if (error){ alert(erroAmigavel(error)); return; }
+  S.admin.fichaAberta = fichaId;      // mantém a ficha aberta após registrar
   await carregarAdmin(); render();
 }
 async function excluirCompraFicha(id){
@@ -2693,10 +2799,10 @@ function vAdminClientes(){
         </details>
       </div>
 
-      ${pendentes.length === 0
-        ? `<p class="muted" style="margin-top:.75rem;font-size:.875rem">Nenhuma ficha aguardando.</p>`
+      ${S.admin.fichas.length === 0
+        ? `<p class="muted" style="margin-top:.75rem;font-size:.875rem">Nenhuma ficha cadastrada ainda.</p>`
         : `<div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.75rem">
-            ${pendentes.map(f => {
+            ${S.admin.fichas.map(f => {
               const compras = S.admin.compras.filter(c => c.pre_cliente_id === f.id);
               const aberta = S.admin.fichaAberta === f.id;
               return `<div class="card" style="padding:.75rem 1rem">
@@ -2707,7 +2813,9 @@ function vAdminClientes(){
                     ${f.setor ? " · 📍 " + esc(f.setor) : ""}
                     ${f.total_cones ? " · 🍦 " + f.total_cones + " cone(s)" : ""}</p>
                 </div>
-                <span class="badge b-novo">aguardando</span>
+                ${f.vinculado_a
+                  ? `<span class="badge b-classico">conta ativa</span>`
+                  : `<span class="badge b-novo">aguardando</span>`}
                 <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
                   onclick="abrirFicha('${f.id}')">${aberta ? "Fechar" : "Detalhes"}</button>
                 <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
@@ -2716,7 +2824,10 @@ function vAdminClientes(){
 
               ${aberta ? `<div style="border-top:1px solid rgb(62 39 35/.08);margin-top:.75rem;padding-top:.75rem">
 
-                <p style="font-weight:700;font-size:.8rem">Compras anteriores</p>
+                <p style="font-weight:700;font-size:.8rem">
+                  Histórico de pedidos
+                  ${f.total_cones ? `<span class="muted" style="font-weight:400">
+                    — ${f.total_compras} pedido(s), ${f.total_cones} cone(s) no total</span>` : ""}</p>
                 ${compras.length === 0
                   ? `<p class="muted" style="font-size:.75rem;margin-top:.25rem">Nenhuma registrada.</p>`
                   : `<ul style="list-style:none;margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem">
@@ -2735,6 +2846,15 @@ function vAdminClientes(){
                       </li>`).join("")}
                     </ul>`}
 
+                <p class="muted" style="font-size:.72rem;margin-top:.7rem">
+                  Registrar um pedido antigo — clique nos sabores para preencher:</p>
+                <div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.35rem">
+                  ${PRODUTOS.map(pr=>`<button class="btn btn-ghost"
+                    style="min-height:1.8rem;padding:.1rem .55rem;font-size:.7rem"
+                    onclick="addSabor('${f.id}','${pr.id}')">
+                    ${pr.emoji} ${esc(pr.nome)}</button>`).join("")}
+                </div>
+
                 <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;align-items:end">
                   <label style="font-size:.72rem;font-weight:600">Cones
                     <input id="hc-qtd-${f.id}" class="field" type="number" min="1"
@@ -2752,6 +2872,7 @@ function vAdminClientes(){
                     onclick="addCompraFicha('${f.id}')">Registrar</button>
                 </div>
 
+                ${f.vinculado_a ? "" : `
                 <p style="font-weight:700;font-size:.8rem;margin-top:1rem">Vincular a uma conta existente</p>
                 <p class="muted" style="font-size:.72rem">
                   Use quando a pessoa já criou conta com outro WhatsApp. Os cones do histórico viram carimbos.</p>
@@ -2762,7 +2883,7 @@ function vAdminClientes(){
                   </select>
                   <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
                     onclick="vincularFichaConta('${f.id}')">Vincular</button>
-                </div>
+                </div>`}
               </div>` : ""}
             </div>`}).join("")}
           </div>`}
