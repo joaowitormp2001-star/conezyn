@@ -187,7 +187,11 @@
   .fid{
     /* roxo dessaturado: dá espaço para a cor de destaque respirar */
     --roxo:#4A3A6E;--roxo-esc:#332750;--roxo-claro:#5D4A87;
-    --destaque:#FFD9A0;--verde:#3FBF7F;
+    /* Cor de destaque do cartão. Alternativas testadas, é só trocar a linha:
+       --destaque:#EFB8C8;  rosé (em uso)
+       --destaque:#D6C6F0;  lavanda clara — o mais harmônico com o roxo
+       --destaque:#F6EDE0;  creme — o mais neutro, puxa o fundo do site */
+    --destaque:#EFB8C8;--verde:#3FBF7F;
     font-family:"Montserrat",system-ui,sans-serif;
     position:relative;overflow:hidden;width:100%;max-width:30rem;margin-inline:auto;
     padding:2.1rem 1.6rem 2.3rem;
@@ -220,7 +224,7 @@
   .fid::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
     background:
       radial-gradient(120% 80% at 18% -10%, rgba(255,255,255,.18), transparent 55%),
-      radial-gradient(90% 70% at 105% 115%, rgba(255,217,160,.14), transparent 60%),
+      radial-gradient(90% 70% at 105% 115%, rgba(239,184,200,.16), transparent 60%),
       linear-gradient(160deg, rgba(255,255,255,.06) 0%, transparent 42%, rgba(0,0,0,.15) 100%)}
   .fid::after{content:"";position:absolute;left:-30%;top:-60%;width:55%;height:220%;
     pointer-events:none;z-index:1;transform:rotate(18deg);
@@ -229,6 +233,15 @@
   @media(max-width:520px){
     .fid{padding:1.7rem 1rem 1.9rem}
     .fid-grade{grid-template-columns:repeat(5,minmax(0,3.1rem));gap:.7rem;margin-top:1.2rem}}
+  /* lista de sugestões do presente */
+  .sug-lista{list-style:none;position:absolute;z-index:20;left:0;right:0;margin-top:.35rem;
+    background:var(--chantilly);border:1px solid rgb(62 39 35/.22);border-radius:.8rem;overflow:hidden;
+    box-shadow:0 12px 26px -10px rgb(62 39 35/.35)}
+  .sug-lista::before{content:"";display:block;height:3px;background:var(--casquinha)}
+  .sug-item{display:block;width:100%;text-align:left;padding:.62rem .8rem;font-size:.85rem;
+    background:transparent;transition:background .12s}
+  .sug-item:hover,.sug-item:focus-visible{background:var(--chantilly-esc)}
+  .sug-lista li + li .sug-item{border-top:1px solid rgb(62 39 35/.1)}
   .campo-senha{position:relative}
   .campo-senha .field{padding-right:2.8rem}
   .olho{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);
@@ -851,12 +864,9 @@ function desenharSugestoes(){
   }
   if (p.sugestoes.length === 0){ caixa.innerHTML = ""; return; }
 
-  caixa.innerHTML = `<ul style="list-style:none;position:absolute;z-index:20;left:0;right:0;margin-top:.25rem;
-      background:#fff;border-radius:.75rem;box-shadow:var(--shadow);overflow:hidden">
+  caixa.innerHTML = `<ul class="sug-lista">
     ${p.sugestoes.map((d,i)=>`<li>
-      <button type="button" style="display:block;width:100%;text-align:left;padding:.6rem .8rem;font-size:.85rem"
-        onmouseover="this.style.background='var(--chantilly-esc)'"
-        onmouseout="this.style.background='transparent'"
+      <button type="button" class="sug-item"
         onmousedown="event.preventDefault()"
         onclick="escolherDestinatario(${i})">
         <strong>${esc(d.nome)}</strong>
@@ -1800,7 +1810,7 @@ function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
   const enfeite =
     marca === "mais"
       ? `<g transform="translate(32 31)">
-           <path d="${cruz}" fill="#FFD9A0" stroke="#fff" stroke-width="3.2"
+           <path d="${cruz}" fill="#EFB8C8" stroke="#fff" stroke-width="3.2"
                  stroke-linejoin="round" paint-order="stroke"/>
          </g>`
       : marca === "check"
