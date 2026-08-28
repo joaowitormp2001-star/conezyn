@@ -481,6 +481,26 @@ async function carregarFidelidade(){
 }
 
 /* Mensagem de erro amigável (prompt, seção 40). */
+/* Mostra o aviso com o motivo real do servidor, para dar o que investigar. */
+function avisarErro(e, ondeAconteceu){
+  const amigavel = erroAmigavel(e);
+  const bruto = S.ultimoErro || "";
+  const codigo = e?.code ? ` (código ${e.code})` : "";
+  const dica = /Bucket not found/i.test(bruto)
+    ? "\n\nO bucket do Storage não existe. Crie em Storage → New bucket com o nome exato e marque Public."
+    : /row-level security|violates row-level/i.test(bruto)
+    ? "\n\nFaltam permissões no banco. Confira se você está logado como administrador e se os patches SQL foram aplicados."
+    : /Could not find the function|PGRST202/i.test(bruto)
+    ? "\n\nEssa função não existe no banco. Falta rodar um dos arquivos SQL."
+    : "";
+  alert(
+    amigavel +
+    (ondeAconteceu ? `\n\nOnde: ${ondeAconteceu}` : "") +
+    (bruto ? `\n\nDetalhe técnico: ${bruto}${codigo}` : "") +
+    dica
+  );
+}
+
 function erroAmigavel(e){
   const m = String(e?.message || e || "");
   if (m) console.error("Erro bruto:", e);
@@ -701,10 +721,10 @@ async function carregarFoto(input){
   const caminho = `${S.perfil.id}/avatar.webp`;
   let blob;
   try { blob = await prepararImagem(f, 480, 0.85); }
-  catch (e) { alert(erroAmigavel(e)); return; }
+  catch (e) { avisarErro(e); return; }
   const { error } = await sb.storage.from("avatares")
     .upload(caminho, blob, { upsert: true, contentType: "image/webp" });
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error); return; }
   const { data } = sb.storage.from("avatares").getPublicUrl(caminho);
   const url = data.publicUrl + "?v=" + Date.now();   // evita cache da foto antiga
   await sb.from("profiles").update({ foto_url: url }).eq("id", S.perfil.id);
@@ -1737,7 +1757,7 @@ async function salvarPerfil(){
   const { error } = await sb.from("profiles")
     .update({ nome, telefone: mascaraTelefone(tel), email })
     .eq("id", S.perfil.id);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "salvar o perfil"); return; }
   Object.assign(S.perfil, { nome, tel: mascaraTelefone(tel), email });
   const aviso = document.getElementById("salvo-ok");
   if (aviso) aviso.style.display = "inline";
@@ -2055,7 +2075,7 @@ async function enviarLogo(input){
     MARCA.logo = url;
     render();
   } catch (e) {
-    alert(erroAmigavel(e));
+    avisarErro(e, "enviar a logo");
     if (rotulo) rotulo.textContent = "Enviar logo";
   }
 }
@@ -2064,7 +2084,7 @@ async function removerLogo(){
   if (!confirm("Voltar para a logo padrão?")) return;
   await sb.storage.from("produtos").remove([LOGO_WEBP, LOGO_SVG]);
   const { error } = await sb.from("settings").delete().eq("chave", "logo_url");
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "remover a logo"); return; }
   MARCA.logo = null;
   render();
 }
@@ -2184,7 +2204,7 @@ function vAdminPedidos(){
 /* ---------- Render ---------- */
 async function mudarStatus(id, status){
   const { error } = await sb.from("orders").update({ status }).eq("id", id);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "mudar o status do pedido"); return; }
   const p = S.pedidos.find(x => x.id === id);
   if (p) p.status = status;
   render();
@@ -2201,7 +2221,7 @@ async function enviarSugestao(){
   if (!S.perfil){ S.voltarPara = "home"; return nav("login"); }
   const { error } = await sb.from("suggestions")
     .insert({ cliente_id: S.perfil.id, texto });
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "enviar a sugestão"); return; }
   S.sugestaoOk = true; render();
 }
 
@@ -2212,7 +2232,7 @@ async function enviarAvaliacao(produtoId, nota, comentario){
     produto_id: produtoId, cliente_id: S.perfil.id,
     nota, comentario: comentario || null,
   }, { onConflict: "produto_id,cliente_id" });
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "enviar a avaliação"); return; }
   await carregarCatalogo();
   fecharModal(); render();
 }
@@ -2381,7 +2401,7 @@ async function enviarFotoProduto(input, produtoId, slug){
     const { data } = sb.storage.from("produtos").getPublicUrl(caminho);
     await salvarCampoProduto(produtoId, "imagem_url", data.publicUrl + "?v=" + Date.now());
   } catch (e) {
-    alert(erroAmigavel(e));
+    avisarErro(e, "enviar a foto do sabor");
     if (rotulo) rotulo.textContent = "Enviar foto";
   }
 }
@@ -2396,7 +2416,7 @@ async function removerFotoProduto(produtoId, slug){
 async function salvarCampoProduto(id, campo, valor){
   const { error } = await sb.from("products")
     .update({ [campo]: valor, atualizado_em: new Date().toISOString() }).eq("id", id);
-  if (error){ alert(erroAmigavel(error)); return false; }
+  if (error){ avisarErro(error, "salvar o produto"); return false; }
   const p = S.admin.produtos.find(x => x.id === id);
   if (p) p[campo] = valor;
   await carregarCatalogo();
@@ -2424,7 +2444,7 @@ async function definirPreco(id, campo, valorReais){
 async function zerarTodoEstoque(){
   if (!confirm("Zerar o estoque de TODOS os sabores? Eles ficarão como Esgotado no site.")) return;
   const { error } = await sb.from("products").update({ estoque: 0 }).gt("estoque", -1);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error); return; }
   await Promise.all([carregarAdmin(), carregarCatalogo()]);
   render();
 }
@@ -2514,7 +2534,7 @@ function vAdminProdutos(){
 /* ---------- Moderação de avaliações ---------- */
 async function moderarAvaliacao(id, aprovada){
   const { error } = await sb.from("reviews").update({ aprovada }).eq("id", id);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "moderar a avaliação"); return; }
   const a = S.admin.avaliacoes.find(x => x.id === id);
   if (a) a.aprovada = aprovada;
   await carregarCatalogo();
@@ -2523,7 +2543,7 @@ async function moderarAvaliacao(id, aprovada){
 async function excluirAvaliacao(id){
   if (!confirm("Excluir esta avaliação definitivamente?")) return;
   const { error } = await sb.from("reviews").delete().eq("id", id);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "excluir a avaliação"); return; }
   S.admin.avaliacoes = S.admin.avaliacoes.filter(x => x.id !== id);
   await carregarCatalogo();
   render();
@@ -2586,7 +2606,7 @@ function vAdminAvaliacoes(){
 /* ---------- Sugestões ---------- */
 async function mudarStatusSugestao(id, status){
   const { error } = await sb.from("suggestions").update({ status }).eq("id", id);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "mudar o status da sugestão"); return; }
   const g = S.admin.sugestoes.find(x => x.id === id);
   if (g) g.status = status;
   render();
@@ -2655,7 +2675,7 @@ async function salvarFicha(){
 async function excluirFicha(id){
   if (!confirm("Excluir esta ficha? O cliente não será mais reconhecido ao se cadastrar.")) return;
   const { error } = await sb.from("pre_clientes").delete().eq("id", id);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "excluir a ficha"); return; }
   await carregarAdmin(); render();
 }
 
@@ -2676,7 +2696,7 @@ async function importarFichas(){
   if (fichas.length === 0){ alert("Nenhuma linha válida encontrada.\n\n" + ruins.join("\n")); return; }
 
   const { error } = await sb.from("pre_clientes").upsert(fichas, { onConflict: "telefone" });
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "importar a lista de fichas"); return; }
   document.getElementById("f-lote").value = "";
   await carregarAdmin(); render();
   alert(`${fichas.length} ficha(s) importada(s).` +
@@ -2707,14 +2727,14 @@ async function addCompraFicha(fichaId){
     pre_cliente_id: fichaId, quantidade: q, sabores: sab || null,
     data_entrega: ent, data_pagamento: pag,
   });
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "registrar a compra na ficha"); return; }
   S.admin.fichaAberta = fichaId;      // mantém a ficha aberta após registrar
   await carregarAdmin(); render();
 }
 async function excluirCompraFicha(id){
   if (!confirm("Excluir este registro de compra?")) return;
   const { error } = await sb.from("pre_compras").delete().eq("id", id);
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "excluir a compra da ficha"); return; }
   await carregarAdmin(); render();
 }
 function abrirFicha(id){
@@ -2728,7 +2748,7 @@ async function vincularFichaConta(fichaId){
   const nomeConta = sel.options[sel.selectedIndex].text;
   if (!confirm(`Vincular esta ficha à conta de ${nomeConta}?\n\nOs cones do histórico viram carimbos de fidelidade.`)) return;
   const { error } = await sb.rpc("vincular_ficha", { p_ficha: fichaId, p_cliente: clienteId });
-  if (error){ alert(erroAmigavel(error)); return; }
+  if (error){ avisarErro(error, "vincular a ficha à conta"); return; }
   await carregarAdmin(); render();
 }
 
