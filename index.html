@@ -387,7 +387,8 @@ const S = {
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false,
-           form: {}, pedidosExpandidos: {}, clienteEditando: null, setoresExpandidos: false },
+           form: {}, pedidosExpandidos: {}, clienteEditando: null, setoresExpandidos: false,
+           abaAvaliacao: 'pendentes' },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
   qtdCard: {},   // quantidade escolhida em cada card do catálogo
@@ -809,7 +810,7 @@ async function abrirAvaliacoes(pid){
   const p = byId(pid); if (!p) return;
 
   // Descobre se esta pessoa comprou e já recebeu o produto.
-  S.avaliar = { produtoId: pid, nota: 0, podeAvaliar: false, minha: null, enviando: false };
+  S.avaliar = { produtoId: pid, nota: 0, podeAvaliar: false, minha: null, enviando: false, enviado: false };
   if (S.perfil){
     const [pode, minha] = await Promise.all([
       sb.rpc("comprou_e_recebeu", { p_produto_id: pid }),
@@ -846,8 +847,9 @@ async function salvarAvaliacao(){
   if (error){ avisarErro(error, "enviar a avaliação"); desenharModalAvaliacoes(a.produtoId); return; }
 
   a.minha = { nota: a.nota, comentario, aprovada: false };
+  a.enviado = true;                        // troca o formulário pela confirmação
+  desenharModalAvaliacoes(a.produtoId);   // confirma na hora, sem depender da recarga
   await carregarCatalogo();
-  desenharModalAvaliacoes(a.produtoId);
   render();
 }
 
@@ -856,7 +858,15 @@ function desenharModalAvaliacoes(pid){
   const avs = AVALIACOES.filter(a=>a.pid===pid);
   const a = S.avaliar;
 
-  const formulario = !S.perfil
+  // Depois de enviar, some com o formulário: só a confirmação.
+  const formulario = a.enviado
+    ? `<div class="ok" style="margin-top:.9rem;text-align:center;padding:1rem">
+         <p style="font-size:1.6rem" aria-hidden>✅</p>
+         <p style="font-weight:700;margin-top:.2rem">Avaliação enviada!</p>
+         <p style="font-weight:400;font-size:.8rem;margin-top:.25rem">
+           Ela vai passar por aprovação e logo aparece na loja. Obrigado!</p>
+       </div>`
+    : !S.perfil
     ? `<p class="muted" style="font-size:.8rem;margin-top:.9rem">
          <button style="font-weight:700;text-decoration:underline" onclick="fecharModal();nav('login')">Entre</button>
          para avaliar os sabores que você já recebeu.</p>`
@@ -889,7 +899,10 @@ function desenharModalAvaliacoes(pid){
         <div style="display:flex;justify-content:space-between;align-items:start;gap:.75rem">
           <div>
             <h2 class="display" style="font-size:1.25rem;font-weight:900">${esc(p.nome)}</h2>
-            <p style="margin-top:.25rem">${stars(p.nota, p.qtd)}</p>
+            <p class="muted" style="margin-top:.25rem;font-size:.85rem">
+              ${p.qtd > 0 ? `<strong style="color:var(--cacau)">${p.nota.toFixed(1).replace(".",",")}</strong>
+                de 5 · ${p.qtd} ${p.qtd === 1 ? "avaliação" : "avaliações"}`
+              : "Ainda sem avaliações"}</p>
           </div>
           <button class="back-btn" style="box-shadow:none" aria-label="Fechar" onclick="fecharModal()">✕</button>
         </div>
@@ -1984,12 +1997,14 @@ async function salvarPerfil(){
   const nome  = document.getElementById("c-nome").value.trim();
   const tel   = document.getElementById("c-tel").value.trim();
   const email = document.getElementById("c-mail").value.trim();
+  const campoSetor = document.getElementById("c-setor");
+  const setor = campoSetor ? (setorOficial(campoSetor.value) || campoSetor.value.trim()) : S.perfil.setor;
   if (!nome){ alert("Informe seu nome."); return; }
   const { error } = await sb.from("profiles")
-    .update({ nome, telefone: mascaraTelefone(tel), email })
+    .update({ nome, telefone: mascaraTelefone(tel), email, setor: setor || null })
     .eq("id", S.perfil.id);
   if (error){ avisarErro(error, "salvar o perfil"); return; }
-  Object.assign(S.perfil, { nome, tel: mascaraTelefone(tel), email });
+  Object.assign(S.perfil, { nome, tel: mascaraTelefone(tel), email, setor });
   const aviso = document.getElementById("salvo-ok");
   if (aviso) aviso.style.display = "inline";
   render();
@@ -2035,6 +2050,11 @@ function vConta(){
             value="${esc(S.perfil.tel)}" oninput="aoDigitarTelefone(this)"></div>
         <div><label class="label" for="c-mail">E-mail</label>
           <input id="c-mail" class="field" value="${esc(S.perfil.email||"")}"></div>
+        <div><label class="label" for="c-setor">Setor
+          ${dica("Onde entregamos seus cones. É atualizado sozinho a cada pedido que você faz para si.")}</label>
+          <input id="c-setor" class="field" autocomplete="off" placeholder="Ex: TI, Comercial,..."
+            value="${esc(S.perfil.setor||"")}" oninput="desenharSetores('c-setor-tags','c-setor')">
+          <div id="c-setor-tags" class="setor-caixa"></div></div>
         <div style="display:flex;gap:.75rem;align-items:center">
           <button class="btn btn-primary" onclick="salvarPerfil()">Salvar alterações</button>
           <span id="salvo-ok" role="status" style="display:none;font-size:.875rem;font-weight:600;color:var(--pistache)">Salvo ✓</span>
@@ -2597,7 +2617,8 @@ async function iniciar(){
 /* ============================================================
    PAINEL — PRODUTOS, AVALIAÇÕES E SUGESTÕES
    ============================================================ */
-const pendentesAvaliacao = () => S.admin.avaliacoes.filter(a => !a.aprovada).length;
+const pendentesAvaliacao = () =>
+  S.admin.avaliacoes.filter(a => !a.aprovada && !a.arquivada && !a.excluida_em).length;
 const pendentesSugestao  = () => S.admin.sugestoes.filter(g => g.status === "Nova").length;
 
 async function abrirAdmin(aba){
@@ -2623,6 +2644,7 @@ async function carregarAdmin(){
   if (!fic.error)  S.admin.fichas     = fic.data || [];
   if (!comp.error) S.admin.compras    = comp.data || [];
   S.admin.carregado = true;
+  if (S.admin.avaliacoes.some(a => a.excluida_em)) limparLixeira(true);   // some com o que passou de 48h
 }
 
 /* ---------- Estoque e cadastro de produtos ---------- */
@@ -2792,74 +2814,124 @@ function vAdminProdutos(){
 }
 
 /* ---------- Moderação de avaliações ---------- */
-async function moderarAvaliacao(id, aprovada){
-  const { error } = await sb.from("reviews").update({ aprovada }).eq("id", id);
-  if (error){ avisarErro(error, "moderar a avaliação"); return; }
-  const a = S.admin.avaliacoes.find(x => x.id === id);
-  if (a) a.aprovada = aprovada;
-  await carregarCatalogo();
+async function mudarEstadoAvaliacao(id, mudanca, rotulo){
+  const { error } = await sb.from("reviews").update(mudanca).eq("id", id);
+  if (error){ avisarErro(error, rotulo); return; }
+  await Promise.all([carregarAdmin(), carregarCatalogo()]);
   render();
 }
-async function excluirAvaliacao(id){
-  if (!confirm("Excluir esta avaliação definitivamente?")) return;
+/* Declaradas como function para ficarem acessíveis aos onclick do HTML. */
+function aprovarAvaliacao(id){   return mudarEstadoAvaliacao(id, { aprovada:true,  arquivada:false, excluida_em:null }, "aprovar a avaliação"); }
+function despublicar(id){        return mudarEstadoAvaliacao(id, { aprovada:false, arquivada:false, excluida_em:null }, "despublicar a avaliação"); }
+function guardarAvaliacao(id){   return mudarEstadoAvaliacao(id, { arquivada:true, aprovada:false, excluida_em:null }, "guardar a avaliação"); }
+function paraLixeira(id){        return mudarEstadoAvaliacao(id, { excluida_em: new Date().toISOString() }, "mover para a lixeira"); }
+function restaurarAvaliacao(id){ return mudarEstadoAvaliacao(id, { excluida_em:null, arquivada:false, aprovada:false }, "restaurar a avaliação"); }
+
+async function apagarDeVez(id){
+  if (!confirm("Apagar esta avaliação para sempre? Não dá para recuperar.")) return;
   const { error } = await sb.from("reviews").delete().eq("id", id);
-  if (error){ avisarErro(error, "excluir a avaliação"); return; }
-  S.admin.avaliacoes = S.admin.avaliacoes.filter(x => x.id !== id);
-  await carregarCatalogo();
+  if (error){ avisarErro(error, "apagar a avaliação"); return; }
+  await Promise.all([carregarAdmin(), carregarCatalogo()]);
   render();
+}
+
+/* Some com o que passou de 48 horas na lixeira. */
+async function limparLixeira(silencioso = false){
+  const { data, error } = await sb.rpc("limpar_lixeira_avaliacoes");
+  if (error){ if (!silencioso) avisarErro(error, "limpar a lixeira"); return; }
+  if (Number(data) > 0){ await carregarAdmin(); render(); }
+  if (!silencioso) alert(Number(data) > 0
+    ? `${data} avaliação(ões) apagada(s) definitivamente.`
+    : "Nada para apagar: tudo na lixeira ainda está dentro das 48 horas.");
+}
+
+function horasNaLixeira(iso){
+  const h = (Date.now() - new Date(iso).getTime()) / 3600000;
+  const restam = Math.max(0, 48 - h);
+  return restam >= 1 ? `${Math.floor(restam)}h restantes` : "some em instantes";
 }
 
 function vAdminAvaliacoes(){
   if (!S.admin.carregado) return `<p class="muted">Carregando avaliações...</p>`;
-  const pend = S.admin.avaliacoes.filter(a => !a.aprovada);
-  const pub  = S.admin.avaliacoes.filter(a =>  a.aprovada);
+  const todas = S.admin.avaliacoes;
+  const naLixeira = todas.filter(a => a.excluida_em);
+  const vivas     = todas.filter(a => !a.excluida_em);
+  const pend      = vivas.filter(a => !a.aprovada && !a.arquivada);
+  const pub       = vivas.filter(a =>  a.aprovada && !a.arquivada);
+  const guardadas = vivas.filter(a =>  a.arquivada);
 
-  const cartao = (a, aguardando) => `<div class="card" style="padding:1rem">
+  const abas = [
+    ["pendentes", `Aguardando aprovação${pend.length ? ` (${pend.length})` : ""}`],
+    ["publicadas", `Publicadas${pub.length ? ` (${pub.length})` : ""}`],
+    ["guardadas", `Guardadas${guardadas.length ? ` (${guardadas.length})` : ""}`],
+    ["lixeira", `🗑 Lixeira${naLixeira.length ? ` (${naLixeira.length})` : ""}`],
+  ];
+  const atual = S.admin.abaAvaliacao || "pendentes";
+  const lista = { pendentes: pend, publicadas: pub, guardadas, lixeira: naLixeira }[atual];
+
+  const cartao = a => `<div class="card" style="padding:1rem">
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:center">
       <p>${stars(a.nota)} <span class="muted" style="font-size:.8rem">· ${esc(a.products?.nome || "")}</span></p>
-      <span class="muted" style="font-size:.72rem">${new Date(a.criado_em).toLocaleDateString("pt-BR")}</span>
+      <span class="muted" style="font-size:.72rem">
+        ${new Date(a.criado_em).toLocaleDateString("pt-BR")}
+        ${a.excluida_em ? ` · ${horasNaLixeira(a.excluida_em)}` : ""}</span>
     </div>
     ${a.comentario ? `<p style="margin-top:.4rem;font-size:.875rem;color:rgb(62 39 35/.8)">“${esc(a.comentario)}”</p>`
                    : `<p class="muted" style="margin-top:.4rem;font-size:.8rem">(nota sem comentário)</p>`}
-    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:.75rem;
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem;
                 border-top:1px solid rgb(62 39 35/.08);padding-top:.6rem">
       <span class="muted" style="font-size:.75rem;font-weight:600">${esc(a.profiles?.nome || "Cliente")}</span>
-      <span style="margin-left:auto;display:flex;gap:.4rem">
-        ${aguardando
-          ? `<button class="btn" style="background:var(--pistache);color:#fff;min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
-               onclick="moderarAvaliacao('${a.id}',true)">Aprovar</button>`
-          : `<button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
-               onclick="moderarAvaliacao('${a.id}',false)">Despublicar</button>`}
-        <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
-          onclick="excluirAvaliacao('${a.id}')">Excluir</button>
+      <span style="margin-left:auto;display:flex;gap:.35rem;flex-wrap:wrap">
+        ${atual === "lixeira" ? `
+          <button class="btn" style="background:var(--pistache);color:#fff;min-height:2.1rem;
+            padding:.25rem .8rem;font-size:.75rem" onclick="restaurarAvaliacao('${a.id}')">Restaurar</button>
+          <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
+            padding:.25rem .8rem;font-size:.75rem" onclick="apagarDeVez('${a.id}')">Apagar agora</button>
+        ` : `
+          ${a.aprovada
+            ? `<button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+                 onclick="despublicar('${a.id}')">Despublicar</button>`
+            : `<button class="btn" style="background:var(--pistache);color:#fff;min-height:2.1rem;
+                 padding:.25rem .8rem;font-size:.75rem" onclick="aprovarAvaliacao('${a.id}')">Aprovar</button>`}
+          ${a.arquivada
+            ? `<button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+                 onclick="despublicar('${a.id}')">Voltar para a fila</button>`
+            : `<button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+                 onclick="guardarAvaliacao('${a.id}')">Guardar</button>`}
+          <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
+            padding:.25rem .8rem;font-size:.75rem" onclick="paraLixeira('${a.id}')">Excluir</button>
+        `}
       </span>
     </div>
   </div>`;
 
-  return `<div style="display:flex;flex-direction:column;gap:1.25rem">
+  const vazio = {
+    pendentes: "Nenhuma avaliação na fila. 👌",
+    publicadas: "Ainda não há avaliações publicadas.",
+    guardadas: "Nada guardado. Use “Guardar” para tirar da loja sem apagar.",
+    lixeira: "Lixeira vazia.",
+  }[atual];
+
+  return `<div style="display:flex;flex-direction:column;gap:1rem">
     <div>
       <h1 class="display" style="font-size:1.5rem;font-weight:900">Avaliações</h1>
       <p class="muted" style="font-size:.875rem">
-        Só quem comprou e recebeu o produto consegue avaliar. Nada aparece na loja antes de você aprovar.</p>
+        Só quem comprou e recebeu consegue avaliar. Nada aparece na loja antes de você aprovar.</p>
     </div>
 
-    <section aria-labelledby="a-pend">
-      <h2 id="a-pend" class="display" style="font-size:1.1rem;font-weight:700">
-        Aguardando aprovação ${pend.length?`(${pend.length})`:""}</h2>
-      ${pend.length===0
-        ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Nenhuma avaliação na fila. 👌</p>`
-        : `<div style="display:flex;flex-direction:column;gap:.75rem;margin-top:.75rem">
-            ${pend.map(a=>cartao(a,true)).join("")}</div>`}
-    </section>
+    <div class="chips" role="tablist" aria-label="Filtrar avaliações">
+      ${abas.map(([id, rot]) => `<button class="chip" role="tab" aria-selected="${atual === id}"
+        onclick="S.admin.abaAvaliacao='${id}';render()">${rot}</button>`).join("")}
+    </div>
 
-    <section aria-labelledby="a-pub">
-      <h2 id="a-pub" class="display" style="font-size:1.1rem;font-weight:700">
-        Publicadas ${pub.length?`(${pub.length})`:""}</h2>
-      ${pub.length===0
-        ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Ainda não há avaliações publicadas.</p>`
-        : `<div style="display:flex;flex-direction:column;gap:.75rem;margin-top:.75rem">
-            ${pub.map(a=>cartao(a,false)).join("")}</div>`}
-    </section>
+    ${atual === "lixeira" ? `<p class="muted" style="font-size:.78rem">
+      As avaliações ficam aqui por 48 horas e depois somem sozinhas. Dá para restaurar antes disso —
+      elas voltam para a fila de aprovação.
+      <button style="font-weight:700;text-decoration:underline" onclick="limparLixeira()">Esvaziar agora</button></p>` : ""}
+
+    ${lista.length === 0
+      ? `<p class="muted" style="font-size:.875rem">${vazio}</p>`
+      : `<div style="display:flex;flex-direction:column;gap:.75rem">${lista.map(cartao).join("")}</div>`}
   </div>`;
 }
 
@@ -3234,6 +3306,22 @@ function verCliente(id){
 }
 
 /* Junta tudo que foi digitado como setor e separa o que não está na lista. */
+async function vincularSetor(indice){
+  const fora = setoresForaDaLista();
+  const alvo = fora[indice];
+  if (!alvo) return;
+  const sel = document.getElementById("vs-" + indice);
+  const destino = sel && sel.value;
+  if (!destino){ alert("Escolha o setor de destino."); return; }
+  if (!confirm(`Trocar "${alvo.texto}" por "${destino}" em todos os cadastros?`)) return;
+
+  const { data, error } = await sb.rpc("corrigir_setor", { p_texto: alvo.texto, p_setor: destino });
+  if (error){ avisarErro(error, "vincular o setor"); return; }
+  await Promise.all([carregarAdmin(), carregarPedidos()]);
+  render();
+  alert(`Pronto: ${data.perfis} perfil(is) e ${data.fichas} ficha(s) atualizados para "${destino}".`);
+}
+
 function setoresForaDaLista(){
   const mapa = new Map();
   const somar = (texto, quem, origem) => {
@@ -3384,6 +3472,15 @@ function vAdminClientes(){
               ).join(" · ")}
             </span>
             ${f.ocorrencias > 1 ? `<span class="muted" style="font-size:.72rem">${f.ocorrencias}×</span>` : ""}
+            <span style="display:flex;gap:.3rem;align-items:center">
+              <select id="vs-${fora.indexOf(f)}" class="field"
+                style="padding:.25rem .5rem;font-size:.74rem;width:auto">
+                <option value="">Vincular a...</option>
+                ${SETORES.map(x => `<option value="${esc(x.nome)}">${esc(x.nome)}</option>`).join("")}
+              </select>
+              <button class="btn btn-primary" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.72rem"
+                onclick="vincularSetor(${fora.indexOf(f)})">Vincular</button>
+            </span>
           </li>`).join("")}
         </ul>
         ${fora.length > 6 ? `<button class="btn btn-ghost"
@@ -3525,6 +3622,7 @@ function render(){
   if (document.getElementById("local-tags")) desenharSetores("local-tags", "local");
   if (document.getElementById("pr-setor-tags")) desenharSetores("pr-setor-tags", "pr-setor");
   if (document.getElementById("f-setor-tags")) desenharSetores("f-setor-tags", "f-setor");
+  if (document.getElementById("c-setor-tags")) desenharSetores("c-setor-tags", "c-setor");
   // o carrossel abre no cartão atual, com os completos à esquerda
   const carrossel = document.getElementById("fid-carrossel");
   if (carrossel) carrossel.scrollLeft = carrossel.scrollWidth;
