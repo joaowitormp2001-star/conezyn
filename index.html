@@ -79,6 +79,13 @@
   .pfoto-img{position:absolute;inset:0;display:grid;place-items:center;font-size:3.75rem;
     transition:transform .45s cubic-bezier(.2,.6,.3,1)}
   .pcard:hover .pfoto-img{transform:scale(1.08)}
+  /* esgotado: foto em preto e branco, volta a cor ao passar o mouse */
+  .pcard.esgotado .pfoto-img,
+  .sabor-card.esgotado .sabor-foto-img{filter:grayscale(1)}
+  .pcard.esgotado:hover .pfoto-img,
+  .sabor-card.esgotado:hover .sabor-foto-img{filter:grayscale(0)}
+  .btn-esgotado{background:transparent;border:1px solid rgb(62 39 35/.2);
+    color:rgb(62 39 35/.45);cursor:not-allowed;font-weight:600}
   @media(prefers-reduced-motion:reduce){.pcard:hover .pfoto-img{transform:none}}
   .pfoto .tags{position:absolute;top:.5rem;left:.5rem;display:flex;flex-wrap:wrap;gap:.25rem}
   .pbody{display:flex;flex-direction:column;gap:.5rem;padding:1rem;flex:1}
@@ -242,6 +249,13 @@
     background:transparent;transition:background .12s}
   .sug-item:hover,.sug-item:focus-visible{background:var(--chantilly-esc)}
   .sug-lista li + li .sug-item{border-top:1px solid rgb(62 39 35/.1)}
+  .fid-carrossel{display:flex;gap:1rem;overflow-x:auto;scroll-snap-type:x mandatory;
+    padding:.25rem 0 1.1rem;margin-left:calc(50% - 50vw);padding-left:calc(50vw - 50%);
+    scrollbar-width:thin}
+  .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86%);scroll-snap-align:end}
+  .fid-slide-rotulo{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.55);
+    margin-bottom:.35rem;display:block}
+  .fid-slide.completo .fid{opacity:.82}
   .setor-caixa{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem}
   .setor-tag{border:1px solid rgb(62 39 35/.2);background:#fff;border-radius:9999px;
     padding:.28rem .7rem;font-size:.75rem;font-weight:600;transition:.12s;line-height:1.2}
@@ -481,7 +495,7 @@ async function carregarPerfil(){
 
 function mapearPedido(row){
   return {
-    id: row.id, numero: row.numero,
+    id: row.id, numero: row.numero, clienteId: row.cliente_id,
     cliente: { nome: row.profiles?.nome || (S.perfil?.nome ?? "Cliente"),
                tel:  row.profiles?.telefone || (S.perfil?.tel ?? "") },
     itens: (row.order_items||[]).map(i => ({
@@ -1195,7 +1209,7 @@ function vFooter(){
 function vCardProduto(p){
   const esg = p.estoque<=0;
   const q = qtdCard(p.id);
-  return `<article class="card pcard">
+  return `<article class="card pcard ${esg ? "esgotado" : ""}">
     <div class="pfoto" role="img" aria-label="Foto do cone ${esc(p.nome)}"
          onclick="nav('produto','${p.id}')">
       <div class="pfoto-img" style="${fundoFoto(p)}">${conteudoFoto(p)}</div>
@@ -1219,15 +1233,18 @@ function vCardProduto(p){
           <button aria-label="Mais um ${esc(p.nome)}" onclick="mudarQtdCard('${p.id}',1)"
             ${q>=p.estoque?"disabled":""}>+</button>
         </div>`}
-        <button class="btn btn-primary" style="flex:1" ${esg?"disabled":""}
+        <button class="btn ${esg ? "btn-esgotado" : "btn-primary"}" style="flex:1" ${esg?"disabled":""}
           onclick="addCart('${p.id}', ${q})">${esg?"Esgotado":"Adicionar"}</button>
       </div>
     </div>
   </article>`;
 }
 function vHome(){
-  const vis = PRODUTOS.filter(p=>S.filtro==="todos"||p.cat===S.filtro);
   const disponiveis = PRODUTOS.filter(p=>p.estoque>0);
+  // uma vitrine só: disponíveis primeiro, esgotados no fim
+  const vitrine = PRODUTOS
+    .filter(p => S.filtro==="todos" || p.cat===S.filtro)
+    .slice().sort((a,b) => (b.estoque>0) - (a.estoque>0));
   const conesRestantes = PRODUTOS.reduce((s,p)=>s+p.estoque,0);
   const tagEstoque = conesRestantes===0 ? "Estoque esgotado por hoje"
     : conesRestantes===1 ? "Resta 1 cone hoje" : `Restam ${conesRestantes} cones hoje`;
@@ -1242,22 +1259,23 @@ function vHome(){
       <a href="#catalogo" class="btn" style="margin-top:1.5rem;background:var(--casquinha);color:var(--cacau);font-weight:700">Ver os sabores</a>
     </section>
 
-    ${disponiveis.length>0 ? `<section aria-labelledby="t-disp">
-      <h2 id="t-disp" class="display" style="font-size:1.5rem;font-weight:900">
-        ${disponiveis.length===1 ? "Sabor disponível hoje" : "Sabores disponíveis hoje"}</h2>
-      <div class="grid c2 c3" style="margin-top:1rem">${disponiveis.map(vCardProduto).join("")}</div>
-    </section>` : ""}
-
-    <section id="catalogo" aria-labelledby="t-cat">
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:.75rem">
-        <h2 id="t-cat" class="display" style="font-size:1.5rem;font-weight:900">Todos os sabores</h2>
-        <div class="chips" role="tablist">
+    <section id="catalogo" aria-labelledby="t-disp" class="scroll-mt">
+      <div style="display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:.75rem">
+        <h2 id="t-disp" class="display" style="font-size:1.5rem;font-weight:900">
+          ${disponiveis.length === 0 ? "Nossos sabores"
+            : disponiveis.length === 1 ? "Sabor disponível hoje"
+            : "Sabores disponíveis hoje"}</h2>
+        <div class="chips" role="tablist" aria-label="Filtrar por categoria">
           ${[["todos","Todos"],["classico","Clássicos"],["premium","Premium"]].map(([id,l])=>
             `<button class="chip" role="tab" aria-selected="${S.filtro===id}"
               onclick="S.filtro='${id}';render()">${l}</button>`).join("")}
         </div>
       </div>
-      <div class="grid c2 c3" style="margin-top:1rem">${vis.map(vCardProduto).join("")}</div>
+      ${disponiveis.length === 0 ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        Tudo esgotado por hoje — volte amanhã que tem mais.</p>` : ""}
+      <div class="grid c2 c3" style="margin-top:1rem">
+        ${vitrine.map(vCardProduto).join("")}
+      </div>
     </section>
 
     ${AVALIACOES.length>=MIN_DEPOIMENTOS ? `<section aria-labelledby="t-av">
@@ -1370,7 +1388,7 @@ function vProduto(){
       <div class="bleed-row" style="margin-top:.5rem">
         ${PRODUTOS.filter(x=>x.id!==p.id).map(x=>{
           const xEsg = x.estoque<=0;
-          return `<article class="card sabor-card">
+          return `<article class="card sabor-card ${xEsg ? "esgotado" : ""}">
           <div class="sabor-foto" role="img" aria-label="Foto do cone ${esc(x.nome)}"
             onclick="nav('produto','${x.id}')">
             <div class="sabor-foto-img" style="${fundoFoto(x)}">${conteudoFoto(x)}</div>
@@ -1388,7 +1406,8 @@ function vProduto(){
             <div style="display:flex;gap:.4rem;margin-top:auto;padding-top:.3rem">
               <button class="btn btn-ghost" style="flex:1;min-height:2.4rem;padding:.35rem .5rem;font-size:.75rem"
                 onclick="nav('produto','${x.id}')">Ver mais</button>
-              <button class="btn btn-primary" style="flex:1;min-height:2.4rem;padding:.35rem .5rem;font-size:.75rem"
+              <button class="btn ${xEsg ? "btn-esgotado" : "btn-primary"}"
+                style="flex:1;min-height:2.4rem;padding:.35rem .5rem;font-size:.75rem"
                 ${xEsg?"disabled":""} onclick="addCart('${x.id}')">${xEsg?"Esgotado":"Adicionar"}</button>
             </div>
           </div>
@@ -2004,6 +2023,34 @@ function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
   </svg>`;
 }
 
+/* Cartões completos ficam à esquerda do atual, como um carrossel:
+   cada cartão fechado dá acesso ao próximo. */
+function carrosselCartoes(carimbos, nome){
+  const completos = Math.floor(carimbos / META_CARIMBOS);
+  const total = completos + 1;                 // os fechados + o que está em uso
+  const slides = [];
+
+  for (let i = 0; i < total; i++){
+    const ehAtual = i === completos;
+    const valor = ehAtual ? carimbos : (i + 1) * META_CARIMBOS;
+    slides.push(`<div class="fid-slide ${ehAtual ? "" : "completo"}">
+      <span class="fid-slide-rotulo">
+        ${ehAtual
+          ? (completos > 0 ? `Cartão ${i + 1} · em andamento` : "Seu cartão")
+          : `Cartão ${i + 1} · completo ✓`}
+      </span>
+      ${cartaoFidelidade(valor, nome)}
+    </div>`);
+  }
+
+  return `<div class="fid-carrossel" id="fid-carrossel"
+      aria-label="Cartões fidelidade${completos ? `, ${completos} completo(s)` : ""}">
+    ${slides.join("")}
+  </div>
+  ${completos > 0 ? `<p class="muted" style="font-size:.78rem;text-align:center;margin-top:-.4rem">
+    ⬅ Arraste para ver os ${completos} cartão(ões) que você já completou.</p>` : ""}`;
+}
+
 /* Réplica em código do cartão físico da conezyn. */
 function cartaoFidelidade(carimbos, nome){
   const noCartao  = carimbos % META_CARIMBOS;
@@ -2041,7 +2088,7 @@ function vFidelidade(){
   const faltam = META_CARIMBOS - noCartao;
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:48rem;display:flex;flex-direction:column;gap:1.25rem">
     <h1 class="display" style="font-size:1.9rem;font-weight:900">Minha fidelidade</h1>
-    ${cartaoFidelidade(d.total, S.perfil.nome)}
+    ${carrosselCartoes(d.total, S.perfil.nome)}
 
     <section class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Histórico de carimbos</h2>
@@ -2966,13 +3013,66 @@ async function excluirCliente(id){
   }
   await carregarAdmin(); render();
 }
+/* Status de um pedido antigo, deduzido das datas registradas.
+   Sem data de pagamento, o pedido nunca passa de "Entregue". */
+function statusAntigo(c){
+  if (c.data_pagamento) return "Pagamento concluído";
+  if (c.data_entrega)   return "Entregue";
+  return "Pedido feito";
+}
+
+/* Junta o que veio da ficha com o que foi pedido na plataforma. */
+function historicoCompleto(clienteId){
+  const ficha = S.admin.fichas.find(f => f.vinculado_a === clienteId);
+  const antigos = ficha
+    ? S.admin.compras.filter(c => c.pre_cliente_id === ficha.id).map(c => ({
+        origem: "ficha",
+        data: c.data_entrega || c.data_pagamento || c.criado_em,
+        cones: c.quantidade,
+        itens: Array.isArray(c.itens) && c.itens.length
+          ? c.itens.map(i => `${i.quantidade}× ${i.sabor}`).join(", ")
+          : (c.sabores || `${c.quantidade} cone(s)`),
+        status: statusAntigo(c),
+        entrega: c.data_entrega, pagamento: c.data_pagamento,
+        numero: null, total: null,
+      }))
+    : [];
+
+  const meus = S.pedidos.filter(p => p.clienteId === clienteId).map(p => ({
+    origem: "plataforma",
+    data: p.criadoEm,
+    cones: p.itens.reduce((n, i) => n + i.q, 0),
+    itens: p.itens.map(i => `${i.q}× ${i.nome}`).join(", "),
+    status: p.status,
+    entrega: null, pagamento: null,
+    numero: p.numero, total: p.total,
+  }));
+
+  return [...antigos, ...meus].sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+}
+
+async function ajustarCarimbos(id){
+  const campo = document.getElementById("cr-" + id);
+  const valor = parseInt(campo.value, 10);
+  if (!Number.isFinite(valor) || valor < 0){ alert("Informe um número igual ou maior que zero."); return; }
+  const { error } = await sb.rpc("ajustar_carimbos", { p_cliente: id, p_total: valor });
+  if (error){ avisarErro(error, "ajustar os carimbos"); return; }
+  await carregarAdmin();
+  render();
+  verCliente(id);
+}
+
 function verCliente(id){
   const c = S.admin.clientes.find(x => x.id === id);
   if (!c) return;
   const ficha = S.admin.fichas.find(f => f.vinculado_a === id);
+  const hist = historicoCompleto(id);
+  const dataBr = d => d ? new Date(String(d).length <= 10 ? d + "T12:00" : d)
+                            .toLocaleDateString("pt-BR") : "—";
+
   document.getElementById("modal-slot").innerHTML = `
     <div class="modal-overlay" onclick="if(event.target===this)fecharModal()">
-      <div class="modal card" role="dialog" aria-modal="true">
+      <div class="modal card" role="dialog" aria-modal="true" style="max-width:30rem">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:.75rem">
           <div style="display:flex;gap:.75rem;align-items:center">
             ${avatarHtml(c.nome, null)}
@@ -2983,44 +3083,56 @@ function verCliente(id){
           </div>
           <button class="back-btn" style="box-shadow:none" aria-label="Fechar" onclick="fecharModal()">✕</button>
         </div>
+
         <dl class="linhas" style="margin-top:1rem">
           <div><dt class="muted">WhatsApp</dt><dd>${esc(c.telefone || "—")}</dd></div>
           <div><dt class="muted">E-mail</dt><dd>${esc(c.email || "—")}</dd></div>
-          <div><dt class="muted">Cadastro</dt>
-            <dd>${c.criado_em ? new Date(c.criado_em).toLocaleDateString("pt-BR") : "—"}</dd></div>
-          <div><dt class="muted">Pedidos</dt><dd><strong>${c.total_pedidos}</strong></dd></div>
+          <div><dt class="muted">Cadastro</dt><dd>${dataBr(c.criado_em)}</dd></div>
           <div><dt class="muted">Total gasto</dt><dd>${reais(c.total_gasto_centavos)}</dd></div>
-          <div><dt class="muted">Carimbos</dt>
-            <dd style="color:var(--pistache);font-weight:700">${c.carimbos}</dd></div>
           <div><dt class="muted">Origem</dt>
             <dd>${c.veio_de_pre_cadastro ? "Ficha " + esc(ficha?.nome || "") : "Cadastro próprio"}</dd></div>
         </dl>
-        ${ficha ? `<p class="muted" style="font-size:.75rem;margin-top:.75rem">
-          Histórico anterior desta ficha: ${ficha.total_compras || 0} pedido(s),
-          ${ficha.total_cones || 0} cone(s).</p>` : ""}
+
+        <div style="background:var(--chantilly-esc);border-radius:.7rem;padding:.7rem;margin-top:.9rem">
+          <p style="font-weight:700;font-size:.8rem">Carimbos de fidelidade</p>
+          <p class="muted" style="font-size:.72rem;margin-top:.15rem">
+            Ajustar aqui define o saldo exato. O histórico de movimentos é preservado.</p>
+          <div style="display:flex;gap:.4rem;align-items:center;margin-top:.5rem">
+            <input id="cr-${id}" class="field" type="number" min="0" value="${c.carimbos}"
+              style="width:6rem;padding:.4rem .6rem">
+            <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
+              onclick="ajustarCarimbos('${id}')">Definir</button>
+            <span class="muted" style="font-size:.72rem">
+              ${Math.floor(c.carimbos / META_CARIMBOS)} cartão(ões) completo(s)</span>
+          </div>
+        </div>
+
+        <p style="font-weight:700;font-size:.85rem;margin-top:1rem">
+          Histórico de pedidos <span class="muted" style="font-weight:400">(${hist.length})</span></p>
+        ${hist.length === 0
+          ? `<p class="muted" style="font-size:.78rem;margin-top:.3rem">Nenhum pedido registrado.</p>`
+          : `<ul style="list-style:none;margin-top:.5rem;display:flex;flex-direction:column;gap:.4rem">
+              ${hist.map(h => `<li style="background:var(--chantilly);border-radius:.6rem;padding:.55rem .7rem">
+                <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:center">
+                  <span style="font-size:.8rem;font-weight:700">
+                    ${h.numero ? "Pedido #" + h.numero : "Pedido anterior"}
+                    ${h.origem === "ficha"
+                      ? `<span class="badge b-classico" style="margin-left:.3rem;font-size:.62rem">da ficha</span>`
+                      : ""}
+                  </span>
+                  <span class="status st-${String(h.status).replace(/ /g,"_")}"
+                    style="font-size:.66rem">${h.status}</span>
+                </div>
+                <p style="font-size:.76rem;margin-top:.2rem">${h.cones} cone(s) · ${esc(h.itens)}</p>
+                <p class="muted" style="font-size:.7rem;margin-top:.15rem">
+                  ${h.origem === "ficha"
+                    ? `entrega ${dataBr(h.entrega)} · pagamento ${h.pagamento ? dataBr(h.pagamento) : "pendente"}`
+                    : `${dataBr(h.data)}${h.total != null ? " · " + reais(h.total) : ""}`}
+                </p>
+              </li>`).join("")}
+            </ul>`}
       </div>
     </div>`;
-}
-
-/* Junta tudo que foi digitado como setor e separa o que não está na lista. */
-function setoresForaDaLista(){
-  const mapa = new Map();
-  const somar = (texto, quem) => {
-    const t = String(texto || "").trim();
-    if (!setorForaDaLista(t)) return;
-    const chave = semAcentoMin(t);
-    if (!mapa.has(chave)) mapa.set(chave, { texto: t, ocorrencias: 0, pessoas: new Set() });
-    const reg = mapa.get(chave);
-    reg.ocorrencias++;
-    if (quem) reg.pessoas.add(quem);
-  };
-  S.admin.clientes.forEach(c => somar(c.setor, c.nome));
-  S.admin.fichas.forEach(f => somar(f.setor, f.nome));
-  S.pedidos.forEach(p => {
-    somar(p.local, p.cliente?.nome);
-    if (p.presente) somar(p.destinatarioSetor, p.destinatario);
-  });
-  return [...mapa.values()].sort((a, b) => b.ocorrencias - a.ocorrencias);
 }
 
 function vAdminClientes(){
@@ -3278,6 +3390,9 @@ function render(){
   if (document.getElementById("local-tags")) desenharSetores("local-tags", "local");
   if (document.getElementById("pr-setor-tags")) desenharSetores("pr-setor-tags", "pr-setor");
   if (document.getElementById("f-setor-tags")) desenharSetores("f-setor-tags", "f-setor");
+  // o carrossel abre no cartão atual, com os completos à esquerda
+  const carrossel = document.getElementById("fid-carrossel");
+  if (carrossel) carrossel.scrollLeft = carrossel.scrollWidth;
   const sw = document.getElementById("switch-btn");
   sw.style.display = S.perfil?.admin ? "inline-flex" : "none";
   sw.textContent = S.view==="admin" ? "← Ver loja" : "Painel admin";
