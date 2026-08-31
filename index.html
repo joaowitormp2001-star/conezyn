@@ -824,6 +824,41 @@ document.addEventListener("keydown", e => { if (e.key==="Escape") fecharModal();
    Aparecem por cima de qualquer aba ou aplicativo, desde que
    esta aba continue aberta em algum lugar e o navegador rodando.
    ============================================================ */
+/* A preferência fica guardada neste navegador, então continua valendo
+   nos próximos dias. A permissão em si é do navegador e já é permanente. */
+const NOTIF_PREF = "cones.notif";
+function lerPrefNotif(){
+  try { return JSON.parse(localStorage.getItem(NOTIF_PREF) || "{}"); }
+  catch { return {}; }
+}
+function salvarPrefNotif(){
+  try {
+    localStorage.setItem(NOTIF_PREF, JSON.stringify({ ativo: S.notif.ativo, som: S.notif.som }));
+  } catch { /* navegação privada: segue só nesta sessão */ }
+}
+/* Restaura o estado ao abrir o site. Se a permissão já foi concedida,
+   os avisos voltam ligados sozinhos — a menos que você tenha desligado. */
+function restaurarNotificacoes(){
+  const pref = lerPrefNotif();
+  if (typeof pref.som === "boolean") S.notif.som = pref.som;
+  if (notifPermissao() === "granted"){
+    S.notif.ativo = pref.ativo !== false;
+    if (S.notif.ativo) prepararSomNaPrimeiraInteracao();
+  } else {
+    S.notif.ativo = false;
+  }
+}
+/* O navegador só libera áudio após um clique. Fica à espera do primeiro. */
+function prepararSomNaPrimeiraInteracao(){
+  const uma = () => {
+    destravarSom();
+    window.removeEventListener("click", uma);
+    window.removeEventListener("keydown", uma);
+  };
+  window.addEventListener("click", uma, { once: true });
+  window.addEventListener("keydown", uma, { once: true });
+}
+
 const notifSuportado = () => typeof window!=="undefined" && "Notification" in window;
 
 /* ---- PERSONALIZAÇÃO DA NOTIFICAÇÃO — edite só aqui ----
@@ -851,11 +886,15 @@ async function ativarNotificacoes(){
   }
   const r = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   S.notif.ativo = (r === "granted");
-  notifLog(r === "granted" ? "Notificações ativadas." : "Permissão não concedida (" + r + ").");
+  salvarPrefNotif();
+  notifLog(r === "granted"
+    ? "Notificações ativadas. Vão continuar ligadas nos próximos dias neste navegador."
+    : "Permissão não concedida (" + r + ").");
   render();
 }
 function desativarNotificacoes(){
   S.notif.ativo = false;
+  salvarPrefNotif();
   notifLog("Notificações desativadas neste painel (a permissão do navegador continua concedida).");
   render();
 }
@@ -2072,7 +2111,7 @@ function vAdminNotif(){
       <p class="${cls}" style="margin-top:.75rem">${txt}</p>
       <p class="${S.notif.ativo?"ok":"alerta"}" style="margin-top:.5rem">
         ${S.notif.ativo
-          ? "Avisos de novo pedido estão LIGADOS neste painel."
+          ? "Avisos de novo pedido estão LIGADOS — e continuam ligados ao reabrir o site neste navegador."
           : "Avisos de novo pedido estão DESLIGADOS neste painel."}</p>
 
       <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem">
@@ -2086,7 +2125,7 @@ function vAdminNotif(){
 
       <label style="display:flex;align-items:center;gap:.5rem;margin-top:1rem;font-size:.875rem;font-weight:600;cursor:pointer">
         <input type="checkbox" ${S.notif.som?"checked":""} style="accent-color:var(--cacau)"
-          onchange="S.notif.som=this.checked;destravarSom();render()">
+          onchange="S.notif.som=this.checked;destravarSom();salvarPrefNotif();render()">
         Tocar um som ao receber pedido
       </label>
     </section>
@@ -2412,6 +2451,7 @@ async function iniciar(){
     await carregarCatalogo();
     if (S.perfil) await Promise.all([carregarPedidos(), carregarFidelidade()]);
     if (S.perfil) checarPresentes();
+    restaurarNotificacoes();
   } catch (e){
     console.error(e);
     S.erroBanco = erroAmigavel(e);
