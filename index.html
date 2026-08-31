@@ -3135,6 +3135,27 @@ function verCliente(id){
     </div>`;
 }
 
+/* Junta tudo que foi digitado como setor e separa o que não está na lista. */
+function setoresForaDaLista(){
+  const mapa = new Map();
+  const somar = (texto, quem) => {
+    const t = String(texto || "").trim();
+    if (!setorForaDaLista(t)) return;
+    const chave = semAcentoMin(t);
+    if (!mapa.has(chave)) mapa.set(chave, { texto: t, ocorrencias: 0, pessoas: new Set() });
+    const reg = mapa.get(chave);
+    reg.ocorrencias++;
+    if (quem) reg.pessoas.add(quem);
+  };
+  S.admin.clientes.forEach(c => somar(c.setor, c.nome));
+  S.admin.fichas.forEach(f => somar(f.setor, f.nome));
+  S.pedidos.forEach(p => {
+    somar(p.local, p.cliente?.nome);
+    if (p.presente) somar(p.destinatarioSetor, p.destinatario);
+  });
+  return [...mapa.values()].sort((a, b) => b.ocorrencias - a.ocorrencias);
+}
+
 function vAdminClientes(){
   if (!S.admin.carregado) return `<p class="muted">Carregando clientes...</p>`;
   const cadastrados = S.admin.clientes;
