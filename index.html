@@ -250,9 +250,9 @@
   .sug-item:hover,.sug-item:focus-visible{background:var(--chantilly-esc)}
   .sug-lista li + li .sug-item{border-top:1px solid rgb(62 39 35/.1)}
   .fid-carrossel{display:flex;gap:1rem;overflow-x:auto;scroll-snap-type:x mandatory;
-    padding:.25rem 0 1.1rem;margin-left:calc(50% - 50vw);padding-left:calc(50vw - 50%);
+    padding:.25rem max(0px, calc(50% - min(30rem, 86%) / 2)) 1.1rem;
     scrollbar-width:thin}
-  .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86%);scroll-snap-align:end}
+  .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86%);scroll-snap-align:center}
   .fid-slide-rotulo{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.55);
     margin-bottom:.35rem;display:block}
   .fid-slide.completo .fid{opacity:.82}
@@ -263,6 +263,10 @@
   .setor-tag.ativa{background:var(--cacau);color:var(--chantilly);border-color:var(--cacau)}
   .setor-tag small{font-weight:400;opacity:.65}
   .setor-aviso{font-size:.72rem;margin-top:.4rem;color:#B4590F;font-weight:600}
+  .estrelas-form{display:flex;gap:.2rem;font-size:1.9rem;line-height:1}
+  .estrelas-form button{color:rgb(62 39 35/.22);transition:.12s;padding:0 .05rem}
+  .estrelas-form button.on{color:var(--casquinha)}
+  .estrelas-form button:hover{transform:scale(1.12)}
   .campo-senha{position:relative}
   .campo-senha .field{padding-right:2.8rem}
   .olho{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);
@@ -387,6 +391,7 @@ const S = {
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
   qtdCard: {},   // quantidade escolhida em cada card do catálogo
+  avaliar: { produtoId:null, nota:0, podeAvaliar:false, minha:null, enviando:false },
 };
 const byId = id => PRODUTOS.find(p => p.id === id);
 const reais = c => (c/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -800,9 +805,84 @@ async function removerFoto(){
   await sb.from("profiles").update({ foto_url: null }).eq("id", S.perfil.id);
   S.perfil.foto = null; render();
 }
-function abrirAvaliacoes(pid){
+async function abrirAvaliacoes(pid){
+  const p = byId(pid); if (!p) return;
+
+  // Descobre se esta pessoa comprou e já recebeu o produto.
+  S.avaliar = { produtoId: pid, nota: 0, podeAvaliar: false, minha: null, enviando: false };
+  if (S.perfil){
+    const [pode, minha] = await Promise.all([
+      sb.rpc("comprou_e_recebeu", { p_produto_id: pid }),
+      sb.from("reviews").select("nota, comentario, aprovada")
+        .eq("produto_id", pid).eq("cliente_id", S.perfil.id).maybeSingle(),
+    ]);
+    S.avaliar.podeAvaliar = pode.data === true;
+    if (minha.data){
+      S.avaliar.minha = minha.data;
+      S.avaliar.nota = minha.data.nota;
+    }
+  }
+  desenharModalAvaliacoes(pid);
+}
+
+function definirNota(n){
+  S.avaliar.nota = n;
+  desenharModalAvaliacoes(S.avaliar.produtoId);
+}
+
+async function salvarAvaliacao(){
+  const a = S.avaliar;
+  if (!a.nota){ alert("Escolha de 1 a 5 estrelas."); return; }
+  const campo = document.getElementById("av-comentario");
+  const comentario = campo ? campo.value.trim() : "";
+  a.enviando = true; desenharModalAvaliacoes(a.produtoId);
+
+  const { error } = await sb.from("reviews").upsert({
+    produto_id: a.produtoId, cliente_id: S.perfil.id,
+    nota: a.nota, comentario: comentario || null,
+  }, { onConflict: "produto_id,cliente_id" });
+
+  a.enviando = false;
+  if (error){ avisarErro(error, "enviar a avaliação"); desenharModalAvaliacoes(a.produtoId); return; }
+
+  a.minha = { nota: a.nota, comentario, aprovada: false };
+  await carregarCatalogo();
+  desenharModalAvaliacoes(a.produtoId);
+  render();
+}
+
+function desenharModalAvaliacoes(pid){
   const p = byId(pid); if (!p) return;
   const avs = AVALIACOES.filter(a=>a.pid===pid);
+  const a = S.avaliar;
+
+  const formulario = !S.perfil
+    ? `<p class="muted" style="font-size:.8rem;margin-top:.9rem">
+         <button style="font-weight:700;text-decoration:underline" onclick="fecharModal();nav('login')">Entre</button>
+         para avaliar os sabores que você já recebeu.</p>`
+    : !a.podeAvaliar
+    ? `<p class="muted" style="font-size:.8rem;margin-top:.9rem">
+         Você poderá avaliar este sabor assim que receber um pedido com ele.</p>`
+    : `<div style="background:var(--chantilly);border-radius:.7rem;padding:.8rem;margin-top:.9rem">
+         <p style="font-weight:700;font-size:.85rem">
+           ${a.minha ? "Sua avaliação" : "Avalie este sabor"}</p>
+         ${a.minha
+           ? (a.minha.aprovada
+               ? `<p style="font-size:.72rem;margin-top:.15rem;color:var(--pistache);font-weight:600">
+                    Publicada na loja ✓</p>`
+               : `<p style="font-size:.72rem;margin-top:.15rem;color:#B4590F;font-weight:600">
+                    Enviada — vai aparecer na loja assim que for aprovada.</p>`)
+           : ""}
+         <div class="estrelas-form" style="margin-top:.5rem" role="group" aria-label="Nota de 1 a 5">
+           ${[1,2,3,4,5].map(n => `<button type="button" class="${n <= a.nota ? "on" : ""}"
+             aria-label="${n} estrela${n>1?"s":""}" onclick="definirNota(${n})">★</button>`).join("")}
+         </div>
+         <textarea id="av-comentario" rows="3" class="field" style="margin-top:.5rem;resize:vertical"
+           placeholder="Conte o que achou (opcional)">${esc(a.minha?.comentario || "")}</textarea>
+         <button class="btn btn-primary" style="width:100%;margin-top:.5rem" ${a.enviando ? "disabled" : ""}
+           onclick="salvarAvaliacao()">
+           ${a.enviando ? "Enviando..." : a.minha ? "Atualizar avaliação" : "Enviar avaliação"}</button>
+       </div>`;
   document.getElementById("modal-slot").innerHTML = `
     <div class="modal-overlay" onclick="if(event.target===this)fecharModal()">
       <div class="modal card" role="dialog" aria-modal="true" aria-label="Avaliações de ${esc(p.nome)}">
@@ -813,6 +893,7 @@ function abrirAvaliacoes(pid){
           </div>
           <button class="back-btn" style="box-shadow:none" aria-label="Fechar" onclick="fecharModal()">✕</button>
         </div>
+        ${formulario}
         ${avs.length===0
           ? `<p class="muted" style="margin-top:1rem;font-size:.875rem">Ainda não há avaliações deste sabor.</p>`
           : `<ul style="list-style:none;margin-top:1rem;display:flex;flex-direction:column;gap:.75rem">
@@ -3001,18 +3082,35 @@ async function salvarCliente(id){
   S.admin.clienteEditando = null;
   await carregarAdmin(); render();
 }
-async function excluirCliente(id){
+async function excluirCliente(id, forcar = false){
   const c = S.admin.clientes.find(x => x.id === id);
   const nome = c ? c.nome : "este cliente";
-  if (!confirm(`Excluir o cadastro de ${nome}?\n\nSó funciona se a pessoa não tiver pedidos registrados. ` +
-               `O login continua existindo no Supabase até você removê-lo em Authentication → Users.`)) return;
-  const { error } = await sb.from("profiles").delete().eq("id", id);
-  if (error){
-    avisarErro(error, "excluir o cliente");
-    return;
+
+  if (!forcar && !confirm(`Excluir o cadastro de ${nome}?`)) return;
+
+  const { data, error } = await sb.rpc("excluir_cliente", { p_cliente: id, p_forcar: forcar });
+  if (error){ avisarErro(error, "excluir o cliente"); return; }
+
+  // O banco protege o histórico: só apaga com confirmação explícita.
+  if (data && data.excluido === false){
+    const ok = confirm(
+      `${nome} tem ${data.pedidos} pedido(s) registrado(s).\n\n` +
+      `Excluir agora apaga TAMBÉM esses pedidos, as avaliações e os carimbos dessa pessoa. ` +
+      `Isso não pode ser desfeito e o faturamento desses pedidos some dos relatórios.\n\n` +
+      `Tem certeza?`);
+    if (!ok) return;
+    return excluirCliente(id, true);
   }
-  await carregarAdmin(); render();
+
+  alert(`${nome} foi excluído.\n\n` +
+        `O login dessa pessoa ainda existe no Supabase. Para removê-lo por completo, ` +
+        `vá em Authentication → Users e apague o usuário por lá.`);
+  fecharModal();
+  await carregarAdmin();
+  await carregarPedidos();
+  render();
 }
+
 /* Status de um pedido antigo, deduzido das datas registradas.
    Sem data de pagamento, o pedido nunca passa de "Entregue". */
 function statusAntigo(c){
@@ -3172,38 +3270,6 @@ function vAdminClientes(){
         ${vinculadas.length} ficha(s) vinculada(s)</p>
     </div>
 
-    ${(() => {
-      const fora = setoresForaDaLista();
-      if (fora.length === 0) return "";
-      const expandido = S.admin.setoresExpandidos;
-      const visiveis = expandido ? fora : fora.slice(0, 6);
-      return `<section class="card" style="padding:1rem;border-left:4px solid #EB791C"
-          aria-labelledby="setores-fora">
-        <h2 id="setores-fora" class="display" style="font-size:1rem;font-weight:800">
-          ⚠️ Setores fora da lista (${fora.length})</h2>
-        <p class="muted" style="font-size:.78rem;margin-top:.2rem">
-          O que foi digitado e não bate com nenhum setor cadastrado. Se algum for válido,
-          vale acrescentar à lista; se for engano, dá para corrigir no cadastro da pessoa.</p>
-        <ul style="list-style:none;margin-top:.7rem;display:flex;flex-direction:column;gap:.35rem">
-          ${visiveis.map(f => `<li style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;
-              background:var(--chantilly);border-radius:.5rem;padding:.4rem .6rem">
-            <span class="badge b-esgotado" style="text-transform:none;font-size:.74rem">
-              ${esc(f.texto)}</span>
-            <span style="font-size:.78rem;flex:1">
-              ${[...f.pessoas.entries()].map(([nome, origens]) =>
-                `<strong>${esc(nome)}</strong> <span class="muted">(${esc([...origens].join(", "))})</span>`
-              ).join(" · ")}
-            </span>
-            ${f.ocorrencias > 1 ? `<span class="muted" style="font-size:.72rem">${f.ocorrencias}×</span>` : ""}
-          </li>`).join("")}
-        </ul>
-        ${fora.length > 6 ? `<button class="btn btn-ghost"
-          style="margin-top:.5rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
-          onclick="S.admin.setoresExpandidos=!S.admin.setoresExpandidos;render()">
-          ${expandido ? "Mostrar menos" : `Ver todos os ${fora.length}`}</button>` : ""}
-      </section>`;
-    })()}
-
     <section aria-labelledby="c-ativos">
       <h2 id="c-ativos" class="display" style="font-size:1.1rem;font-weight:700">Contas ativas</h2>
       ${cadastrados.length === 0
@@ -3294,6 +3360,38 @@ function vAdminClientes(){
             ${S.admin.fichas.map(f => vFicha(f)).join("")}
           </div>`}
     </section>
+
+    ${(() => {
+      const fora = setoresForaDaLista();
+      if (fora.length === 0) return "";
+      const expandido = S.admin.setoresExpandidos;
+      const visiveis = expandido ? fora : fora.slice(0, 6);
+      return `<section class="card" style="padding:1rem;border-left:4px solid #EB791C"
+          aria-labelledby="setores-fora">
+        <h2 id="setores-fora" class="display" style="font-size:1rem;font-weight:800">
+          ⚠️ Setores fora da lista (${fora.length})</h2>
+        <p class="muted" style="font-size:.78rem;margin-top:.2rem">
+          O que foi digitado e não bate com nenhum setor cadastrado. Se algum for válido,
+          vale acrescentar à lista; se for engano, dá para corrigir no cadastro da pessoa.</p>
+        <ul style="list-style:none;margin-top:.7rem;display:flex;flex-direction:column;gap:.35rem">
+          ${visiveis.map(f => `<li style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;
+              background:var(--chantilly);border-radius:.5rem;padding:.4rem .6rem">
+            <span class="badge b-esgotado" style="text-transform:none;font-size:.74rem">
+              ${esc(f.texto)}</span>
+            <span style="font-size:.78rem;flex:1">
+              ${[...f.pessoas.entries()].map(([nome, origens]) =>
+                `<strong>${esc(nome)}</strong> <span class="muted">(${esc([...origens].join(", "))})</span>`
+              ).join(" · ")}
+            </span>
+            ${f.ocorrencias > 1 ? `<span class="muted" style="font-size:.72rem">${f.ocorrencias}×</span>` : ""}
+          </li>`).join("")}
+        </ul>
+        ${fora.length > 6 ? `<button class="btn btn-ghost"
+          style="margin-top:.5rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
+          onclick="S.admin.setoresExpandidos=!S.admin.setoresExpandidos;render()">
+          ${expandido ? "Mostrar menos" : `Ver todos os ${fora.length}`}</button>` : ""}
+      </section>`;
+    })()}
   </div>`;
 }
 
