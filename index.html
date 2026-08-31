@@ -383,7 +383,7 @@ const S = {
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false,
-           form: {}, pedidosExpandidos: {}, clienteEditando: null },
+           form: {}, pedidosExpandidos: {}, clienteEditando: null, setoresExpandidos: false },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
   qtdCard: {},   // quantidade escolhida em cada card do catálogo
@@ -1309,7 +1309,7 @@ function vHome(){
     <section class="card" style="padding:1.5rem" aria-labelledby="t-sug">
       <h2 id="t-sug" class="display" style="font-size:1.5rem;font-weight:900">Tem alguma sugestão?</h2>
       <p class="muted" style="margin-top:.25rem;font-size:.875rem">
-        Quer ver um novo sabor, combinação ou melhoria por aqui? Conte para a gente!</p>
+        Quer ver um novo sabor, combinação ou melhoria por aqui? Conta aí!</p>
       ${S.sugestaoOk
         ? `<p class="ok" role="status" style="margin-top:1rem">Sugestão enviada. Obrigado por ajudar a melhorar a casa! 💚</p>`
         : `<div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1rem">
@@ -3138,20 +3138,22 @@ function verCliente(id){
 /* Junta tudo que foi digitado como setor e separa o que não está na lista. */
 function setoresForaDaLista(){
   const mapa = new Map();
-  const somar = (texto, quem) => {
+  const somar = (texto, quem, origem) => {
     const t = String(texto || "").trim();
     if (!setorForaDaLista(t)) return;
     const chave = semAcentoMin(t);
-    if (!mapa.has(chave)) mapa.set(chave, { texto: t, ocorrencias: 0, pessoas: new Set() });
+    if (!mapa.has(chave)) mapa.set(chave, { texto: t, ocorrencias: 0, pessoas: new Map() });
     const reg = mapa.get(chave);
     reg.ocorrencias++;
-    if (quem) reg.pessoas.add(quem);
+    const nome = quem || "sem nome";
+    if (!reg.pessoas.has(nome)) reg.pessoas.set(nome, new Set());
+    reg.pessoas.get(nome).add(origem);
   };
-  S.admin.clientes.forEach(c => somar(c.setor, c.nome));
-  S.admin.fichas.forEach(f => somar(f.setor, f.nome));
+  S.admin.clientes.forEach(c => somar(c.setor, c.nome, "perfil"));
+  S.admin.fichas.forEach(f => somar(f.setor, f.nome, "ficha"));
   S.pedidos.forEach(p => {
-    somar(p.local, p.cliente?.nome);
-    if (p.presente) somar(p.destinatarioSetor, p.destinatario);
+    somar(p.local, p.cliente?.nome, "pedido #" + p.numero);
+    if (p.presente) somar(p.destinatarioSetor, p.destinatario, "presente #" + p.numero);
   });
   return [...mapa.values()].sort((a, b) => b.ocorrencias - a.ocorrencias);
 }
@@ -3173,18 +3175,32 @@ function vAdminClientes(){
     ${(() => {
       const fora = setoresForaDaLista();
       if (fora.length === 0) return "";
+      const expandido = S.admin.setoresExpandidos;
+      const visiveis = expandido ? fora : fora.slice(0, 6);
       return `<section class="card" style="padding:1rem;border-left:4px solid #EB791C"
           aria-labelledby="setores-fora">
         <h2 id="setores-fora" class="display" style="font-size:1rem;font-weight:800">
           ⚠️ Setores fora da lista (${fora.length})</h2>
         <p class="muted" style="font-size:.78rem;margin-top:.2rem">
-          Nomes que clientes escreveram e não batem com nenhum setor cadastrado.
-          Se algum for válido, vale acrescentar à lista no código.</p>
-        <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem">
-          ${fora.map(f => `<span class="badge b-esgotado" style="text-transform:none;font-size:.74rem"
-            title="${esc([...f.pessoas].join(", "))}">
-            ${esc(f.texto)} · ${f.ocorrencias}×</span>`).join("")}
-        </div>
+          O que foi digitado e não bate com nenhum setor cadastrado. Se algum for válido,
+          vale acrescentar à lista; se for engano, dá para corrigir no cadastro da pessoa.</p>
+        <ul style="list-style:none;margin-top:.7rem;display:flex;flex-direction:column;gap:.35rem">
+          ${visiveis.map(f => `<li style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;
+              background:var(--chantilly);border-radius:.5rem;padding:.4rem .6rem">
+            <span class="badge b-esgotado" style="text-transform:none;font-size:.74rem">
+              ${esc(f.texto)}</span>
+            <span style="font-size:.78rem;flex:1">
+              ${[...f.pessoas.entries()].map(([nome, origens]) =>
+                `<strong>${esc(nome)}</strong> <span class="muted">(${esc([...origens].join(", "))})</span>`
+              ).join(" · ")}
+            </span>
+            ${f.ocorrencias > 1 ? `<span class="muted" style="font-size:.72rem">${f.ocorrencias}×</span>` : ""}
+          </li>`).join("")}
+        </ul>
+        ${fora.length > 6 ? `<button class="btn btn-ghost"
+          style="margin-top:.5rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
+          onclick="S.admin.setoresExpandidos=!S.admin.setoresExpandidos;render()">
+          ${expandido ? "Mostrar menos" : `Ver todos os ${fora.length}`}</button>` : ""}
       </section>`;
     })()}
 
