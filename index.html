@@ -284,6 +284,9 @@
 <div id="cart-toast-slot"></div>
 <div id="modal-slot"></div>
 <datalist id="sabores-lista"></datalist>
+<datalist id="formas-lista">
+  <option value="Pix"><option value="Dinheiro"><option value="Cartão"><option value="Transferência">
+</datalist>
 <button class="btn btn-primary switch" id="switch-btn" onclick="toggleAdmin()">Painel admin</button>
 
 <script>
@@ -387,7 +390,7 @@ const S = {
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false,
-           form: {}, pedidosExpandidos: {}, clienteEditando: null, setoresExpandidos: false,
+           form: {}, pedidosExpandidos: {}, clienteEditando: null, setoresExpandidos: false, importacao: null,
            abaAvaliacao: 'pendentes' },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
@@ -2987,6 +2990,112 @@ function vAdminSugestoes(){
    cadastrou. A ficha não é usuário: ela só espera a pessoa se
    cadastrar com o mesmo WhatsApp para ser reconhecida.
    ============================================================ */
+/* ============================================================
+   IMPORTAÇÃO DE PEDIDOS COLADOS DA PLANILHA
+   Colunas: entrega | nome | qtd | sabor | pagamento | forma | valor
+   Linhas sem data e sem nome são continuação do pedido de cima
+   (mais um sabor no mesmo pedido).
+   ============================================================ */
+function parseDataBr(txt, anoPadrao){
+  const t = String(txt || "").trim();
+  if (!t) return null;
+  const m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/);
+  if (!m) return null;
+  const dia = m[1].padStart(2, "0"), mes = m[2].padStart(2, "0");
+  let ano = m[3] || String(anoPadrao ?? new Date().getFullYear());
+  if (ano.length === 2) ano = "20" + ano;
+  return `${ano}-${mes}-${dia}`;
+}
+function parseValor(txt){
+  const t = String(txt || "").replace(/[^\d,.-]/g, "").trim();
+  if (!t) return null;
+  // "1.234,56" (brasileiro) ou "1234.56"
+  const normal = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t;
+  const n = parseFloat(normal);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+function parseQtd(txt){
+  const n = parseInt(String(txt || "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function interpretarPlanilha(texto){
+  const linhas = String(texto || "").split(/\r?\n/);
+  const pedidos = [];
+  const problemas = [];
+
+  linhas.forEach((linha, i) => {
+    if (!linha.trim()) return;                       // linha em branco separa blocos
+    // aceita tabulação, ponto e vírgula ou 2+ espaços como separador
+    const col = linha.split(/\t|;|\s{2,}/).map(c => c.trim());
+    while (col.length < 7) col.push("");
+
+    const [entrega, nome, qtdTxt, sabor, pagamento, forma, valor] = col;
+    const qtd = parseQtd(qtdTxt);
+
+    // continuação: sem data e sem nome, mas com quantidade e sabor
+    const ehContinuacao = !entrega && !nome && qtd && sabor;
+    if (ehContinuacao){
+      const anterior = pedidos[pedidos.length - 1];
+      if (!anterior){ problemas.push(`linha ${i+1}: sabor solto, sem pedido acima`); return; }
+      anterior.itens.push({ sabor, quantidade: qtd });
+      return;
+    }
+
+    if (!nome){ problemas.push(`linha ${i+1}: sem nome do cliente`); return; }
+    if (!qtd || !sabor){ problemas.push(`linha ${i+1}: falta quantidade ou sabor`); return; }
+
+    pedidos.push({
+      nome,
+      itens: [{ sabor, quantidade: qtd }],
+      entrega: parseDataBr(entrega),
+      entregaTexto: entrega,
+      pagamento: parseDataBr(pagamento),
+      forma: forma || null,
+      valor: parseValor(valor),
+      linha: i + 1,
+    });
+  });
+
+  return { pedidos, problemas };
+}
+
+/* Confere o que foi entendido antes de gravar. */
+function analisarImportacao(){
+  const txt = document.getElementById("imp-texto").value;
+  const r = interpretarPlanilha(txt);
+  S.admin.importacao = { ...r, importando: false, resultado: null };
+  render();
+}
+function cancelarImportacao(){
+  S.admin.importacao = null;
+  render();
+}
+async function confirmarImportacao(){
+  const imp = S.admin.importacao;
+  if (!imp || imp.pedidos.length === 0) return;
+  imp.importando = true; render();
+
+  let ok = 0; const erros = [];
+  for (const p of imp.pedidos){
+    const { error } = await sb.rpc("importar_pedido_ficha", {
+      p_nome: p.nome,
+      p_itens: p.itens,
+      p_data_entrega: p.entrega,
+      p_data_pagamento: p.pagamento,
+      p_forma_pagamento: p.forma,
+      p_valor_centavos: p.valor,
+    });
+    if (error) erros.push(`${p.nome} (linha ${p.linha}): ${error.message}`);
+    else ok++;
+  }
+
+  imp.importando = false;
+  imp.resultado = { ok, erros };
+  await carregarAdmin();
+  render();
+}
+
 async function salvarFicha(){
   const nome  = document.getElementById("f-nome").value.trim();
   const tel   = document.getElementById("f-tel").value.trim();
@@ -3054,8 +3163,10 @@ function lerFormulario(fichaId){
   });
   const ce = document.getElementById("lc-ent-" + fichaId);
   const cp = document.getElementById("lc-pag-" + fichaId);
+  const cf = document.getElementById("lc-forma-" + fichaId);
   if (ce) f.entrega = ce.value;
   if (cp) f.pagamento = cp.value;
+  if (cf) f.forma = cf.value;
   return f;
 }
 function addLinha(fichaId){
@@ -3078,6 +3189,7 @@ function editarCompra(fichaId, compraId){
   S.admin.form[fichaId] = {
     linhas: itens, editando: compraId,
     entrega: c.data_entrega || "", pagamento: c.data_pagamento || "",
+    forma: c.forma_pagamento || "",
   };
   S.admin.fichaAberta = fichaId;
   render();
@@ -3098,6 +3210,7 @@ async function salvarCompra(fichaId){
     pre_cliente_id: fichaId, itens, quantidade: total,
     sabores: itens.map(i => `${i.quantidade}× ${i.sabor}`).join(", "),
     data_entrega: f.entrega || null, data_pagamento: f.pagamento || null,
+    forma_pagamento: (f.forma || "").trim() || null,
   };
 
   const { error } = f.editando
@@ -3344,6 +3457,84 @@ function setoresForaDaLista(){
   return [...mapa.values()].sort((a, b) => b.ocorrencias - a.ocorrencias);
 }
 
+/* Tela de colar, conferir e importar os pedidos da planilha. */
+function vImportacao(){
+  const imp = S.admin.importacao;
+
+  if (imp && imp.resultado){
+    const r = imp.resultado;
+    return `<div style="margin-top:.6rem">
+      <p class="${r.erros.length ? "alerta" : "ok"}">
+        ${r.ok} pedido(s) importado(s) com sucesso.
+        ${r.erros.length ? `<br>${r.erros.length} falharam.` : ""}</p>
+      ${r.erros.length ? `<ul class="muted" style="font-size:.72rem;margin-top:.4rem;padding-left:1rem">
+        ${r.erros.map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
+      <button class="btn btn-ghost" style="margin-top:.6rem" onclick="cancelarImportacao()">Fechar</button>
+    </div>`;
+  }
+
+  if (imp){
+    const totalCones = imp.pedidos.reduce((n, p) => n + p.itens.reduce((x, i) => x + i.quantidade, 0), 0);
+    return `<div style="margin-top:.6rem">
+      <p style="font-weight:700;font-size:.85rem">
+        Confira antes de gravar — ${imp.pedidos.length} pedido(s), ${totalCones} cone(s)</p>
+      ${imp.problemas.length ? `<div class="alerta" style="margin-top:.5rem">
+        ${imp.problemas.length} linha(s) ignorada(s):
+        <ul style="font-weight:400;font-size:.72rem;margin-top:.3rem;padding-left:1rem">
+          ${imp.problemas.map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}
+
+      <div style="overflow-x:auto;margin-top:.6rem">
+        <table style="width:100%;border-collapse:collapse;font-size:.76rem">
+          <thead><tr style="text-align:left;color:rgb(62 39 35/.55)">
+            <th style="padding:.3rem .4rem">Cliente</th>
+            <th style="padding:.3rem .4rem">Sabores</th>
+            <th style="padding:.3rem .4rem">Entrega</th>
+            <th style="padding:.3rem .4rem">Pagamento</th>
+            <th style="padding:.3rem .4rem">Valor</th>
+          </tr></thead>
+          <tbody>
+            ${imp.pedidos.map(p => `<tr style="border-top:1px solid rgb(62 39 35/.1)">
+              <td style="padding:.35rem .4rem;font-weight:700">${esc(p.nome)}</td>
+              <td style="padding:.35rem .4rem">
+                ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join("<br>")}</td>
+              <td style="padding:.35rem .4rem">
+                ${p.entrega
+                  ? new Date(p.entrega + "T12:00").toLocaleDateString("pt-BR")
+                  : `<span style="color:var(--framboesa)">${p.entregaTexto ? "não entendi" : "—"}</span>`}</td>
+              <td style="padding:.35rem .4rem">
+                ${p.pagamento ? new Date(p.pagamento + "T12:00").toLocaleDateString("pt-BR") : "pendente"}
+                ${p.forma ? `<br><span class="muted">${esc(p.forma)}</span>` : ""}</td>
+              <td style="padding:.35rem .4rem">${p.valor != null ? reais(p.valor) : "—"}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+
+      <p class="muted" style="font-size:.72rem;margin-top:.5rem">
+        Clientes que ainda não existem viram fichas novas, sem telefone.
+        Se o nome bater com uma conta ativa, a ficha já nasce vinculada a ela.</p>
+
+      <div style="display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" ${imp.importando ? "disabled" : ""}
+          onclick="confirmarImportacao()">
+          ${imp.importando ? "Importando..." : `Importar ${imp.pedidos.length} pedido(s)`}</button>
+        <button class="btn btn-ghost" onclick="cancelarImportacao()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  return `<div style="margin-top:.6rem">
+    <p class="muted" style="font-size:.75rem">
+      Copie as linhas da planilha e cole aqui. A ordem das colunas deve ser:<br>
+      <code>entrega · nome · quantidade · sabor · pagamento · forma · valor</code><br>
+      Para mais de um sabor no mesmo pedido, deixe as duas primeiras colunas vazias na linha seguinte.</p>
+    <textarea id="imp-texto" rows="7" class="field" style="margin-top:.5rem;resize:vertical;
+      font-family:ui-monospace,monospace;font-size:.74rem"
+      placeholder="27/08&#9;Renan&#9;1&#9;Kinder Bueno&#9;&#9;&#9;R$ 14,00&#10;27/08&#9;Sandra&#9;1&#9;Ferrero Rocher&#9;&#9;Pix&#9;R$ 72,00&#10;&#9;&#9;4&#9;Kinder Bueno"></textarea>
+    <button class="btn btn-ghost" style="margin-top:.5rem" onclick="analisarImportacao()">Analisar</button>
+  </div>`;
+}
+
 function vAdminClientes(){
   if (!S.admin.carregado) return `<p class="muted">Carregando clientes...</p>`;
   const cadastrados = S.admin.clientes;
@@ -3431,6 +3622,12 @@ function vAdminClientes(){
           <button class="btn btn-primary" onclick="salvarFicha()">Adicionar</button>
         </div>
         <div id="f-setor-tags" class="setor-caixa"></div>
+        <details style="margin-top:.9rem" ${S.admin.importacao ? "open" : ""}>
+          <summary style="cursor:pointer;font-size:.82rem;font-weight:700">
+            📋 Colar pedidos da planilha</summary>
+          ${vImportacao()}
+        </details>
+
         <details style="margin-top:.9rem">
           <summary style="cursor:pointer;font-size:.82rem;font-weight:700">Importar vários de uma vez</summary>
           <p class="muted" style="font-size:.75rem;margin-top:.5rem">
@@ -3544,6 +3741,8 @@ function vFicha(f){
                   <span class="muted" style="display:block;font-size:.72rem;margin-top:.15rem">
                     ${dataBr(c.data_entrega) ? "entrega " + dataBr(c.data_entrega) : "sem data de entrega"}
                     ${dataBr(c.data_pagamento) ? " · pago em " + dataBr(c.data_pagamento) : " · pagamento não registrado"}
+                    ${c.forma_pagamento ? " · " + esc(c.forma_pagamento) : ""}
+                    ${c.valor_centavos ? " · " + reais(c.valor_centavos) : ""}
                   </span>
                 </span>
                 <button style="font-size:.72rem;font-weight:700;color:var(--cacau);text-decoration:underline"
@@ -3584,6 +3783,9 @@ function vFicha(f){
           <label style="font-size:.7rem;font-weight:600">Pagamento
             <input id="lc-pag-${f.id}" class="field" type="date" value="${form.pagamento || ""}"
               style="padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
+          <label style="font-size:.7rem;font-weight:600">Forma
+            <input id="lc-forma-${f.id}" class="field" list="formas-lista" value="${esc(form.forma || "")}"
+              placeholder="Pix" style="width:7rem;padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
           <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
             onclick="salvarCompra('${f.id}')">${form.editando ? "Salvar alterações" : "Registrar pedido"}</button>
           ${form.editando ? `<button class="btn btn-ghost"
