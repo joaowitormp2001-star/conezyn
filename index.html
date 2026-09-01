@@ -249,10 +249,12 @@
     background:transparent;transition:background .12s}
   .sug-item:hover,.sug-item:focus-visible{background:var(--chantilly-esc)}
   .sug-lista li + li .sug-item{border-top:1px solid rgb(62 39 35/.1)}
+  /* a faixa dos cartões ocupa a tela inteira, ignorando as margens da página */
   .fid-carrossel{display:flex;gap:1rem;overflow-x:auto;scroll-snap-type:x mandatory;
-    padding:.25rem max(0px, calc(50% - min(30rem, 86%) / 2)) 1.1rem;
-    scrollbar-width:thin}
-  .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86%);scroll-snap-align:center}
+    width:100vw;max-width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);
+    padding:.25rem max(1rem, calc(50vw - min(30rem, 86vw) / 2)) 1.1rem;
+    scrollbar-width:thin;overscroll-behavior-x:contain}
+  .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86vw);scroll-snap-align:center}
   .fid-slide-rotulo{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.55);
     margin-bottom:.35rem;display:block}
   .fid-slide.completo .fid{opacity:.82}
@@ -2282,7 +2284,9 @@ function vFidelidade(){
             Ainda sem carimbos — eles aparecem aqui quando um pedido é marcado como <strong>Entregue</strong> no painel.</p>`
         : `<ul style="list-style:none;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem;font-size:.875rem">
             ${d.historico.map(h=>`<li style="display:flex;justify-content:space-between;border-bottom:1px solid rgb(62 39 35/.08);padding-bottom:.5rem">
-              <span><strong style="color:var(--pistache)">+${h.n} ${h.n===1?"carimbo":"carimbos"}</strong> · Pedido #${h.pedido}</span>
+              <span><strong style="color:${h.n < 0 ? "var(--framboesa)" : "var(--pistache)"}">
+                ${h.n > 0 ? "+" : ""}${h.n} ${Math.abs(h.n) === 1 ? "carimbo" : "carimbos"}</strong>
+                · ${h.pedido === "—" ? "ajuste" : "Pedido #" + h.pedido}</span>
               <span class="muted">${h.data}</span></li>`).join("")}</ul>`}
     </section>
   </main>${vFooter()}`;
