@@ -1936,6 +1936,9 @@ function confirmarFicha(sim){
   if (sim){
     c.nome = c.ficha.primeiro_nome;   // pré-preenchido, mas editável
   } else {
+    // Registra a recusa para você avaliar depois: mesmo WhatsApp,
+    // mas a pessoa diz que não é ela.
+    sb.rpc("registrar_recusa_precadastro", { p_telefone: c.tel });
     c.ficha = null; c.nome = "";
   }
   c.etapa = 3;
@@ -3104,26 +3107,54 @@ function parseQtd(txt){
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/* Detecta se a coluna 3 é um telefone (formato novo) ou a quantidade
+   (formato antigo). Assim os dois modelos de planilha funcionam. */
+function ehTelefone(txt){
+  const d = String(txt || "").replace(/\D/g, "");
+  return d.length === 10 || d.length === 11;
+}
+
 function interpretarPlanilha(texto){
   const linhas = String(texto || "").split(/\r?\n/);
   const pedidos = [];
   const problemas = [];
 
   linhas.forEach((linha, i) => {
-    if (!linha.trim()) return;                       // linha em branco separa blocos
-    // aceita tabulação, ponto e vírgula ou 2+ espaços como separador
+    if (!linha.trim()) return;
     const col = linha.split(/\t|;|\s{2,}/).map(c => c.trim());
-    while (col.length < 7) col.push("");
+    while (col.length < 8) col.push("");
 
-    const [entrega, nome, qtdTxt, sabor, pagamento, forma, valor] = col;
+    // com WhatsApp: entrega | nome | zap | qtd | sabor | pgto | forma | valor
+    // sem WhatsApp: entrega | nome | qtd | sabor | pgto | forma | valor
+    const comZap = ehTelefone(col[2]);
+    const entrega   = col[0];
+    const nome      = col[1];
+    const zap       = comZap ? col[2] : "";
+    const qtdTxt    = comZap ? col[3] : col[2];
+    const sabor     = comZap ? col[4] : col[3];
+    const pagamento = comZap ? col[5] : col[4];
+    const forma     = comZap ? col[6] : col[5];
+    const valor     = comZap ? col[7] : col[6];
     const qtd = parseQtd(qtdTxt);
 
-    // continuação: sem data e sem nome, mas com quantidade e sabor
-    const ehContinuacao = !entrega && !nome && qtd && sabor;
-    if (ehContinuacao){
-      const anterior = pedidos[pedidos.length - 1];
-      if (!anterior){ problemas.push(`linha ${i+1}: sabor solto, sem pedido acima`); return; }
+    const anterior = pedidos[pedidos.length - 1];
+    const digitos = t => String(t || "").replace(/\D/g, "");
+
+    // Continuação: sem data de entrega, com sabor, e ou sem nome
+    // ou repetindo exatamente a mesma pessoa da linha de cima.
+    // O WhatsApp manda: dois "João" com números diferentes são duas pessoas.
+    let mesmaPessoa = false;
+    if (anterior){
+      if (zap && anterior.telefone)      mesmaPessoa = digitos(zap) === digitos(anterior.telefone);
+      else if (zap && !anterior.telefone) mesmaPessoa = !nome || nome.toLowerCase() === anterior.nome.toLowerCase();
+      else if (nome)                      mesmaPessoa = nome.toLowerCase() === anterior.nome.toLowerCase();
+      else                                mesmaPessoa = true;   // linha só com sabor
+    }
+
+    if (!entrega && qtd && sabor && mesmaPessoa){
       anterior.itens.push({ sabor, quantidade: qtd });
+      // nome e WhatsApp repetidos são ignorados: fica valendo a 1ª versão
+      if (!anterior.telefone && zap) anterior.telefone = zap;
       return;
     }
 
@@ -3132,6 +3163,7 @@ function interpretarPlanilha(texto){
 
     pedidos.push({
       nome,
+      telefone: zap || null,
       itens: [{ sabor, quantidade: qtd }],
       entrega: parseDataBr(entrega),
       entregaTexto: entrega,
@@ -3170,6 +3202,7 @@ async function confirmarImportacao(){
       p_data_pagamento: p.pagamento,
       p_forma_pagamento: p.forma,
       p_valor_centavos: p.valor,
+      p_telefone: p.telefone,
     });
     if (error) erros.push(`${p.nome} (linha ${p.linha}): ${error.message}`);
     else ok++;
@@ -3572,6 +3605,7 @@ function vImportacao(){
         <table style="width:100%;border-collapse:collapse;font-size:.76rem">
           <thead><tr style="text-align:left;color:rgb(62 39 35/.55)">
             <th style="padding:.3rem .4rem">Cliente</th>
+            <th style="padding:.3rem .4rem">WhatsApp</th>
             <th style="padding:.3rem .4rem">Sabores</th>
             <th style="padding:.3rem .4rem">Entrega</th>
             <th style="padding:.3rem .4rem">Pagamento</th>
@@ -3580,6 +3614,9 @@ function vImportacao(){
           <tbody>
             ${imp.pedidos.map(p => `<tr style="border-top:1px solid rgb(62 39 35/.1)">
               <td style="padding:.35rem .4rem;font-weight:700">${esc(p.nome)}</td>
+              <td style="padding:.35rem .4rem">
+                ${p.telefone ? esc(mascaraTelefone(p.telefone))
+                  : `<span class="muted">—</span>`}</td>
               <td style="padding:.35rem .4rem">
                 ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join("<br>")}</td>
               <td style="padding:.35rem .4rem">
@@ -3611,8 +3648,9 @@ function vImportacao(){
   return `<div style="margin-top:.6rem">
     <p class="muted" style="font-size:.75rem">
       Copie as linhas da planilha e cole aqui. A ordem das colunas deve ser:<br>
-      <code>entrega · nome · quantidade · sabor · pagamento · forma · valor</code><br>
-      Para mais de um sabor no mesmo pedido, deixe as duas primeiras colunas vazias na linha seguinte.</p>
+      <code>entrega · nome · WhatsApp · quantidade · sabor · pagamento · forma · valor</code><br>
+      Para mais de um sabor no mesmo pedido, repita o nome e o WhatsApp (ou deixe vazios) e não preencha a data.
+      O WhatsApp é o que garante o reconhecimento do cliente quando ele criar a conta.</p>
     <textarea id="imp-texto" rows="7" class="field" style="margin-top:.5rem;resize:vertical;
       font-family:ui-monospace,monospace;font-size:.74rem"
       placeholder="27/08&#9;Renan&#9;1&#9;Kinder Bueno&#9;&#9;&#9;R$ 14,00&#10;27/08&#9;Sandra&#9;1&#9;Ferrero Rocher&#9;&#9;Pix&#9;R$ 72,00&#10;&#9;&#9;4&#9;Kinder Bueno"></textarea>
@@ -3631,7 +3669,11 @@ function vAdminClientes(){
       <h1 class="display" style="font-size:1.5rem;font-weight:900">Clientes</h1>
       <p class="muted" style="font-size:.875rem">
         ${cadastrados.length} com conta ativa · ${semVinculo.length} ficha(s) sem vínculo ·
-        ${vinculadas.length} ficha(s) vinculada(s)</p>
+        ${vinculadas.length} ficha(s) vinculada(s)
+        ${S.admin.fichas.some(f => f.recusas > 0 && !f.vinculado_a)
+          ? ` · <strong style="color:var(--framboesa)">
+              ${S.admin.fichas.filter(f => f.recusas > 0 && !f.vinculado_a).length} com recusa de vínculo</strong>`
+          : ""}</p>
     </div>
 
     <section aria-labelledby="c-ativos">
@@ -3793,6 +3835,11 @@ function vFicha(f){
           ${f.setor ? " · 📍 " + esc(f.setor) : ""}
           ${f.total_cones ? " · 🍦 " + f.total_cones + " cone(s)" : ""}</p>
       </div>
+      ${f.recusas > 0 && !f.vinculado_a
+        ? `<span class="badge b-esgotado" style="text-transform:none"
+             title="Alguém se cadastrou com este WhatsApp e respondeu que não era esta pessoa. Confira se o número está certo.">
+             ⚠️ recusou o vínculo ${f.recusas > 1 ? f.recusas + "×" : ""}</span>`
+        : ""}
       ${f.vinculado_a
         ? `<button class="badge b-classico" style="cursor:pointer"
              title="Ver informações completas do cliente"
