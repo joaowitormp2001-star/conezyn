@@ -343,17 +343,17 @@ const MARCA = { logo: null };
    Cores tiradas das artes originais. */
 const NIVEIS = [
   { chave:"coneiro", titulo:"Coneiro",
-    tituloCartao:'Complete e ganhe <strong>um conezyn</strong>',
+    premio:"um conezyn",
     fundo:"#4A3A6E", fundoEsc:"#332750", fundoClaro:"#5D4A87",
     destaque:"#FFD9A0", badgeFundo:"#FFD9A0", badgeTexto:"#332750",
     selo:"#4A3A6E", enfeite:"cone" },
   { chave:"mestre", titulo:"Mestre Cônus",
-    tituloCartao:'Complete e ganhe <strong>um conezyn</strong>',
+    premio:"um conezyn",
     fundo:"#B84614", fundoEsc:"#7D2D27", fundoClaro:"#CE5A22",
     destaque:"#FFD9A0", badgeFundo:"#471C76", badgeTexto:"#FFFFFF",
     selo:"#B84614", enfeite:"formatura" },
   { chave:"doutor", titulo:"Dr. Cônus",
-    tituloCartao:'Complete e ganhe <strong>50% OFF + um conezyn</strong>',
+    premio:"50% OFF + um conezyn",
     fundo:"#950007", fundoEsc:"#68031F", fundoClaro:"#B00A12",
     destaque:"#EB791C", badgeFundo:"#EB791C", badgeTexto:"#68031F",
     selo:"#950007", enfeite:"gravata", bonusNoSelo:5, bonusTexto:"50%<tspan x='24' dy='11'>OFF</tspan>",
@@ -2262,7 +2262,7 @@ function cartaoFidelidade(carimbos, nome, indiceCartao = 0){
     <p class="fid-topo">${esc(nome || "Nome")}
       <span class="fid-badge" style="background:${nv.badgeFundo};color:${nv.badgeTexto}">
         ${esc(nv.titulo)}</span></p>
-    <p class="fid-titulo">${nv.tituloCartao}</p>
+    <p class="fid-titulo">Complete e ganha: <strong>${esc(nv.premio)}</strong></p>
 
     <div class="fid-grade">${selos}</div>
   </div>`;
