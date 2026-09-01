@@ -2178,29 +2178,44 @@ function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
    cada cartão fechado dá acesso ao próximo. */
 function carrosselCartoes(carimbos, nome){
   const completos = Math.floor(carimbos / META_CARIMBOS);
-  const total = completos + 1;                 // os fechados + o que está em uso
-  const slides = [];
+  const ehAdmin = !!S.perfil?.admin;
 
+  // O administrador enxerga todos os níveis existentes, mesmo os que
+  // ainda não conquistou — serve para conferir a arte de cada cartão.
+  const total = ehAdmin
+    ? Math.max(completos + 1, NIVEIS.length)
+    : completos + 1;
+
+  const slides = [];
   for (let i = 0; i < total; i++){
-    const ehAtual = i === completos;
-    const valor = ehAtual ? carimbos : (i + 1) * META_CARIMBOS;
-    slides.push(`<div class="fid-slide ${ehAtual ? "" : "completo"}">
+    const ehAtual  = i === completos;
+    const ehPrevia = i > completos;
+    const valor = ehAtual ? carimbos : ehPrevia ? 0 : (i + 1) * META_CARIMBOS;
+
+    slides.push(`<div class="fid-slide ${ehAtual || ehPrevia ? "" : "completo"}">
       <span class="fid-slide-rotulo">
         ${nivelDe(i).titulo} ·
         ${ehAtual
           ? (completos > 0 ? "em andamento" : "seu cartão")
-          : "completo ✓"}
+          : ehPrevia
+            ? `<span style="color:var(--casquinha)">prévia (só você vê)</span>`
+            : "completo ✓"}
       </span>
       ${cartaoFidelidade(valor, nome, i)}
     </div>`);
   }
 
+  const aviso = ehAdmin && total > completos + 1
+    ? `Como administrador, você vê todos os ${NIVEIS.length} níveis do cartão. Arraste para o lado.`
+    : completos > 0
+      ? `⬅ Arraste para ver os ${completos} cartão(ões) que você já completou.`
+      : "";
+
   return `<div class="fid-carrossel" id="fid-carrossel"
       aria-label="Cartões fidelidade${completos ? `, ${completos} completo(s)` : ""}">
     ${slides.join("")}
   </div>
-  ${completos > 0 ? `<p class="muted" style="font-size:.78rem;text-align:center;margin-top:-.4rem">
-    ⬅ Arraste para ver os ${completos} cartão(ões) que você já completou.</p>` : ""}`;
+  ${aviso ? `<p class="muted" style="font-size:.78rem;text-align:center;margin-top:-.4rem">${aviso}</p>` : ""}`;
 }
 
 /* Réplica em código do cartão físico da conezyn, em três níveis. */
