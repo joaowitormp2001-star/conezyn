@@ -337,6 +337,28 @@ const STATUS_TODOS = [...STATUS, "Cancelado"];                       // + saída
 let META_CARIMBOS = 10;
 const MARCA = { logo: null };
 
+/* Níveis do cartão fidelidade. Cada cartão completo abre o próximo nível.
+   Cores tiradas das artes originais. */
+const NIVEIS = [
+  { chave:"coneiro", titulo:"Coneiro",
+    tituloCartao:'Complete e ganhe <strong>um conezyn</strong>',
+    fundo:"#4A3A6E", fundoEsc:"#332750", fundoClaro:"#5D4A87",
+    destaque:"#FFD9A0", badgeFundo:"#FFD9A0", badgeTexto:"#332750",
+    selo:"#4A3A6E", enfeite:"cone" },
+  { chave:"mestre", titulo:"Mestre Cônus",
+    tituloCartao:'Complete e ganhe <strong>um conezyn</strong>',
+    fundo:"#B84614", fundoEsc:"#7D2D27", fundoClaro:"#CE5A22",
+    destaque:"#FFD9A0", badgeFundo:"#471C76", badgeTexto:"#FFFFFF",
+    selo:"#B84614", enfeite:"formatura" },
+  { chave:"doutor", titulo:"Dr. Cônus",
+    tituloCartao:'Complete e ganhe <strong>50% OFF + um conezyn</strong>',
+    fundo:"#950007", fundoEsc:"#68031F", fundoClaro:"#B00A12",
+    destaque:"#EB791C", badgeFundo:"#EB791C", badgeTexto:"#68031F",
+    selo:"#950007", enfeite:"gravata", bonusNoSelo:5, bonusTexto:"50%<tspan x='24' dy='11'>OFF</tspan>",
+    bonusCor:"#9F8DB1" },
+];
+const nivelDe = i => NIVEIS[Math.min(i, NIVEIS.length - 1)];
+
 /* Setores da empresa. `apelidos` são as outras formas como a equipe
    se refere ao mesmo setor — servem para filtrar, mas o valor gravado
    é sempre o nome oficial. */
@@ -2099,6 +2121,31 @@ function vPedidos(){
           </li>`).join("")}</ul>`}
   </main>${vFooter()}`;
 }
+/* Silhuetas de fundo, uma para cada nível. */
+function svgEnfeite(tipo){
+  const c = "currentColor";
+  if (tipo === "formatura"){   // capelo de formatura sobre o cone
+    return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g transform="rotate(-20 24 24)">
+        <path d="M24 16 L32 21 L26 44 L22 44 L16 21 Z" fill="${c}"/>
+        <path d="M6 12 L24 5 L42 12 L24 19 Z" fill="${c}"/>
+        <path d="M38 14 v9" stroke="${c}" stroke-width="1.6" fill="none"/>
+        <circle cx="38" cy="24" r="1.8" fill="${c}"/>
+      </g>
+    </svg>`;
+  }
+  if (tipo === "gravata"){     // cone com gravata de doutor
+    return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g transform="rotate(-10 24 24)">
+        <ellipse cx="24" cy="9" rx="11" ry="4.5" fill="${c}"/>
+        <path d="M13 9 L24 45 L35 9 Z" fill="${c}"/>
+        <path d="M21 14 h6 l-1.6 3.5 2.6 9-4 4-4-4 2.6-9 Z" fill="#fff" opacity=".28"/>
+      </g>
+    </svg>`;
+  }
+  return svgCone({ recheio:c, casquinha:c });
+}
+
 /* Cone em SVG. `marca` aceita "mais" (+ laranja) ou "check" (✓ verde).
    Ambos levam contorno branco para destacar sobre o cone. */
 function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
@@ -2139,11 +2186,12 @@ function carrosselCartoes(carimbos, nome){
     const valor = ehAtual ? carimbos : (i + 1) * META_CARIMBOS;
     slides.push(`<div class="fid-slide ${ehAtual ? "" : "completo"}">
       <span class="fid-slide-rotulo">
+        ${nivelDe(i).titulo} ·
         ${ehAtual
-          ? (completos > 0 ? `Cartão ${i + 1} · em andamento` : "Seu cartão")
-          : `Cartão ${i + 1} · completo ✓`}
+          ? (completos > 0 ? "em andamento" : "seu cartão")
+          : "completo ✓"}
       </span>
-      ${cartaoFidelidade(valor, nome)}
+      ${cartaoFidelidade(valor, nome, i)}
     </div>`);
   }
 
@@ -2155,31 +2203,49 @@ function carrosselCartoes(carimbos, nome){
     ⬅ Arraste para ver os ${completos} cartão(ões) que você já completou.</p>` : ""}`;
 }
 
-/* Réplica em código do cartão físico da conezyn. */
-function cartaoFidelidade(carimbos, nome){
+/* Réplica em código do cartão físico da conezyn, em três níveis. */
+function cartaoFidelidade(carimbos, nome, indiceCartao = 0){
+  const nv = nivelDe(indiceCartao);
   const noCartao  = carimbos % META_CARIMBOS;
-  const completo  = carimbos > 0 && noCartao === 0;   // 10, 20, 30... = cartão fechado
+  const completo  = carimbos > 0 && noCartao === 0;
   const cheios    = completo ? META_CARIMBOS : noCartao;
 
   const selos = Array.from({ length: META_CARIMBOS }, (_, i) => {
     const ultimo  = i === META_CARIMBOS - 1;
     const marcado = i < cheios;
-    // o último círculo carrega a marca: + enquanto falta, ✓ quando completa
+    const bonus   = nv.bonusNoSelo && i === nv.bonusNoSelo - 1;
+
+    // selo do bônus (o "50% OFF" do cartão vermelho)
+    if (bonus && !marcado){
+      return `<span class="fid-selo">
+        <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <text x="24" y="20" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-weight="800" font-size="13" fill="${nv.bonusCor}">${nv.bonusTexto}</text>
+        </svg></span>`;
+    }
+
     const marca = ultimo ? (completo ? "check" : "mais") : null;
     return marcado
-      ? `<span class="fid-selo">${svgCone({ recheio:"#4A3A6E", casquinha:"#4A3A6E", marca })}</span>`
+      ? `<span class="fid-selo">${svgCone({ recheio: nv.selo, casquinha: nv.selo, marca })}</span>`
       : `<span class="fid-selo">${ultimo ? svgCone({ marca }) : ""}</span>`;
   }).join("");
 
-  return `<div class="fid" role="img" aria-label="Cartão fidelidade: ${cheios} de ${META_CARIMBOS} carimbos">
-    <svg class="fid-onda" viewBox="0 0 400 80" preserveAspectRatio="none" aria-hidden="true">
-      <path d="M0 0 H400 V26 C330 58 300 6 232 22 C150 42 120 4 44 26 C28 31 12 32 0 30 Z" fill="#3A1267"/>
-    </svg>
-    <span class="fid-cone-bg e">${svgCone({ recheio:"currentColor", casquinha:"currentColor" })}</span>
-    <span class="fid-cone-bg d">${svgCone({ recheio:"currentColor", casquinha:"currentColor" })}</span>
+  const estilo = `--roxo:${nv.fundo};--roxo-esc:${nv.fundoEsc};--roxo-claro:${nv.fundoClaro};` +
+                 `--destaque:${nv.destaque}`;
 
-    <p class="fid-topo">${esc(nome || "Nome")} <span class="fid-badge">Coneiro</span></p>
-    <p class="fid-titulo">Complete e ganhe <strong>um conezyn</strong></p>
+  return `<div class="fid" style="${estilo}" role="img"
+      aria-label="Cartão ${nv.titulo}: ${cheios} de ${META_CARIMBOS} carimbos">
+    <svg class="fid-onda" viewBox="0 0 400 80" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 0 H400 V26 C330 58 300 6 232 22 C150 42 120 4 44 26 C28 31 12 32 0 30 Z"
+        fill="${nv.fundoEsc}"/>
+    </svg>
+    <span class="fid-cone-bg e">${svgEnfeite(nv.enfeite)}</span>
+    <span class="fid-cone-bg d">${svgEnfeite(nv.enfeite)}</span>
+
+    <p class="fid-topo">${esc(nome || "Nome")}
+      <span class="fid-badge" style="background:${nv.badgeFundo};color:${nv.badgeTexto}">
+        ${esc(nv.titulo)}</span></p>
+    <p class="fid-titulo">${nv.tituloCartao}</p>
 
     <div class="fid-grade">${selos}</div>
   </div>`;
