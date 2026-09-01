@@ -3107,11 +3107,38 @@ function parseQtd(txt){
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/* Detecta se a coluna 3 é um telefone (formato novo) ou a quantidade
-   (formato antigo). Assim os dois modelos de planilha funcionam. */
-function ehTelefone(txt){
-  const d = String(txt || "").replace(/\D/g, "");
-  return d.length === 10 || d.length === 11;
+/* ============================================================
+   LEITURA DA PLANILHA
+   Em vez de confiar na posição das colunas, cada célula é
+   classificada pelo que ela contém: data, telefone, dinheiro,
+   forma de pagamento, número ou texto. Assim colunas a mais,
+   a menos ou fora de ordem continuam funcionando.
+   ============================================================ */
+const FORMAS_PAGAMENTO = ["pix","dinheiro","cartao","cartão","credito","crédito",
+  "debito","débito","transferencia","transferência","especie","espécie","fiado","cortesia"];
+
+const soDigitos = t => String(t || "").replace(/\D/g, "");
+const ehData     = t => /^\d{1,2}[\/\-.]\d{1,2}([\/\-.]\d{2,4})?$/.test(String(t||"").trim());
+const ehTelefone = t => [10,11].includes(soDigitos(t).length) && /\d[\s\-()]*\d/.test(String(t||""));
+const ehDinheiro = t => /r\$/i.test(String(t||"")) || /^\d{1,3}(\.\d{3})*,\d{2}$/.test(String(t||"").trim());
+const ehForma    = t => FORMAS_PAGAMENTO.includes(semAcentoMin(t));
+const ehNumero   = t => /^\d{1,3}$/.test(String(t||"").trim());
+const temLetras  = t => /[a-zà-ú]/i.test(String(t||""));
+
+function classificarLinha(linha){
+  const celulas = linha.split(/\t|;|\s{2,}/).map(c => c.trim());
+  const r = { datas: [], telefone: null, valor: null, forma: null, quantidades: [], textos: [] };
+
+  celulas.forEach((c, i) => {
+    if (!c) return;
+    if (ehData(c))      { r.datas.push({ txt: c, i }); return; }
+    if (ehTelefone(c))  { if (!r.telefone) r.telefone = c; return; }
+    if (ehDinheiro(c))  { if (r.valor === null) r.valor = c; return; }
+    if (ehForma(c))     { if (!r.forma) r.forma = c; return; }
+    if (ehNumero(c))    { r.quantidades.push({ txt: c, i }); return; }
+    if (temLetras(c))   { r.textos.push({ txt: c, i }); return; }
+  });
+  return r;
 }
 
 function interpretarPlanilha(texto){
@@ -3121,56 +3148,69 @@ function interpretarPlanilha(texto){
 
   linhas.forEach((linha, i) => {
     if (!linha.trim()) return;
-    const col = linha.split(/\t|;|\s{2,}/).map(c => c.trim());
-    while (col.length < 8) col.push("");
 
-    // com WhatsApp: entrega | nome | zap | qtd | sabor | pgto | forma | valor
-    // sem WhatsApp: entrega | nome | qtd | sabor | pgto | forma | valor
-    const comZap = ehTelefone(col[2]);
-    const entrega   = col[0];
-    const nome      = col[1];
-    const zap       = comZap ? col[2] : "";
-    const qtdTxt    = comZap ? col[3] : col[2];
-    const sabor     = comZap ? col[4] : col[3];
-    const pagamento = comZap ? col[5] : col[4];
-    const forma     = comZap ? col[6] : col[5];
-    const valor     = comZap ? col[7] : col[6];
-    const qtd = parseQtd(qtdTxt);
+    const c = classificarLinha(linha);
+    // cabeçalho: linha só com palavras e nenhuma quantidade, data ou valor
+    const pareceCabecalho = c.textos.length >= 3 && !c.datas.length &&
+      !c.quantidades.length && c.valor === null && !c.telefone;
+    if (pareceCabecalho) return;
 
-    const anterior = pedidos[pedidos.length - 1];
-    const digitos = t => String(t || "").replace(/\D/g, "");
-
-    // Continuação: sem data de entrega, com sabor, e ou sem nome
-    // ou repetindo exatamente a mesma pessoa da linha de cima.
-    // O WhatsApp manda: dois "João" com números diferentes são duas pessoas.
-    let mesmaPessoa = false;
-    if (anterior){
-      if (zap && anterior.telefone)      mesmaPessoa = digitos(zap) === digitos(anterior.telefone);
-      else if (zap && !anterior.telefone) mesmaPessoa = !nome || nome.toLowerCase() === anterior.nome.toLowerCase();
-      else if (nome)                      mesmaPessoa = nome.toLowerCase() === anterior.nome.toLowerCase();
-      else                                mesmaPessoa = true;   // linha só com sabor
-    }
-
-    if (!entrega && qtd && sabor && mesmaPessoa){
-      anterior.itens.push({ sabor, quantidade: qtd });
-      // nome e WhatsApp repetidos são ignorados: fica valendo a 1ª versão
-      if (!anterior.telefone && zap) anterior.telefone = zap;
+    if (c.textos.length === 0 && c.quantidades.length === 0){
+      problemas.push({ linha: i + 1, motivo: "linha sem conteúdo aproveitável", texto: linha.trim() });
       return;
     }
 
-    if (!nome){ problemas.push(`linha ${i+1}: sem nome do cliente`); return; }
-    if (!qtd || !sabor){ problemas.push(`linha ${i+1}: falta quantidade ou sabor`); return; }
+    // Dos textos sobrando: o primeiro costuma ser o nome, o último o sabor.
+    let nome = null, sabor = null;
+    if (c.textos.length >= 2){ nome = c.textos[0].txt; sabor = c.textos[c.textos.length - 1].txt; }
+    else if (c.textos.length === 1){
+      // Só um texto: é nome se vier antes da quantidade, senão é sabor.
+      const t = c.textos[0];
+      const q = c.quantidades[0];
+      if (q && t.i > q.i) sabor = t.txt; else nome = t.txt;
+    }
 
+    const qtd = c.quantidades.length ? parseInt(c.quantidades[0].txt, 10) : null;
+    const anterior = pedidos[pedidos.length - 1];
+
+    // Continuação: sem data de entrega e sem nome novo — ou repetindo a
+    // mesma pessoa da linha de cima (nome e WhatsApp duplicados).
+    // O telefone decide primeiro: dois números diferentes são duas pessoas,
+    // mesmo que o nome seja idêntico.
+    let mesmaPessoa = false;
+    if (anterior){
+      if (c.telefone && anterior.telefone){
+        mesmaPessoa = soDigitos(c.telefone) === soDigitos(anterior.telefone);
+      } else if (nome){
+        mesmaPessoa = semAcentoMin(nome) === semAcentoMin(anterior.nome);
+      } else {
+        mesmaPessoa = true;   // linha só com quantidade e sabor
+      }
+    }
+
+    if (!c.datas.length && mesmaPessoa && (sabor || qtd)){
+      anterior.itens.push({ sabor: sabor || "Não informado", quantidade: qtd || 1 });
+      if (!anterior.telefone && c.telefone) anterior.telefone = c.telefone;
+      return;
+    }
+
+    if (!nome){
+      problemas.push({ linha: i + 1, motivo: "não achei o nome do cliente", texto: linha.trim() });
+      return;
+    }
+
+    // Tolerante: sem quantidade assume 1, sem sabor grava "Não informado".
     pedidos.push({
       nome,
-      telefone: zap || null,
-      itens: [{ sabor, quantidade: qtd }],
-      entrega: parseDataBr(entrega),
-      entregaTexto: entrega,
-      pagamento: parseDataBr(pagamento),
-      forma: forma || null,
-      valor: parseValor(valor),
+      telefone: c.telefone || null,
+      itens: [{ sabor: sabor || "Não informado", quantidade: qtd || 1 }],
+      entrega: c.datas[0] ? parseDataBr(c.datas[0].txt) : null,
+      entregaTexto: c.datas[0]?.txt || "",
+      pagamento: c.datas[1] ? parseDataBr(c.datas[1].txt) : null,
+      forma: c.forma || null,
+      valor: c.valor !== null ? parseValor(c.valor) : null,
       linha: i + 1,
+      incompleto: !sabor || !qtd ? true : false,
     });
   });
 
@@ -3597,9 +3637,17 @@ function vImportacao(){
       <p style="font-weight:700;font-size:.85rem">
         Confira antes de gravar — ${imp.pedidos.length} pedido(s), ${totalCones} cone(s)</p>
       ${imp.problemas.length ? `<div class="alerta" style="margin-top:.5rem">
-        ${imp.problemas.length} linha(s) ignorada(s):
-        <ul style="font-weight:400;font-size:.72rem;margin-top:.3rem;padding-left:1rem">
-          ${imp.problemas.map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}
+        ${imp.problemas.length} linha(s) ignorada(s) — provavelmente vazias ou de cabeçalho.
+        <details style="margin-top:.3rem">
+          <summary style="cursor:pointer;font-weight:700;font-size:.75rem">Ver quais</summary>
+          <ul style="font-weight:400;font-size:.7rem;margin-top:.3rem;padding-left:1rem">
+            ${imp.problemas.slice(0, 15).map(p => `<li>
+              <strong>linha ${p.linha}</strong>: ${esc(p.motivo)}
+              ${p.texto ? `<br><code style="opacity:.75">${esc(p.texto.slice(0, 90))}</code>` : ""}
+            </li>`).join("")}
+            ${imp.problemas.length > 15 ? `<li>...e mais ${imp.problemas.length - 15}</li>` : ""}
+          </ul>
+        </details></div>` : ""}
 
       <div style="overflow-x:auto;margin-top:.6rem">
         <table style="width:100%;border-collapse:collapse;font-size:.76rem">
@@ -3618,7 +3666,9 @@ function vImportacao(){
                 ${p.telefone ? esc(mascaraTelefone(p.telefone))
                   : `<span class="muted">—</span>`}</td>
               <td style="padding:.35rem .4rem">
-                ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join("<br>")}</td>
+                ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join("<br>")}
+                ${p.incompleto ? `<br><span style="color:#B4590F;font-size:.68rem;font-weight:700">
+                  ⚠ faltou dado — confira</span>` : ""}</td>
               <td style="padding:.35rem .4rem">
                 ${p.entrega
                   ? new Date(p.entrega + "T12:00").toLocaleDateString("pt-BR")
