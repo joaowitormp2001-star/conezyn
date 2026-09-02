@@ -2906,7 +2906,7 @@ function vAdminDash(){
       <h2 class="display" style="font-size:1.1rem;font-weight:700;margin-top:1.5rem">
         Animação de carregamento</h2>
       <p class="muted" style="font-size:.8rem;margin-top:.25rem">
-        Três quadros que se alternam a cada meio segundo, na ordem
+        Três quadros que se alternam a cada 0,2 segundo, na ordem
         <strong>2 → 3 → 2 → 1</strong>, repetindo. Use PNG com fundo transparente e o mesmo
         enquadramento nos três, para o movimento ficar contínuo.</p>
       <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:.9rem">
@@ -3081,7 +3081,7 @@ function iniciarAnimacaoCarregamento(){
     i = (i + 1) % SEQUENCIA_QUADROS.length;
     const url = quadros[SEQUENCIA_QUADROS[i]] || quadros.find(Boolean);
     if (url) alvo.src = url;
-  }, 500);
+  }, 200);
 }
 
 function vCarregando(){
