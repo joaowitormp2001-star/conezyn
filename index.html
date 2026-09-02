@@ -67,6 +67,12 @@
   .hero{position:relative;overflow:hidden;background:var(--cacau);color:var(--chantilly);
     border-radius:var(--radius);padding:2.5rem 1.5rem;box-shadow:var(--shadow)}
   .hero .big{position:absolute;right:-1.5rem;bottom:-2rem;font-size:10rem;opacity:.2;pointer-events:none}
+  /* imagem de destaque no canto inferior direito do bloco */
+  .hero-img{position:absolute;right:-1rem;bottom:-1.5rem;width:min(26rem,52%);
+    max-height:130%;object-fit:contain;object-position:bottom right;pointer-events:none;
+    filter:drop-shadow(0 18px 30px rgb(0 0 0 / .35))}
+  @media(max-width:700px){
+    .hero-img{width:min(17rem,62%);right:-1.5rem;bottom:-2rem;opacity:.85}}
   .hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;line-height:1.1;max-width:26rem;margin-top:1rem}
   .grid{display:grid;gap:1rem}
   @media(min-width:600px){.grid.c2{grid-template-columns:1fr 1fr}}
@@ -337,7 +343,7 @@ const MIN_DEPOIMENTOS = 7;
 const STATUS = ["Pedido feito","Entregue","Pagamento concluído"];   // fluxo normal
 const STATUS_TODOS = [...STATUS, "Cancelado"];                       // + saída de emergência
 let META_CARIMBOS = 10;
-const MARCA = { logo: null };
+const MARCA = { logo: null, hero: null };
 
 /* Níveis do cartão fidelidade. Cada cartão completo abre o próximo nível.
    Cores tiradas das artes originais. */
@@ -506,6 +512,7 @@ async function carregarCatalogo(){
   const conf = Object.fromEntries((cfg.data || []).map(c => [c.chave, c.valor]));
   if (conf.meta_carimbos) META_CARIMBOS = Number(conf.meta_carimbos) || 10;
   MARCA.logo = conf.logo_url || null;
+  MARCA.hero = conf.hero_url || null;
 
   const lista = document.getElementById("sabores-lista");
   if (lista) lista.innerHTML = PRODUTOS.map(p => `<option value="${esc(p.nome)}">`).join("");
@@ -1392,10 +1399,13 @@ function vHome(){
     : conesRestantes===1 ? "Resta 1 cone hoje" : `Restam ${conesRestantes} cones hoje`;
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;display:flex;flex-direction:column;gap:3rem">
     <section class="hero">
-      <span class="big" aria-hidden>🍦</span>
+      ${MARCA.hero
+        ? `<img class="hero-img" src="${MARCA.hero}" alt="" aria-hidden="true">`
+        : `<span class="big" aria-hidden>🍦</span>`}
       <p class="carimbo" style="display:inline-block;padding:.25rem .75rem;font-size:.7rem;font-weight:700;
         letter-spacing:.12em;text-transform:uppercase;color:var(--casquinha-claro)">${tagEstoque}</p>
-      <h1 class="display">Cones trufados artesanais, entregues na sua mesa</h1>
+      <h1 class="display" style="font-size:clamp(2.4rem,6vw,3.8rem);max-width:22rem">
+        Cones trufados, entregues na sua mesa</h1>
       <p style="margin-top:.75rem;font-size:.875rem;color:rgb(255 249 242/.7);max-width:26rem">
         Leve dois cones e pague menos.</p>
       <a href="#catalogo" class="btn" style="margin-top:1.5rem;background:var(--casquinha);color:var(--cacau);font-weight:700">Ver os sabores</a>
@@ -2517,6 +2527,53 @@ async function enviarLogo(input){
   }
 }
 
+const HERO_WEBP = "marca/hero.webp";
+const HERO_PNG  = "marca/hero.png";
+
+async function enviarHero(input){
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)){ alert("Escolha um arquivo de imagem."); return; }
+  const rotulo = document.getElementById("hero-rotulo");
+  if (rotulo) rotulo.textContent = "Enviando...";
+  try {
+    // PNG preserva o fundo transparente do cone recortado.
+    const ehPng = /png/i.test(f.type);
+    const corpo = ehPng ? f : await prepararImagem(f, 1000, 0.9);
+    const caminho = ehPng ? HERO_PNG : HERO_WEBP;
+    const tipo = ehPng ? "image/png" : "image/webp";
+
+    if (ehPng && f.size > 2 * 1024 * 1024){
+      alert("O PNG está com mais de 2 MB. Reduza antes de enviar, senão a página fica lenta.");
+      if (rotulo) rotulo.textContent = "Enviar imagem";
+      return;
+    }
+
+    const up = await sb.storage.from("produtos").upload(caminho, corpo, { upsert: true, contentType: tipo });
+    if (up.error) throw up.error;
+    await sb.storage.from("produtos").remove([ehPng ? HERO_WEBP : HERO_PNG]);
+
+    const { data } = sb.storage.from("produtos").getPublicUrl(caminho);
+    const url = data.publicUrl + "?v=" + Date.now();
+    const { error } = await sb.from("settings").upsert({ chave: "hero_url", valor: url }, { onConflict: "chave" });
+    if (error) throw error;
+    MARCA.hero = url;
+    render();
+  } catch (e) {
+    avisarErro(e, "enviar a imagem de destaque");
+    if (rotulo) rotulo.textContent = "Enviar imagem";
+  }
+}
+
+async function removerHero(){
+  if (!confirm("Remover a imagem de destaque do topo?")) return;
+  await sb.storage.from("produtos").remove([HERO_WEBP, HERO_PNG]);
+  const { error } = await sb.from("settings").delete().eq("chave", "hero_url");
+  if (error){ avisarErro(error, "remover a imagem de destaque"); return; }
+  MARCA.hero = null;
+  render();
+}
+
 async function removerLogo(){
   if (!confirm("Voltar para a logo padrão?")) return;
   await sb.storage.from("produtos").remove([LOGO_WEBP, LOGO_SVG]);
@@ -2583,6 +2640,25 @@ function vAdminDash(){
         </label>
         ${MARCA.logo ? `<button style="font-size:.78rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
           onclick="removerLogo()">voltar ao padrão</button>` : ""}
+      </div>
+
+      <h2 class="display" style="font-size:1.1rem;font-weight:700;margin-top:1.5rem">Imagem de destaque da home</h2>
+      <p class="muted" style="font-size:.8rem;margin-top:.25rem">
+        Aparece grande no canto inferior direito do bloco escuro do topo.
+        Ideal: foto do cone <strong>recortada, em PNG com fundo transparente</strong>, na vertical.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:1rem;margin-top:.9rem">
+        <div style="background:var(--cacau);border-radius:.8rem;padding:.6rem;display:grid;place-items:center;
+          min-width:7rem;min-height:5rem">
+          ${MARCA.hero
+            ? `<img src="${MARCA.hero}" alt="Imagem atual" style="max-height:5rem;max-width:8rem;object-fit:contain;display:block">`
+            : `<span style="color:var(--chantilly);font-size:1.6rem">🍦</span>`}
+        </div>
+        <label class="btn btn-ghost" style="cursor:pointer">
+          <span id="hero-rotulo">${MARCA.hero ? "Trocar imagem" : "Enviar imagem"}</span>
+          <input type="file" accept="image/*" style="display:none" onchange="enviarHero(this)">
+        </label>
+        ${MARCA.hero ? `<button style="font-size:.78rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
+          onclick="removerHero()">remover</button>` : ""}
       </div>
     </section>
 
