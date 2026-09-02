@@ -251,9 +251,8 @@
 
   .fid-grade{position:relative;z-index:2;display:grid;
     grid-template-columns:repeat(var(--colunas,5),minmax(0,1fr));justify-content:center;
-    gap:clamp(.45rem,1.6vw,1.1rem);margin:1.4rem auto 0;
-    max-width:calc(var(--colunas,5) * 5.2rem)}
-  .fid-selo{aspect-ratio:1;width:100%;max-width:4rem;margin:0 auto;border-radius:9999px;background:#fff;
+    gap:clamp(.4rem,1.4vw,1.15rem);margin:1.5rem auto 0;width:100%}
+  .fid-selo{aspect-ratio:1;width:100%;margin:0 auto;border-radius:9999px;background:#fff;
     display:grid;place-items:center;
     box-shadow:0 2px 6px -2px rgba(0,0,0,.35), inset 0 -2px 4px -2px rgba(74,58,110,.28)}
   .fid-selo svg{width:66%;height:66%}
@@ -312,14 +311,11 @@
   .sug-item:hover,.sug-item:focus-visible{background:var(--chantilly-esc)}
   .sug-lista li + li .sug-item{border-top:1px solid rgb(62 39 35/.1)}
   /* a faixa dos cartões ocupa a tela inteira, ignorando as margens da página */
-  .fid-carrossel{display:flex;align-items:stretch;gap:1rem;overflow-x:auto;scroll-snap-type:x mandatory;
+  .fid-carrossel{display:flex;align-items:start;gap:1rem;overflow-x:auto;scroll-snap-type:x mandatory;
     width:100vw;max-width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);
     padding:.25rem max(1rem, calc(50vw - min(30rem, 86vw) / 2)) 1.1rem;
     scrollbar-width:thin;overscroll-behavior-x:contain}
-  .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86vw);scroll-snap-align:center;
-    display:flex;flex-direction:column}
-  /* todos os cartões guardam a mesma proporção, com 10, 14 ou 16 círculos */
-  .fid-carrossel .fid{flex:1;aspect-ratio:2.23/1;display:flex;flex-direction:column;justify-content:center}
+  .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86vw);scroll-snap-align:center}
   .fid-slide-rotulo{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.55);
     margin-bottom:.35rem;display:block}
   .fid-slide.completo .fid{opacity:.92}
