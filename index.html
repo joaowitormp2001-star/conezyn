@@ -847,6 +847,16 @@ function copiarPix(codigo, botao){
 }
 
 /* ---------- Engine de preços (espelho de src/lib/pricing/) ---------- */
+/* Valor do cone de brinde, com a mesma regra do banco:
+   um cone só no pedido usa o preço avulso; dois ou mais, o de dupla.
+   Nunca passa do total. */
+function descontoBrinde(pr){
+  if (!S.fidelidade?.temBrinde || pr.cones < 1) return 0;
+  const menorUnit  = Math.min(...pr.linhas.map(l => l.unit));
+  const menorDupla = Math.min(...pr.linhas.map(l => l.dupla));
+  return Math.min(pr.cones === 1 ? menorUnit : menorDupla, pr.total);
+}
+
 function precificar(){
   const linhas = Object.entries(S.carrinho).filter(([,q])=>q>0).map(([id,q])=>{
     const p = byId(id);
@@ -1765,10 +1775,13 @@ let pqv = 1;
 function pq(d){ const p=byId(S.param); pqv=Math.min(Math.max(1,pqv+d),Math.max(p.estoque,1)); render(); }
 
 function vBreakdown(pr){
+  const brinde = descontoBrinde(pr);
   return `<dl class="linhas">
     <div class="muted"><dt>Subtotal individual</dt><dd>${reais(pr.subtotal)}</dd></div>
     ${pr.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia</dt><dd>− ${reais(pr.economia)}</dd></div>`:""}
-    <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total)}</dd></div>
+    ${brinde>0?`<div style="font-weight:700;color:#B4590F"><dt>🎁 Cone de brinde</dt>
+      <dd>− ${reais(brinde)}</dd></div>`:""}
+    <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total - brinde)}</dd></div>
   </dl>`;
 }
 function vCarrinho(){
@@ -1885,9 +1898,14 @@ function vCheckout(){
     </div>
     <aside class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Resumo do pedido</h2>
-      ${S.fidelidade.temBrinde ? `<p style="margin-top:.5rem;background:rgba(235,121,28,.12);
-        color:#B4590F;border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
-        🎁 Seu cartão está completo — 1 cone deste pedido sai de graça. O desconto entra ao confirmar.</p>` : ""}
+      ${(() => {
+        const desc = descontoBrinde(pr);
+        if (!desc) return "";
+        return `<p style="margin-top:.5rem;background:rgba(235,121,28,.12);
+          color:#B4590F;border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
+          🎁 Cartão fidelidade completo — 1 cone deste pedido sai de graça,
+          ${reais(desc)} já descontados abaixo.</p>`;
+      })()}
       <dl class="linhas" style="margin-top:.75rem">
         ${pr.linhas.map(l=>`<div><dt>${l.q}× ${esc(byId(l.id).nome)}</dt><dd style="font-weight:600">${reais(l.efetivo)}</dd></div>`).join("")}
       </dl>
