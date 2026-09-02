@@ -553,7 +553,8 @@ const S = {
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], fichaAberta: null, carregado: false,
-           form: {}, pedidosExpandidos: {}, clienteEditando: null, setoresExpandidos: false, importacao: null,
+           form: {}, pedidosExpandidos: {}, clienteEditando: null, fichaEditando: null,
+           setoresExpandidos: false, importacao: null,
            abaAvaliacao: 'pendentes' },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
@@ -3811,6 +3812,36 @@ async function confirmarImportacao(){
   render();
 }
 
+function editarFicha(id){
+  S.admin.fichaEditando = S.admin.fichaEditando === id ? null : id;
+  render();
+}
+
+async function salvarDadosFicha(id){
+  const nome  = document.getElementById("fe-nome-" + id).value.trim();
+  const tel   = document.getElementById("fe-tel-" + id).value.trim();
+  const setor = document.getElementById("fe-setor-" + id).value.trim();
+  const gen   = document.getElementById("fe-genero-" + id).value;
+
+  if (nome.length < 2){ alert("Informe o nome completo."); return; }
+  if (tel && !telefoneValido(tel)){
+    alert("WhatsApp inválido. Use DDD + número, ou deixe vazio.");
+    return;
+  }
+
+  const { error } = await sb.from("pre_clientes").update({
+    nome,
+    telefone: tel ? digitos(tel) : null,
+    setor: setorOficial(setor) || setor || null,
+    genero: gen || null,
+  }).eq("id", id);
+
+  if (error){ avisarErro(error, "salvar os dados da ficha"); return; }
+  S.admin.fichaEditando = null;
+  await carregarAdmin();
+  render();
+}
+
 async function definirGeneroFicha(fichaId, genero){
   const { error } = await sb.from("pre_clientes")
     .update({ genero: genero || null }).eq("id", fichaId);
@@ -4518,6 +4549,7 @@ function vFicha(f){
   const expandido = !!S.admin.pedidosExpandidos[f.id];
   const visiveis  = expandido ? compras : compras.slice(0, 3);
   const dono      = f.vinculado_a ? S.admin.clientes.find(c => c.id === f.vinculado_a) : null;
+  const editando  = S.admin.fichaEditando === f.id;
   const form      = linhasDe(f.id);
 
   const dataBr = d => d ? new Date(d + "T12:00").toLocaleDateString("pt-BR") : null;
@@ -4549,10 +4581,41 @@ function vFicha(f){
         <option value="f" ${f.genero==="f"?"selected":""}>Feminino</option>
       </select>
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+        onclick="editarFicha('${f.id}')">${editando ? "Cancelar" : "Editar"}</button>
+      <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
         onclick="abrirFicha('${f.id}')">${aberta ? "Fechar" : "Detalhes"}</button>
       <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
         padding:.25rem .8rem;font-size:.75rem" onclick="excluirFicha('${f.id}')">Excluir</button>
     </div>
+
+    ${!editando ? "" : `<div style="border-top:1px solid rgb(62 39 35/.08);margin-top:.75rem;padding-top:.75rem;
+        display:flex;flex-wrap:wrap;gap:.5rem;align-items:end">
+      <label style="font-size:.72rem;font-weight:600;flex:1.5;min-width:9rem">Nome
+        <input id="fe-nome-${f.id}" class="field" value="${esc(f.nome)}"
+          style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
+      <label style="font-size:.72rem;font-weight:600;flex:1.2;min-width:9rem">WhatsApp
+        <input id="fe-tel-${f.id}" class="field" type="tel" maxlength="16"
+          value="${esc(mascaraTelefone(f.telefone || ""))}" placeholder="(11) 9 9999-9999"
+          oninput="aoDigitarTelefone(this)"
+          style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
+      <label style="font-size:.72rem;font-weight:600;flex:1;min-width:7rem">Setor
+        <input id="fe-setor-${f.id}" class="field" value="${esc(f.setor || "")}" autocomplete="off"
+          oninput="desenharSetores('fe-setor-tags-${f.id}','fe-setor-${f.id}')"
+          style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
+      <label style="font-size:.72rem;font-weight:600;min-width:7rem">Trato no cartão
+        <select id="fe-genero-${f.id}" class="field"
+          style="padding:.4rem .6rem;display:block;margin-top:.15rem">
+          <option value="" ${!f.genero?"selected":""}>Neutro</option>
+          <option value="m" ${f.genero==="m"?"selected":""}>Masculino</option>
+          <option value="f" ${f.genero==="f"?"selected":""}>Feminino</option>
+        </select></label>
+      <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
+        onclick="salvarDadosFicha('${f.id}')">Salvar</button>
+      <div id="fe-setor-tags-${f.id}" class="setor-caixa" style="width:100%"></div>
+      ${f.vinculado_a ? `<p class="muted" style="width:100%;font-size:.72rem">
+        Esta ficha está vinculada a uma conta. Editar aqui muda só a ficha —
+        para alterar a conta, use "Editar" em Contas ativas.</p>` : ""}
+    </div>`}
 
     ${!aberta ? "" : `<div style="border-top:1px solid rgb(62 39 35/.08);margin-top:.75rem;padding-top:.75rem">
 
@@ -4672,6 +4735,11 @@ function render(){
   if (document.getElementById("pr-setor-tags")) desenharSetores("pr-setor-tags", "pr-setor");
   if (document.getElementById("f-setor-tags")) desenharSetores("f-setor-tags", "f-setor");
   if (document.getElementById("c-setor-tags")) desenharSetores("c-setor-tags", "c-setor");
+  if (S.admin.fichaEditando){
+    const id = S.admin.fichaEditando;
+    if (document.getElementById(`fe-setor-tags-${id}`))
+      desenharSetores(`fe-setor-tags-${id}`, `fe-setor-${id}`);
+  }
   // o carrossel abre no cartão atual, com os completos à esquerda
   const carrossel = document.getElementById("fid-carrossel");
   if (carrossel){
