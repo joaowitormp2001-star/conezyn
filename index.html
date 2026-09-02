@@ -250,12 +250,15 @@
   .fid-titulo strong{font-weight:800;color:var(--destaque)}
 
   .fid-grade{position:relative;z-index:2;display:grid;
-    grid-template-columns:repeat(5,minmax(0,4rem));justify-content:center;
-    gap:1.15rem;margin:1.5rem auto 0}
-  .fid-selo{aspect-ratio:1;width:100%;border-radius:9999px;background:#fff;
+    grid-template-columns:repeat(var(--colunas,5),minmax(0,1fr));justify-content:center;
+    gap:clamp(.45rem,1.6vw,1.1rem);margin:1.4rem auto 0;
+    max-width:calc(var(--colunas,5) * 5.2rem)}
+  .fid-selo{aspect-ratio:1;width:100%;max-width:4rem;margin:0 auto;border-radius:9999px;background:#fff;
     display:grid;place-items:center;
     box-shadow:0 2px 6px -2px rgba(0,0,0,.35), inset 0 -2px 4px -2px rgba(74,58,110,.28)}
   .fid-selo svg{width:66%;height:66%}
+  .fid-rodape{position:relative;z-index:2;text-align:center;margin-top:1rem;
+    font-size:.78rem;opacity:.9}
 
   /* ---------- acabamento vintage ---------- */
   /* papel envelhecido: ruído sutil por cima da cor do nível */
@@ -299,7 +302,8 @@
 
   @media(max-width:520px){
     .fid{padding:1.7rem 1rem 1.9rem}
-    .fid-grade{grid-template-columns:repeat(5,minmax(0,3.1rem));gap:.7rem;margin-top:1.2rem}}
+    .fid-grade{gap:.4rem;margin-top:1rem}
+    .fid-selo{max-width:3.1rem}}
   /* lista de sugestões do presente */
   .sug-lista{list-style:none;position:absolute;z-index:20;left:0;right:0;margin-top:.35rem;
     background:var(--chantilly);border:1px solid rgb(62 39 35/.22);border-radius:.8rem;overflow:hidden;
@@ -416,7 +420,7 @@ let AVALIACOES = [];   // idem
 const MIN_DEPOIMENTOS = 7;
 const STATUS = ["Pedido feito","Entregue","Pagamento concluído"];   // fluxo normal
 const STATUS_TODOS = [...STATUS, "Cancelado"];                       // + saída de emergência
-let META_CARIMBOS = 10;
+let META_CARIMBOS = 10;   // usado só como reserva; cada cartão tem sua meta
 const MARCA = { logo: null, hero: null, quadros: [null, null, null] };
 
 /* Os quadros da animação de carregamento ficam guardados neste
@@ -430,28 +434,72 @@ function salvarQuadrosCache(q){
   try { localStorage.setItem(QUADROS_CACHE, JSON.stringify(q)); } catch { /* ignora */ }
 }
 
-/* Níveis do cartão fidelidade. Cada cartão completo abre o próximo nível.
-   Cores tiradas das artes originais.
-   Convenção: o título sempre traz o (a) — Coneiro(a), Mestre(a), Dr(a). */
+/* Níveis do cartão fidelidade. Cada cartão completo abre o próximo.
+   `meta` é quantos carimbos aquele cartão tem — os últimos são maiores.
+   `bonus` marca os círculos que já nascem com um selo de recompensa. */
 const NIVEIS = [
-  { chave:"coneiro", titulo:"Coneiro(a)",
-    premio:"um conezyn",
+  { chave:"coneiro",  titulo:{ m:"Coneiro", f:"Coneira" }, meta:10,
+    subtitulo:"Complete e ganhe:", rodape:null, premio:"um conezyn",
     fundo:"#4A3A6E", fundoEsc:"#332750", fundoClaro:"#5D4A87",
     destaque:"#FFD9A0", badgeFundo:"#FFD9A0", badgeTexto:"#332750",
-    selo:"#4A3A6E", enfeite:"cone" },
-  { chave:"mestre", titulo:"Mestre(a) Cônus",
-    premio:"um conezyn",
+    selo:"#4A3A6E", enfeite:"cone", bonus:[] },
+
+  { chave:"mestre",   titulo:{ m:"Mestre Cônus", f:"Mestra Cônus" }, meta:10,
+    subtitulo:"Complete e ganhe:", rodape:null, premio:"um conezyn",
     fundo:"#B84614", fundoEsc:"#7D2D27", fundoClaro:"#CE5A22",
     destaque:"#FFD9A0", badgeFundo:"#471C76", badgeTexto:"#FFFFFF",
-    selo:"#B84614", enfeite:"formatura" },
-  { chave:"doutor", titulo:"Dr(a). Cônus",
-    premio:"50% OFF + um conezyn",
+    selo:"#B84614", enfeite:"formatura", bonus:[] },
+
+  { chave:"doutor",   titulo:{ m:"Dr. Cônus", f:"Dra. Cônus" }, meta:10,
+    subtitulo:"Complete e ganhe:", rodape:null, premio:"50% OFF + um conezyn",
     fundo:"#950007", fundoEsc:"#68031F", fundoClaro:"#B00A12",
     destaque:"#EB791C", badgeFundo:"#EB791C", badgeTexto:"#68031F",
-    selo:"#950007", enfeite:"gravata", bonusNoSelo:5, bonusTexto:"50%<tspan x='24' dy='14'>OFF</tspan>",
-    bonusCor:"#9F8DB1" },
+    selo:"#950007", enfeite:"gravata",
+    bonus:[{ pos:5, texto:"50%", texto2:"OFF", cor:"#9F8DB1" }] },
+
+  { chave:"sir",      titulo:{ m:"Sir Cônus", f:"Lady Cônus" }, meta:10,
+    subtitulo:"Missão dada!", rodape:"Você não para?", premio:"50% OFF + um conezyn",
+    fundo:"#2D1900", fundoEsc:"#1C0F00", fundoClaro:"#402400",
+    destaque:"#C8B49A", badgeFundo:"#FFFFFF", badgeTexto:"#2D1900",
+    selo:"#2D1900", enfeite:"elmo",
+    bonus:[{ pos:7, texto:"50%", texto2:"OFF", cor:"#9A8B7A" }] },
+
+  { chave:"king",     titulo:{ m:"King Cônus", f:"Queen Cônus" }, meta:14,
+    subtitulo:"Majestade...", rodape:"Reinado impiedoso!", premio:"dois conezyns",
+    fundo:"#8E1BA8", fundoEsc:"#320E4A", fundoClaro:"#B21DC1",
+    destaque:"#E1A314", badgeFundo:"#E1A314", badgeTexto:"#8E1BA8",
+    selo:"#8E1BA8", enfeite:"coroa",
+    bonus:[{ pos:4,  texto:"25%", texto2:"OFF", cor:"#9A8B7A" },
+           { pos:7,  texto:"50%", texto2:"OFF", cor:"#9A8B7A" }],
+    duplo:true },
+
+  { chave:"imperador", titulo:{ m:"Imperador Cônus", f:"Imperatriz Cônus" }, meta:16,
+    subtitulo:"Poder máximo!", rodape:"Um guerreiro carregando o mundo, merece um cone!",
+    premio:"dois conezyns",
+    fundo:"#3A3A3A", fundoEsc:"#111111", fundoClaro:"#575757",
+    destaque:"#F7C144", badgeFundo:"#E1A314", badgeTexto:"#111111",
+    selo:"#3A3A3A", enfeite:"cone",
+    bonus:[], marcaMeio:8, duplo:true },
 ];
+
 const nivelDe = i => NIVEIS[Math.min(i, NIVEIS.length - 1)];
+
+/* Título conforme o gênero informado. Sem gênero, usa o masculino. */
+function tituloNivel(nv, genero){
+  return genero === "f" ? nv.titulo.f : nv.titulo.m;
+}
+const CARIMBOS_MAXIMOS = () => NIVEIS.reduce((n, x) => n + x.meta, 0);
+
+/* Traduz o total acumulado em: quantos cartões fechou e quanto falta no atual. */
+function progressoCartoes(total){
+  let resta = total, completos = 0;
+  for (const nv of NIVEIS){
+    if (resta >= nv.meta){ resta -= nv.meta; completos++; }
+    else break;
+  }
+  return { completos, noAtual: completos < NIVEIS.length ? resta : 0,
+           passouDoFim: completos >= NIVEIS.length };
+}
 
 /* Setores da empresa. `apelidos` são as outras formas como a equipe
    se refere ao mesmo setor — servem para filtrar, mas o valor gravado
@@ -618,6 +666,7 @@ async function carregarPerfil(){
     email: data?.email || user.email || "",
     foto: data?.foto_url || null,
     setor: data?.setor || "",
+    genero: data?.genero || null,
     admin: data?.papel === "admin",
   };
 }
@@ -700,7 +749,10 @@ async function carregarFidelidade(){
     historico: hist,
     resgates: r ? Number(r.resgates) : 0,
     temBrinde: r ? r.tem_brinde === true : false,
+    completos: r ? Number(r.completos) : 0,
+    maximo: r ? Number(r.maximo) : CARIMBOS_MAXIMOS(),
   };
+  if (r && r.genero && S.perfil) S.perfil.genero = r.genero;
 }
 
 /* Mensagem de erro amigável (prompt, seção 40). */
@@ -2228,7 +2280,7 @@ function vConta(){
     <section aria-labelledby="previa-fid">
       <h2 id="previa-fid" class="display" style="font-size:1.1rem;font-weight:700;margin-bottom:.6rem">
         Meu cartão fidelidade</h2>
-      ${cartaoFidelidade(Math.max(carimbos().total, 1), S.perfil.nome)}
+      ${cartaoFidelidade(Math.min(Math.max(carimbos().total, 1), NIVEIS[0].meta), S.perfil.nome, 0, S.perfil.genero)}
       <p class="muted" style="font-size:.72rem;margin-top:.5rem;text-align:center">
         Cada cone entregue vale um carimbo.
         <button style="font-weight:700;text-decoration:underline" onclick="nav('fidelidade')">Ver histórico</button></p>
@@ -2357,6 +2409,24 @@ function svgEnfeite(tipo){
       </g>
     </svg>`;
   }
+  if (tipo === "elmo"){        // elmo de cavaleiro sobre o cone
+    return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g transform="rotate(-8 24 24)">
+        <path d="M15 10 h18 l-9 34 Z" fill="${c}"/>
+        <path d="M14 6 q10 -5 20 0 v10 q-10 5 -20 0 Z" fill="${c}"/>
+        <path d="M18 9 q6 -3 12 0" stroke="#fff" stroke-width="1.2" fill="none" opacity=".35"/>
+        <rect x="17" y="12" width="6" height="2.4" rx="1" fill="#fff" opacity=".3"/>
+      </g>
+    </svg>`;
+  }
+  if (tipo === "coroa"){       // coroa sobre o cone
+    return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g transform="rotate(-8 24 24)">
+        <path d="M16 16 h16 l-8 28 Z" fill="${c}"/>
+        <path d="M13 6 l5 6 6 -8 6 8 5 -6 -2 10 h-18 Z" fill="${c}"/>
+      </g>
+    </svg>`;
+  }
   if (tipo === "gravata"){     // cone com gravata de doutor
     return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <g transform="rotate(-10 24 24)">
@@ -2371,7 +2441,7 @@ function svgEnfeite(tipo){
 
 /* Cone em SVG. `marca` aceita/* Cone em SVG. `marca` aceita "mais" (+ laranja) ou "check" (✓ verde).
    Ambos levam contorno branco para destacar sobre o cone. */
-function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
+function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null, duplo=false } = {}){
   const cruz = "M -2 -7.5 H 2 V -2 H 7.5 V 2 H 2 V 7.5 H -2 V 2 H -7.5 V -2 H -2 Z";
   const tique = "M -6.5 0 L -2 4.8 L 6.8 -5";
   const enfeite =
@@ -2388,11 +2458,14 @@ function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
                  stroke-linecap="round" stroke-linejoin="round"/>
          </g>`
       : "";
-  return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <g transform="rotate(-28 24 24)">
+  const cone = (dx, dy, giro, escala) => `<g transform="translate(${dx} ${dy}) rotate(${giro} 24 24) scale(${escala})">
       <path d="M24 6 L34 12 L25.6 41.4 Q24 44.4 22.4 41.4 L14 12 Z" fill="${casquinha}" opacity=".55"/>
       <ellipse cx="24" cy="10" rx="10.5" ry="5" fill="${recheio}"/>
-    </g>
+    </g>`;
+  return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    ${duplo
+      ? cone(-5, -2, -34, 0.82) + cone(9, 2, 26, 0.82)
+      : cone(0, 0, -28, 1)}
     ${enfeite}
   </svg>`;
 }
@@ -2430,91 +2503,90 @@ function atualizarSetasCartoes(){
   }
 }
 
-function carrosselCartoes(carimbos, nome){
-  const completos = Math.floor(carimbos / META_CARIMBOS);
+function carrosselCartoes(carimbos, nome, genero = null){
+  const prog = progressoCartoes(carimbos);
   const ehAdmin = !!S.perfil?.admin;
-
-  // O administrador enxerga todos os níveis existentes, mesmo os que
-  // ainda não conquistou — serve para conferir a arte de cada cartão.
   const total = ehAdmin
-    ? Math.max(completos + 1, NIVEIS.length)
-    : completos + 1;
+    ? Math.max(prog.completos + (prog.passouDoFim ? 0 : 1), NIVEIS.length)
+    : Math.min(prog.completos + (prog.passouDoFim ? 0 : 1), NIVEIS.length);
 
   const slides = [];
   for (let i = 0; i < total; i++){
-    const ehAtual  = i === completos;
-    const ehPrevia = i > completos;
-    // O cartão em uso mostra só o que sobrou do último completo.
-    // Sem isto, um total de 20 fazia o 3º cartão aparecer cheio.
-    const valor = ehAtual ? (carimbos % META_CARIMBOS)
-                : ehPrevia ? 0
-                : META_CARIMBOS;
+    const ehAtual  = i === prog.completos && !prog.passouDoFim;
+    const ehPrevia = i > prog.completos;
+    const cheios = ehAtual ? prog.noAtual : ehPrevia ? 0 : NIVEIS[i].meta;
 
     slides.push(`<div class="fid-slide ${ehAtual || ehPrevia ? "" : "completo"}">
       <span class="fid-slide-rotulo">
-        ${nivelDe(i).titulo} ·
+        ${esc(tituloNivel(nivelDe(i), genero))} ·
         ${ehAtual
-          ? (completos > 0 ? "em andamento" : "seu cartão")
+          ? (prog.completos > 0 ? "em andamento" : "seu cartão")
           : ehPrevia
             ? `<span style="color:var(--casquinha)">prévia (só você vê)</span>`
             : "completo ✓"}
       </span>
-      ${cartaoFidelidade(valor, nome, i)}
+      ${cartaoFidelidade(cheios, nome, i, genero)}
     </div>`);
   }
 
-  const aviso = ehAdmin && total > completos + 1
-    ? `Como administrador, você vê todos os ${NIVEIS.length} níveis do cartão. Arraste para o lado.`
-    : completos > 0
-      ? `⬅ Arraste para ver os ${completos} cartão(ões) que você já completou.`
-      : "";
+  const aviso = prog.passouDoFim
+    ? `🏆 Você completou todos os ${NIVEIS.length} cartões! Um novo nível está a caminho.`
+    : ehAdmin && total > prog.completos + 1
+      ? `Como administrador, você vê todos os ${NIVEIS.length} níveis do cartão. Arraste para o lado.`
+      : prog.completos > 0
+        ? `⬅ Arraste para ver os ${prog.completos} cartão(ões) que você já completou.`
+        : "";
 
   return `<div class="fid-carrossel" id="fid-carrossel"
-      aria-label="Cartões fidelidade${completos ? `, ${completos} completo(s)` : ""}">
+      aria-label="Cartões fidelidade${prog.completos ? `, ${prog.completos} completo(s)` : ""}">
     ${slides.join("")}
   </div>
   ${total >= 2 ? `<div class="fid-nav">
-    <button class="fid-seta" id="fid-ant" aria-label="Cartão anterior"
-      onclick="rolarCartoes(-1)">‹</button>
+    <button class="fid-seta" id="fid-ant" aria-label="Cartão anterior" onclick="rolarCartoes(-1)">‹</button>
     <span class="muted" style="font-size:.78rem" id="fid-pos"></span>
-    <button class="fid-seta" id="fid-prox" aria-label="Próximo cartão"
-      onclick="rolarCartoes(1)">›</button>
+    <button class="fid-seta" id="fid-prox" aria-label="Próximo cartão" onclick="rolarCartoes(1)">›</button>
   </div>` : ""}
   ${aviso ? `<p class="muted" style="font-size:.78rem;text-align:center;margin-top:.4rem">${aviso}</p>` : ""}`;
 }
 
-/* Réplica em código do cartão físico da conezyn, em três níveis. */
-function cartaoFidelidade(carimbos, nome, indiceCartao = 0){
+/* Réplica em código dos cartões físicos da conezyn.
+   `cheios` é quanto já foi carimbado NESTE cartão (não o total geral). */
+function cartaoFidelidade(cheios, nome, indiceCartao = 0, genero = null){
   const nv = nivelDe(indiceCartao);
-  const noCartao  = carimbos % META_CARIMBOS;
-  const completo  = carimbos > 0 && noCartao === 0;
-  const cheios    = completo ? META_CARIMBOS : noCartao;
+  const meta = nv.meta;
+  const completo = cheios >= meta;
+  const colunas = Math.ceil(meta / 2);
 
-  const selos = Array.from({ length: META_CARIMBOS }, (_, i) => {
-    const ultimo  = i === META_CARIMBOS - 1;
+  const selos = Array.from({ length: meta }, (_, i) => {
+    const pos = i + 1;
+    const ultimo  = pos === meta;
     const marcado = i < cheios;
-    const bonus   = nv.bonusNoSelo && i === nv.bonusNoSelo - 1;
+    const bonus = (nv.bonus || []).find(b => b.pos === pos);
 
-    // selo do bônus (o "50% OFF" do cartão vermelho)
+    // selo de desconto do meio do cartão, enquanto não é conquistado
     if (bonus && !marcado){
       return `<span class="fid-selo">
         <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <text x="24" y="19" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-weight="800" font-size="16" fill="${nv.bonusCor}">${nv.bonusTexto}</text>
+            font-weight="800" font-size="16" fill="${bonus.cor}">${bonus.texto}<tspan x="24" dy="14">${bonus.texto2}</tspan></text>
         </svg></span>`;
     }
 
-    const marca = ultimo ? (completo ? "check" : "mais") : null;
+    // marca de recompensa: no último círculo e, quando houver, no meio
+    const ehMarca = ultimo || (nv.marcaMeio && pos === nv.marcaMeio);
+    const marca = ehMarca ? (completo && ultimo ? "check" : "mais") : null;
+    const duplo = ehMarca && nv.duplo && ultimo;
+
     return marcado
-      ? `<span class="fid-selo">${svgCone({ recheio: nv.selo, casquinha: nv.selo, marca })}</span>`
-      : `<span class="fid-selo">${ultimo ? svgCone({ marca }) : ""}</span>`;
+      ? `<span class="fid-selo">${svgCone({ recheio: nv.selo, casquinha: nv.selo, marca, duplo })}</span>`
+      : `<span class="fid-selo">${ehMarca ? svgCone({ marca, duplo }) : ""}</span>`;
   }).join("");
 
   const estilo = `--roxo:${nv.fundo};--roxo-esc:${nv.fundoEsc};--roxo-claro:${nv.fundoClaro};` +
-                 `--destaque:${nv.destaque}`;
+                 `--destaque:${nv.destaque};--colunas:${colunas}`;
 
   return `<div class="fid vintage" style="${estilo}" role="img"
-      aria-label="Cartão ${nv.titulo}: ${cheios} de ${META_CARIMBOS} carimbos">
+      aria-label="Cartão ${tituloNivel(nv, genero)}: ${cheios} de ${meta} carimbos">
     <span class="fid-textura"></span>
     <span class="fid-moldura"></span>
     <svg class="fid-onda" viewBox="0 0 400 80" preserveAspectRatio="none" aria-hidden="true">
@@ -2526,27 +2598,34 @@ function cartaoFidelidade(carimbos, nome, indiceCartao = 0){
 
     <p class="fid-topo">${esc(nome || "Nome")}
       <span class="fid-badge" style="background:${nv.badgeFundo};color:${nv.badgeTexto}">
-        ${esc(nv.titulo)}</span></p>
-    <p class="fid-titulo">Complete e ganhe:</p>
+        ${esc(tituloNivel(nv, genero))}</span></p>
+    <p class="fid-titulo">${esc(nv.subtitulo)}</p>
 
-    <div class="fid-grade">${selos}</div>
+    <div class="fid-grade" style="grid-template-columns:repeat(${colunas},minmax(0,1fr))">${selos}</div>
+
+    ${nv.rodape ? `<p class="fid-rodape">${esc(nv.rodape)}</p>` : ""}
   </div>`;
 }
 
 function vFidelidade(){
   if (!S.perfil){ S.voltarPara="fidelidade"; return vLogin(false); }
   const d = carimbos();
-  const noCartao = d.total % META_CARIMBOS, completos = Math.floor(d.total/META_CARIMBOS);
-  const faltam = META_CARIMBOS - noCartao;
+  const prog = progressoCartoes(d.total);
+  const noCartao = prog.noAtual, completos = prog.completos;
+  const metaAtual = prog.passouDoFim ? 0 : nivelDe(completos).meta;
+  const faltam = Math.max(metaAtual - noCartao, 0);
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:48rem;display:flex;flex-direction:column;gap:1.25rem">
     <h1 class="display" style="font-size:1.9rem;font-weight:900">Minha fidelidade</h1>
-    ${carrosselCartoes(d.total, S.perfil.nome)}
+    ${carrosselCartoes(d.total, S.perfil.nome, S.perfil.genero)}
 
     <p class="muted" style="font-size:.82rem;text-align:center;margin-top:-.2rem">
       <strong style="color:var(--cacau)">${d.total}</strong> cone(s) acumulado(s) — os carimbos não expiram.
-      ${Math.floor(d.total / META_CARIMBOS) > 0
-        ? ` · ${Math.floor(d.total / META_CARIMBOS)} cartão(ões) completo(s), ${d.resgates} brinde(s) usado(s).`
+      ${progressoCartoes(d.total).completos > 0
+        ? ` · ${progressoCartoes(d.total).completos} cartão(ões) completo(s), ${d.resgates} brinde(s) usado(s).`
         : ""}
+      ${progressoCartoes(d.total).passouDoFim
+        ? `<br><strong style="color:#B4590F">🏆 Você completou todos os cartões!
+           Um novo nível está sendo preparado — em breve ele aparece aqui.</strong>` : ""}
       ${d.temBrinde ? `<br><strong style="color:#B4590F">🎁 Você tem um cone grátis esperando!
         Ele entra sozinho no seu próximo pedido.</strong>` : ""}</p>
 
@@ -3880,6 +3959,7 @@ async function salvarCliente(id){
     telefone: document.getElementById("cl-tel-" + id).value.trim(),
     email:    document.getElementById("cl-mail-" + id).value.trim() || null,
     setor:    document.getElementById("cl-setor-" + id).value.trim() || null,
+    genero:   document.getElementById("cl-genero-" + id).value || null,
   };
   if (!dados.nome){ alert("O nome não pode ficar vazio."); return; }
   const { error } = await sb.from("profiles").update(dados).eq("id", id);
@@ -4006,7 +4086,7 @@ function verCliente(id){
             <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
               onclick="ajustarCarimbos('${id}')">Definir</button>
             <span class="muted" style="font-size:.72rem">
-              ${Math.floor(c.carimbos / META_CARIMBOS)} cartão(ões) completo(s) ·
+              ${c.cartoes_completos ?? progressoCartoes(c.carimbos).completos} cartão(ões) completo(s) ·
               ${(S.pedidos.filter(p => p.clienteId === id && p.brinde > 0 && p.status !== "Cancelado").length)} brinde(s) usado(s)</span>
           </div>
         </div>
@@ -4209,6 +4289,24 @@ function vAdminClientes(){
           : ""}</p>
     </div>
 
+    ${(() => {
+      const cheios = S.admin.clientes.filter(c => c.passou_do_ultimo_cartao);
+      if (cheios.length === 0) return "";
+      return `<section class="card" style="padding:1rem;border-left:4px solid #E1A314"
+          aria-labelledby="max-cartoes">
+        <h2 id="max-cartoes" class="display" style="font-size:1rem;font-weight:800">
+          🏆 Passaram de todos os cartões (${cheios.length})</h2>
+        <p class="muted" style="font-size:.78rem;margin-top:.2rem">
+          Estas pessoas já completaram os ${NIVEIS.length} níveis (${CARIMBOS_MAXIMOS()} carimbos).
+          Vale criar um cartão novo — é só acrescentar um item na lista NIVEIS do código
+          e atualizar <code>metas_cartoes</code> nas configurações do banco.</p>
+        <ul style="list-style:none;margin-top:.6rem;display:flex;flex-wrap:wrap;gap:.4rem">
+          ${cheios.map(c => `<li class="badge b-classico" style="text-transform:none;font-size:.76rem">
+            ${esc(c.nome)} · ${c.carimbos} carimbos</li>`).join("")}
+        </ul>
+      </section>`;
+    })()}
+
     ${S.admin.senhas.length ? `<section class="card" style="padding:1rem;border-left:4px solid var(--framboesa)"
         aria-labelledby="senhas">
       <h2 id="senhas" class="display" style="font-size:1rem;font-weight:800">
@@ -4282,6 +4380,13 @@ function vAdminClientes(){
                 <label style="font-size:.72rem;font-weight:600;flex:1;min-width:7rem">Setor
                   <input id="cl-setor-${c.id}" class="field" value="${esc(c.setor || "")}"
                     style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
+                <label style="font-size:.72rem;font-weight:600;min-width:8rem">Trato no cartão
+                  <select id="cl-genero-${c.id}" class="field"
+                    style="padding:.4rem .6rem;display:block;margin-top:.15rem">
+                    <option value="" ${!c.genero?"selected":""}>Neutro (masculino)</option>
+                    <option value="m" ${c.genero==="m"?"selected":""}>Masculino</option>
+                    <option value="f" ${c.genero==="f"?"selected":""}>Feminino</option>
+                  </select></label>
                 <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
                   onclick="salvarCliente('${c.id}')">Salvar</button>
               </div>` : ""}
