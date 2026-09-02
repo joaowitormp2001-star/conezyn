@@ -259,7 +259,7 @@
 
   /* ---------- acabamento vintage ---------- */
   /* papel envelhecido: ruído sutil por cima da cor do nível */
-  .fid-textura{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.22;
+  .fid-textura{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.10;
     mix-blend-mode:overlay;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E")}
   /* moldura dupla, como cartão impresso antigo */
@@ -270,7 +270,7 @@
     border:1px dashed rgba(255,255,255,.28)}
   /* cantos escurecidos, como papel guardado há tempo */
   .fid.vintage{box-shadow:0 14px 34px -14px rgba(51,39,80,.6),
-    inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 70px rgba(0,0,0,.30)}
+    inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 60px rgba(0,0,0,.14)}
   .fid.vintage .fid-topo{letter-spacing:.06em;text-transform:uppercase;font-size:.85rem}
   .fid.vintage .fid-badge{letter-spacing:.08em;border-radius:.3rem;
     box-shadow:0 1px 0 rgba(255,255,255,.35) inset, 0 1px 3px rgba(0,0,0,.25)}
@@ -292,7 +292,7 @@
     background:
       radial-gradient(120% 80% at 18% -10%, rgba(255,255,255,.18), transparent 55%),
       radial-gradient(90% 70% at 105% 115%, rgba(239,184,200,.16), transparent 60%),
-      linear-gradient(160deg, rgba(255,255,255,.06) 0%, transparent 42%, rgba(0,0,0,.15) 100%)}
+      linear-gradient(160deg, rgba(255,255,255,.06) 0%, transparent 45%, rgba(0,0,0,.07) 100%)}
   .fid::after{content:"";position:absolute;left:-30%;top:-60%;width:55%;height:220%;
     pointer-events:none;z-index:1;transform:rotate(18deg);
     background:linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent)}
@@ -317,7 +317,7 @@
   .fid-carrossel > .fid-slide{flex:0 0 min(30rem,86vw);scroll-snap-align:center}
   .fid-slide-rotulo{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.55);
     margin-bottom:.35rem;display:block}
-  .fid-slide.completo .fid{opacity:.82}
+  .fid-slide.completo .fid{opacity:.92}
   .setor-caixa{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem}
   .setor-tag{border:1px solid rgb(62 39 35/.2);background:#fff;border-radius:9999px;
     padding:.28rem .7rem;font-size:.75rem;font-weight:600;transition:.12s;line-height:1.2}
@@ -2426,7 +2426,11 @@ function carrosselCartoes(carimbos, nome){
   for (let i = 0; i < total; i++){
     const ehAtual  = i === completos;
     const ehPrevia = i > completos;
-    const valor = ehAtual ? carimbos : ehPrevia ? 0 : (i + 1) * META_CARIMBOS;
+    // O cartão em uso mostra só o que sobrou do último completo.
+    // Sem isto, um total de 20 fazia o 3º cartão aparecer cheio.
+    const valor = ehAtual ? (carimbos % META_CARIMBOS)
+                : ehPrevia ? 0
+                : META_CARIMBOS;
 
     slides.push(`<div class="fid-slide ${ehAtual || ehPrevia ? "" : "completo"}">
       <span class="fid-slide-rotulo">
