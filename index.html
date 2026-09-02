@@ -377,23 +377,24 @@ let META_CARIMBOS = 10;
 const MARCA = { logo: null, hero: null };
 
 /* Níveis do cartão fidelidade. Cada cartão completo abre o próximo nível.
-   Cores tiradas das artes originais. */
+   Cores tiradas das artes originais.
+   Convenção: o título sempre traz o (a) — Coneiro(a), Mestre(a), Dr(a). */
 const NIVEIS = [
-  { chave:"coneiro", titulo:"Coneiro",
+  { chave:"coneiro", titulo:"Coneiro(a)",
     premio:"um conezyn",
     fundo:"#4A3A6E", fundoEsc:"#332750", fundoClaro:"#5D4A87",
     destaque:"#FFD9A0", badgeFundo:"#FFD9A0", badgeTexto:"#332750",
     selo:"#4A3A6E", enfeite:"cone" },
-  { chave:"mestre", titulo:"Mestre Cônus",
+  { chave:"mestre", titulo:"Mestre(a) Cônus",
     premio:"um conezyn",
     fundo:"#B84614", fundoEsc:"#7D2D27", fundoClaro:"#CE5A22",
     destaque:"#FFD9A0", badgeFundo:"#471C76", badgeTexto:"#FFFFFF",
     selo:"#B84614", enfeite:"formatura" },
-  { chave:"doutor", titulo:"Dr. Cônus",
+  { chave:"doutor", titulo:"Dr(a). Cônus",
     premio:"50% OFF + um conezyn",
     fundo:"#950007", fundoEsc:"#68031F", fundoClaro:"#B00A12",
     destaque:"#EB791C", badgeFundo:"#EB791C", badgeTexto:"#68031F",
-    selo:"#950007", enfeite:"gravata", bonusNoSelo:5, bonusTexto:"50%<tspan x='24' dy='11'>OFF</tspan>",
+    selo:"#950007", enfeite:"gravata", bonusNoSelo:5, bonusTexto:"50%<tspan x='24' dy='14'>OFF</tspan>",
     bonusCor:"#9F8DB1" },
 ];
 const nivelDe = i => NIVEIS[Math.min(i, NIVEIS.length - 1)];
@@ -2265,7 +2266,7 @@ function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
   const tique = "M -6.5 0 L -2 4.8 L 6.8 -5";
   const enfeite =
     marca === "mais"
-      ? `<g transform="translate(32 31)">
+      ? `<g transform="translate(32 25)">
            <path d="${cruz}" fill="#EFB8C8" stroke="#fff" stroke-width="3.2"
                  stroke-linejoin="round" paint-order="stroke"/>
          </g>`
@@ -2384,8 +2385,8 @@ function cartaoFidelidade(carimbos, nome, indiceCartao = 0){
     if (bonus && !marcado){
       return `<span class="fid-selo">
         <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <text x="24" y="20" text-anchor="middle" font-family="Montserrat,sans-serif"
-            font-weight="800" font-size="13" fill="${nv.bonusCor}">${nv.bonusTexto}</text>
+          <text x="24" y="19" text-anchor="middle" font-family="Montserrat,sans-serif"
+            font-weight="800" font-size="16" fill="${nv.bonusCor}">${nv.bonusTexto}</text>
         </svg></span>`;
     }
 
