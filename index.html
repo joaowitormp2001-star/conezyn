@@ -73,6 +73,8 @@
   .perfil-btn{position:relative;width:2.75rem;height:2.75rem;border-radius:9999px;overflow:hidden;
     display:grid;place-items:center;border:1px solid rgb(62 39 35/.2);background:#fff;color:var(--cacau)}
   .perfil-btn img{width:100%;height:100%;object-fit:cover}
+  .ola-nome{font-size:.85rem;font-weight:700;margin-right:.15rem;white-space:nowrap}
+  @media(max-width:520px){.ola-nome{display:none}}
   .logo{display:flex;align-items:center;gap:.5rem;font-weight:900;font-size:1.25rem;letter-spacing:-.02em}
   .logo .selo{width:2.5rem;height:2.5rem;display:grid;place-items:center;color:var(--casquinha);font-size:1.1rem}
   .cart-btn{position:relative;width:2.75rem;height:2.75rem;display:grid;place-items:center;
@@ -479,7 +481,7 @@ const S = {
   perfil: null,               // { id, nome, tel, email, foto, admin }
   carrinho: {},
   pedidos: [], pedidosAntigos: [],
-  fidelidade: { total: 0, historico: [] },
+  fidelidade: { total: 0, historico: [], resgates: 0, temBrinde: false },
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
   presente: { ativo:false, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false },
@@ -663,14 +665,24 @@ async function carregarPedidosAntigos(){
 }
 
 async function carregarFidelidade(){
-  if (!S.perfil){ S.fidelidade = { total:0, historico:[] }; return; }
+  if (!S.perfil){ S.fidelidade = { total:0, historico:[], resgates:0, temBrinde:false }; return; }
+
+  // Resumo oficial vindo do banco: carimbos acumulados, resgates usados
+  // e se há brinde disponível agora.
+  const resumo = await sb.rpc("minha_fidelidade");
+  const r = Array.isArray(resumo.data) ? resumo.data[0] : resumo.data;
   const { data } = await sb.from("loyalty_transactions").select("*, orders(numero)")
     .eq("cliente_id", S.perfil.id).order("criado_em", { ascending:false });
   const hist = (data||[]).map(t => ({
     pedido: t.orders?.numero ?? "—", n: t.carimbos,
     data: new Date(t.criado_em).toLocaleDateString("pt-BR"),
   }));
-  S.fidelidade = { total: hist.reduce((s,h)=>s+h.n,0), historico: hist };
+  S.fidelidade = {
+    total: r ? Number(r.carimbos) : hist.reduce((s,h)=>s+h.n,0),
+    historico: hist,
+    resgates: r ? Number(r.resgates) : 0,
+    temBrinde: r ? r.tem_brinde === true : false,
+  };
 }
 
 /* Mensagem de erro amigável (prompt, seção 40). */
@@ -1433,6 +1445,7 @@ function vHeader(){
 
       <nav style="display:flex;align-items:center;gap:.5rem;position:relative">
         ${S.perfil ? `
+          <span class="ola-nome">Olá, ${esc(S.perfil.nome.split(" ")[0])}</span>
           <button class="perfil-btn" aria-label="Minha conta" aria-haspopup="true"
             aria-expanded="${S.menuPerfil ? "true" : "false"}" onclick="alternarMenuPerfil()">
             ${S.perfil.foto
@@ -1803,7 +1816,7 @@ function vCheckout(){
     </div>
     <aside class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Resumo do pedido</h2>
-      ${S.fidelidade.total >= META_CARIMBOS ? `<p style="margin-top:.5rem;background:rgba(235,121,28,.12);
+      ${S.fidelidade.temBrinde ? `<p style="margin-top:.5rem;background:rgba(235,121,28,.12);
         color:#B4590F;border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
         🎁 Seu cartão está completo — 1 cone deste pedido sai de graça. O desconto entra ao confirmar.</p>` : ""}
       <dl class="linhas" style="margin-top:.75rem">
@@ -2507,6 +2520,14 @@ function vFidelidade(){
     <h1 class="display" style="font-size:1.9rem;font-weight:900">Minha fidelidade</h1>
     ${carrosselCartoes(d.total, S.perfil.nome)}
 
+    <p class="muted" style="font-size:.82rem;text-align:center;margin-top:-.2rem">
+      <strong style="color:var(--cacau)">${d.total}</strong> cone(s) acumulado(s) — os carimbos não expiram.
+      ${Math.floor(d.total / META_CARIMBOS) > 0
+        ? ` · ${Math.floor(d.total / META_CARIMBOS)} cartão(ões) completo(s), ${d.resgates} brinde(s) usado(s).`
+        : ""}
+      ${d.temBrinde ? `<br><strong style="color:#B4590F">🎁 Você tem um cone grátis esperando!
+        Ele entra sozinho no seu próximo pedido.</strong>` : ""}</p>
+
     <section class="card" style="padding:1.25rem">
       <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.5rem">
         <h2 class="display" style="font-size:1.1rem;font-weight:700">Histórico de carimbos</h2>
@@ -2838,7 +2859,9 @@ function vAdminPedidos(){
           ${vis.map(p=>`<li class="card" style="padding:1.25rem">
             <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.75rem">
               <div>
-                <p class="display" style="font-size:1.1rem;font-weight:900">Pedido #${p.numero}</p>
+                <p class="display" style="font-size:1.1rem;font-weight:900">Pedido #${p.numero}
+                  ${p.brinde > 0 ? `<span class="badge" style="background:#EB791C;color:#fff;
+                    margin-left:.35rem;text-transform:none">🎁 brinde</span>` : ""}</p>
                 ${p.presente?`<p style="font-size:.78rem;font-weight:700;color:var(--cacau-claro)">
                   🎁 Presente para ${esc(p.destinatario)}${p.destinatarioSetor?" · 📍 "+esc(p.destinatarioSetor):""}</p>`:""}
                 <p class="muted" style="font-size:.75rem">${esc(p.cliente.nome)} · ${esc(p.cliente.tel)} ·
@@ -2846,12 +2869,25 @@ function vAdminPedidos(){
               </div>
               <span class="status st-${p.status.replace(" ","_")}">${p.status}</span>
             </div>
+
+            ${p.brinde > 0 ? `<p style="margin-top:.6rem;background:rgba(235,121,28,.14);color:#B4590F;
+              border-left:3px solid #EB791C;border-radius:.5rem;padding:.5rem .7rem;
+              font-size:.78rem;font-weight:700">
+              🎁 Cartão fidelidade resgatado — 1 cone saiu de graça
+              (${reais(p.brinde)} abatidos). ${p.total === 0
+                ? "Não há nada a receber neste pedido."
+                : "Cobrar apenas " + reais(p.total) + "."}</p>` : ""}
+
             <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;margin-top:.75rem">
               <dl class="linhas" style="flex:1;min-width:12rem;max-width:20rem">
                 ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
               </dl>
               <div style="font-size:.875rem;text-align:right">
+                ${p.brinde > 0 ? `<p class="muted" style="font-size:.75rem;text-decoration:line-through">
+                  ${reais(p.total + p.brinde)}</p>` : ""}
                 <p class="display" style="font-size:1.1rem;font-weight:900">${reais(p.total)}</p>
+                ${p.brinde > 0 ? `<p style="font-size:.72rem;font-weight:700;color:#B4590F">
+                  − ${reais(p.brinde)} de brinde</p>` : ""}
                 <p class="muted">📍 ${esc(p.local)}</p>
                 <p class="muted">🕐 ${p.quando==="agora"?"Agora":"às "+p.quando}</p>
               </div>
@@ -3843,7 +3879,8 @@ function verCliente(id){
             <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
               onclick="ajustarCarimbos('${id}')">Definir</button>
             <span class="muted" style="font-size:.72rem">
-              ${Math.floor(c.carimbos / META_CARIMBOS)} cartão(ões) completo(s)</span>
+              ${Math.floor(c.carimbos / META_CARIMBOS)} cartão(ões) completo(s) ·
+              ${(S.pedidos.filter(p => p.clienteId === id && p.brinde > 0 && p.status !== "Cancelado").length)} brinde(s) usado(s)</span>
           </div>
         </div>
 
