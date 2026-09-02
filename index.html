@@ -7,8 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Inter:wght@400;600;700&family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<!-- Ícone padrão embutido no próprio arquivo: funciona sem nenhum upload.
+     Se existir /favicon.png no repositório, ele tem prioridade.
+     E se você enviar um ícone pelo painel, ele substitui os dois. -->
+<link id="fav-svg" rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233E2723'/%3E%3Cg transform='rotate(-16 32 32)'%3E%3Cpath d='M32 20 L42 26 L33.6 55 Q32 58 30.4 55 L22 26 Z' fill='%23E8D9C5'/%3E%3Cellipse cx='32' cy='23' rx='11' ry='5.5' fill='%23EB791C'/%3E%3C/g%3E%3C/svg%3E">
+<link id="fav-png" rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#3e2723">
@@ -421,10 +424,25 @@ const MIN_DEPOIMENTOS = 7;
 const STATUS = ["Pedido feito","Entregue","Pagamento concluído"];   // fluxo normal
 const STATUS_TODOS = [...STATUS, "Cancelado"];                       // + saída de emergência
 let META_CARIMBOS = 10;   // usado só como reserva; cada cartão tem sua meta
-const MARCA = { logo: null, hero: null, quadros: [null, null, null] };
+const MARCA = { logo: null, hero: null, favicon: null, quadros: [null, null, null] };
 
 /* Os quadros da animação de carregamento ficam guardados neste
    navegador, porque a tela aparece antes de o banco responder. */
+const FAVICON_CACHE = "cones.favicon";
+
+/* Aplica o ícone da aba. Guardado neste navegador para valer já na
+   primeira pintura da página, antes de o banco responder. */
+function aplicarFavicon(url){
+  const alvo = url || (() => { try { return localStorage.getItem(FAVICON_CACHE); } catch { return null; } })();
+  if (!alvo) return;
+  try { localStorage.setItem(FAVICON_CACHE, alvo); } catch { /* ignora */ }
+  document.querySelectorAll("link[rel~='icon']").forEach(l => l.remove());
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.href = alvo;
+  document.head.appendChild(link);
+}
+
 const QUADROS_CACHE = "cones.quadros";
 function lerQuadrosCache(){
   try { const v = JSON.parse(localStorage.getItem(QUADROS_CACHE) || "[]");
@@ -648,6 +666,8 @@ async function carregarCatalogo(){
   if (conf.meta_carimbos) META_CARIMBOS = Number(conf.meta_carimbos) || 10;
   MARCA.logo = conf.logo_url || null;
   MARCA.hero = conf.hero_url || null;
+  MARCA.favicon = conf.favicon_url || null;
+  if (MARCA.favicon) aplicarFavicon(MARCA.favicon);
   MARCA.quadros = [conf.quadro1_url || null, conf.quadro2_url || null, conf.quadro3_url || null];
   salvarQuadrosCache(MARCA.quadros);
 
@@ -2864,6 +2884,49 @@ async function enviarHero(input){
   }
 }
 
+async function enviarFavicon(input){
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)){ alert("Escolha um arquivo de imagem."); return; }
+  const rotulo = document.getElementById("fav-rotulo");
+  if (rotulo) rotulo.textContent = "Enviando...";
+  try {
+    // 180px cobre desde a aba do navegador até o atalho na tela do celular
+    const ehSvg = /svg/i.test(f.type);
+    const corpo = ehSvg ? f : await prepararImagem(f, 180, 0.92);
+    const caminho = ehSvg ? "marca/favicon.svg" : "marca/favicon.webp";
+    const tipo = ehSvg ? "image/svg+xml" : "image/webp";
+
+    const up = await sb.storage.from("produtos")
+      .upload(caminho, corpo, { upsert: true, contentType: tipo });
+    if (up.error) throw up.error;
+    await sb.storage.from("produtos").remove([ehSvg ? "marca/favicon.webp" : "marca/favicon.svg"]);
+
+    const { data } = sb.storage.from("produtos").getPublicUrl(caminho);
+    const url = data.publicUrl + "?v=" + Date.now();
+    const { error } = await sb.from("settings")
+      .upsert({ chave: "favicon_url", valor: url }, { onConflict: "chave" });
+    if (error) throw error;
+    MARCA.favicon = url;
+    aplicarFavicon(url);
+    render();
+  } catch (e) {
+    avisarErro(e, "enviar o ícone do site");
+    if (rotulo) rotulo.textContent = "Enviar ícone";
+  }
+}
+
+async function removerFavicon(){
+  if (!confirm("Voltar para o ícone padrão?")) return;
+  await sb.storage.from("produtos").remove(["marca/favicon.webp", "marca/favicon.svg"]);
+  const { error } = await sb.from("settings").delete().eq("chave", "favicon_url");
+  if (error){ avisarErro(error, "remover o ícone"); return; }
+  MARCA.favicon = null;
+  try { localStorage.removeItem(FAVICON_CACHE); } catch { /* ignora */ }
+  alert("Ícone removido. Recarregue a página para ver o padrão de volta.");
+  render();
+}
+
 async function enviarQuadro(input, n){
   const f = input.files && input.files[0];
   if (!f) return;
@@ -2978,6 +3041,27 @@ function vAdminDash(){
         </label>
         ${MARCA.logo ? `<button style="font-size:.78rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
           onclick="removerLogo()">voltar ao padrão</button>` : ""}
+      </div>
+
+      <h2 class="display" style="font-size:1.1rem;font-weight:700;margin-top:1.5rem">
+        Ícone do site (favicon)</h2>
+      <p class="muted" style="font-size:.8rem;margin-top:.25rem">
+        Aparece na aba do navegador e no atalho da tela inicial do celular.
+        Use uma imagem <strong>quadrada</strong> e bem simples — ela é exibida em 16 pixels.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:1rem;margin-top:.9rem">
+        <div style="background:var(--chantilly-esc);border-radius:.6rem;padding:.5rem;
+          display:grid;place-items:center;width:4rem;height:4rem">
+          ${MARCA.favicon
+            ? `<img src="${MARCA.favicon}" alt="Ícone atual"
+                 style="width:2.5rem;height:2.5rem;object-fit:contain;display:block">`
+            : `<span style="font-size:1.5rem" aria-hidden>🍦</span>`}
+        </div>
+        <label class="btn btn-ghost" style="cursor:pointer">
+          <span id="fav-rotulo">${MARCA.favicon ? "Trocar ícone" : "Enviar ícone"}</span>
+          <input type="file" accept="image/*" style="display:none" onchange="enviarFavicon(this)">
+        </label>
+        ${MARCA.favicon ? `<button style="font-size:.78rem;font-weight:700;color:var(--framboesa);
+          text-decoration:underline" onclick="removerFavicon()">voltar ao padrão</button>` : ""}
       </div>
 
       <h2 class="display" style="font-size:1.1rem;font-weight:700;margin-top:1.5rem">Imagem de destaque da home</h2>
@@ -3240,6 +3324,7 @@ async function fecharPresente(id){
 }
 
 async function iniciar(){
+  aplicarFavicon();   // usa o que já estiver guardado neste navegador
   render();
   try {
     await carregarPerfil();
