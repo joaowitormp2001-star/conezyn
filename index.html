@@ -335,14 +335,19 @@
   .olho:hover{background:rgb(62 39 35/.07);color:var(--cacau)}
   /* entrada suave: os blocos sobem levemente ao aparecer */
   @keyframes surgir{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-  .card, .hero, .fid-slide, section > .grid > *, .sug-lista{animation:surgir .38s ease-out both}
-  .grid > .card:nth-child(2){animation-delay:.05s}
-  .grid > .card:nth-child(3){animation-delay:.1s}
-  .grid > .card:nth-child(4){animation-delay:.15s}
-  .grid > .card:nth-child(5){animation-delay:.2s}
-  .grid > .card:nth-child(n+6){animation-delay:.25s}
+  /* só anima quando a tela muda; ações dentro da mesma tela não repetem */
+  #app.animar .card,
+  #app.animar .hero,
+  #app.animar .fid-slide,
+  #app.animar section > .grid > *{animation:surgir .38s ease-out both}
+  #app.animar .grid > .card:nth-child(2){animation-delay:.05s}
+  #app.animar .grid > .card:nth-child(3){animation-delay:.1s}
+  #app.animar .grid > .card:nth-child(4){animation-delay:.15s}
+  #app.animar .grid > .card:nth-child(5){animation-delay:.2s}
+  #app.animar .grid > .card:nth-child(n+6){animation-delay:.25s}
   @media(prefers-reduced-motion:reduce){
-    .card,.hero,.fid-slide,section > .grid > *,.sug-lista{animation:none}}
+    #app.animar .card,#app.animar .hero,#app.animar .fid-slide,
+    #app.animar section > .grid > *{animation:none}}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -4343,7 +4348,15 @@ function render(){
     confirmado:vConfirmado, login:()=>vLogin(false), cadastro:vCadastro, conta:vConta,
     pedidos:vPedidos, fidelidade:vFidelidade, admin:vAdmin };
   if (S.view!=="produto") pqv = 1;
-  document.getElementById("app").innerHTML = (views[S.view]||vHome)();
+  // A animação de entrada só roda quando se muda de tela — trocar a
+  // quantidade de um cone ou filtrar categoria não redesenha com efeito.
+  const telaAtual = [S.view, S.param, S.view === "admin" ? S.adminTab : ""].join("|");
+  const mudouDeTela = telaAtual !== render.ultimaTela;
+  render.ultimaTela = telaAtual;
+
+  const alvo = document.getElementById("app");
+  alvo.classList.toggle("animar", mudouDeTela);
+  alvo.innerHTML = (views[S.view]||vHome)();
   // as tags de setor precisam ser desenhadas depois que a tela existe
   if (document.getElementById("local-tags")) desenharSetores("local-tags", "local");
   if (document.getElementById("pr-setor-tags")) desenharSetores("pr-setor-tags", "pr-setor");
