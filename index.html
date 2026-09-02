@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cones da Casa — Preview do Front-end</title>
+<title>Conezyn — Cones trufados</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Inter:wght@400;600;700&family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -57,22 +57,43 @@
   .stars .off{color:rgb(62 39 35 / .2)}
   header.loja{position:sticky;top:0;z-index:40;backdrop-filter:blur(8px);
     background:rgb(255 249 242 / .9);border-bottom:1px solid rgb(62 39 35 / .08)}
-  header.loja .inner{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.75rem 0}
+  header.loja .inner{display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+    padding:.75rem 1rem;max-width:64rem;margin:0 auto}
+  @media(min-width:1024px){header.loja .inner{padding:.75rem 0}}
+  /* barra de voltar, abaixo do cabeçalho */
+  .barra-voltar{max-width:64rem;margin:0 auto;padding:.7rem 1rem 0}
+  /* menu do perfil */
+  .perfil-menu{position:absolute;right:0;top:calc(100% + .5rem);z-index:60;min-width:13rem;
+    background:var(--chantilly);border:1px solid rgb(62 39 35/.18);border-radius:.9rem;overflow:hidden;
+    box-shadow:0 14px 28px -12px rgb(62 39 35/.4)}
+  .perfil-menu button{display:block;width:100%;text-align:left;padding:.7rem .9rem;font-size:.85rem;
+    font-weight:600;background:transparent}
+  .perfil-menu button:hover{background:var(--chantilly-esc)}
+  .perfil-menu li + li button{border-top:1px solid rgb(62 39 35/.1)}
+  .perfil-btn{position:relative;width:2.75rem;height:2.75rem;border-radius:9999px;overflow:hidden;
+    display:grid;place-items:center;border:1px solid rgb(62 39 35/.2);background:#fff;color:var(--cacau)}
+  .perfil-btn img{width:100%;height:100%;object-fit:cover}
   .logo{display:flex;align-items:center;gap:.5rem;font-weight:900;font-size:1.25rem;letter-spacing:-.02em}
   .logo .selo{width:2.5rem;height:2.5rem;display:grid;place-items:center;color:var(--casquinha);font-size:1.1rem}
   .cart-btn{position:relative;width:2.75rem;height:2.75rem;display:grid;place-items:center;
-    border-radius:9999px;background:var(--cacau);color:var(--chantilly);font-size:1.1rem}
+    border-radius:9999px;background:transparent;border:1px solid rgb(62 39 35/.2);
+    color:var(--cacau);font-size:1.1rem}
+  .cart-btn:hover{background:var(--chantilly-esc)}
   .cart-count{position:absolute;top:-4px;right:-4px;width:1.25rem;height:1.25rem;display:grid;place-items:center;
     border-radius:9999px;background:var(--framboesa);color:#fff;font-size:.68rem;font-weight:700}
   .hero{position:relative;overflow:hidden;background:var(--cacau);color:var(--chantilly);
     border-radius:var(--radius);padding:2.5rem 1.5rem;box-shadow:var(--shadow)}
+  @media(max-width:700px){
+    /* bloco mais alto no celular: a imagem desce e não encosta no título */
+    .hero{padding-bottom:14rem}
+  }
   .hero .big{position:absolute;right:-1.5rem;bottom:-2rem;font-size:10rem;opacity:.2;pointer-events:none}
   /* imagem de destaque no canto inferior direito do bloco */
   .hero-img{position:absolute;right:-2rem;bottom:-2.5rem;width:min(34rem,64%);
     max-height:165%;object-fit:contain;object-position:bottom right;pointer-events:none;
     filter:drop-shadow(0 20px 34px rgb(0 0 0 / .38))}
   @media(max-width:700px){
-    .hero-img{width:min(20rem,68%);right:-2rem;bottom:-2.5rem;opacity:.8}}
+    .hero-img{width:min(19rem,74%);right:-1.5rem;bottom:-1rem;max-height:14rem;opacity:.95}}
   .hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:900;line-height:1.1;max-width:26rem;margin-top:1rem}
   .grid{display:grid;gap:1rem}
   @media(min-width:600px){.grid.c2{grid-template-columns:1fr 1fr}}
@@ -312,6 +333,16 @@
     width:2rem;height:2rem;display:grid;place-items:center;border-radius:9999px;
     font-size:1rem;line-height:1;color:rgb(62 39 35/.5)}
   .olho:hover{background:rgb(62 39 35/.07);color:var(--cacau)}
+  /* entrada suave: os blocos sobem levemente ao aparecer */
+  @keyframes surgir{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .card, .hero, .fid-slide, section > .grid > *, .sug-lista{animation:surgir .38s ease-out both}
+  .grid > .card:nth-child(2){animation-delay:.05s}
+  .grid > .card:nth-child(3){animation-delay:.1s}
+  .grid > .card:nth-child(4){animation-delay:.15s}
+  .grid > .card:nth-child(5){animation-delay:.2s}
+  .grid > .card:nth-child(n+6){animation-delay:.25s}
+  @media(prefers-reduced-motion:reduce){
+    .card,.hero,.fid-slide,section > .grid > *,.sug-lista{animation:none}}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -451,11 +482,12 @@ const S = {
   cad: { etapa: 1, tel: "", nome: "", email: "", ficha: null, checando: false },
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
-  admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], fichaAberta: null, carregado: false,
+  admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], fichaAberta: null, carregado: false,
            form: {}, pedidosExpandidos: {}, clienteEditando: null, setoresExpandidos: false, importacao: null,
            abaAvaliacao: 'pendentes' },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
+  menuPerfil: false, loginAviso: null,
   qtdCard: {},   // quantidade escolhida em cada card do catálogo
   avaliar: { produtoId:null, nota:0, podeAvaliar:false, minha:null, enviando:false },
 };
@@ -493,7 +525,7 @@ function iconeCarrinho(tam = 20){
 /* Logo da loja: imagem enviada pelo administrador ou o selo padrão. */
 function logoMarca(){
   return MARCA.logo
-    ? `<img src="${MARCA.logo}" alt="Cones da Casa" style="height:2.5rem;width:auto;
+    ? `<img src="${MARCA.logo}" alt="Conezyn" style="height:2.5rem;width:auto;
          max-width:9rem;object-fit:contain;display:block">`
     : `<span class="selo carimbo">🍦</span>`;
 }
@@ -776,8 +808,9 @@ function nav(view, param){
   if (view==="checkout"){ S.checkout = { local: S.perfil?.setor || "", quando:"agora", hora:"", erro:null, idem:null };
     S.presente = { ativo:false, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false }; }
   if (view==="produto") pqv = 1;
+  S.menuPerfil = false;
   if (view==="cadastro") S.cad = { etapa:1, tel:"", nome:"", email:"", ficha:null, checando:false };
-  S.loginErro = null; S.cadastroErro = null;
+  S.loginErro = null; S.cadastroErro = null; S.loginAviso = null;
   render(); window.scrollTo({top:0});
 }
 function voltar(){
@@ -1060,7 +1093,7 @@ const notifSuportado = () => typeof window!=="undefined" && "Notification" in wi
    {numero} {cliente} {total} {local} {quando} são substituídos automaticamente. */
 const NOTIF_TEXTO = {
   icone: "/icon-192.png",                       // miniatura exibida na notificação
-  titulo: "🍦 Novo pedido — Cones da Casa",
+  titulo: "🍦 Novo pedido — Conezyn",
   corpo: "Pedido #{numero} · {cliente}\n{total} · Entrega: {local} · Receber: {quando}",
 };
 function montarTexto(modelo, dados){
@@ -1194,7 +1227,7 @@ function desenharSetores(idCaixa, idCampo){
       class="setor-tag ${oficial === s.nome ? "ativa" : ""}"
       onmousedown="event.preventDefault()"
       onclick="escolherSetor('${idCaixa}','${idCampo}','${esc(s.nome)}')">
-      ${esc(s.nome)}${s.apelidos.length ? ` <small>${esc(s.apelidos.join("/"))}</small>` : ""}
+      ${esc(s.nome)}
     </button>`).join("");
 }
 function escolherSetor(idCaixa, idCampo, nome){
@@ -1365,26 +1398,64 @@ function notificarAdmin(pedido){
 function carimbos(){
   return S.fidelidade;
 }
+/* Ícone de perfil: foto da pessoa, ou o desenho padrão. */
+function iconePerfil(tam = 20){
+  return `<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+    stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>
+  </svg>`;
+}
+
+function alternarMenuPerfil(){
+  S.menuPerfil = !S.menuPerfil;
+  render();
+}
+function irPara(view){
+  S.menuPerfil = false;
+  nav(view);
+}
+function confirmarSaida(){
+  S.menuPerfil = false;
+  if (confirm("Deseja sair da sua conta?")) sair(); else render();
+}
+
 function vHeader(){
   const cones = precificar().cones;
-  return `<header class="loja"><div class="wrap inner">
-    <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
-      ${S.view!=="home" ? backBtn() : ""}
+  return `<header class="loja">
+    <div class="inner">
       <a href="#" class="logo display" onclick="nav('home');return false">
-        ${logoMarca()}${MARCA.logo ? "" : "Cones da Casa"}</a>
+        ${logoMarca()}${MARCA.logo ? "" : "Conezyn"}</a>
+
+      <nav style="display:flex;align-items:center;gap:.5rem;position:relative">
+        ${S.perfil ? `
+          <button class="perfil-btn" aria-label="Minha conta" aria-haspopup="true"
+            aria-expanded="${S.menuPerfil ? "true" : "false"}" onclick="alternarMenuPerfil()">
+            ${S.perfil.foto
+              ? `<img src="${S.perfil.foto}" alt="">`
+              : iconePerfil(20)}
+          </button>
+          ${S.menuPerfil ? `<ul class="perfil-menu" role="menu">
+            <li><button role="menuitem" onclick="irPara('conta')">Meu perfil</button></li>
+            <li><button role="menuitem" onclick="irPara('pedidos')">Meus pedidos</button></li>
+            <li><button role="menuitem" onclick="irPara('fidelidade')">Meu cartão fidelidade</button></li>
+            <li><button role="menuitem" style="color:var(--framboesa)"
+                  onclick="confirmarSaida()">Sair</button></li>
+          </ul>` : ""}
+        ` : `
+          <button class="btn" style="font-weight:600" onclick="nav('login')">Entrar</button>
+        `}
+
+        <button class="cart-btn" aria-label="Carrinho com ${cones} ${cones===1?"cone":"cones"}"
+          onclick="nav('carrinho')">${iconeCarrinho(20)}
+          ${cones>0?`<span class="cart-count">${cones}</span>`:""}</button>
+      </nav>
     </div>
-    <nav style="display:flex;align-items:center;gap:.5rem">
-      <button class="btn" style="font-weight:600" onclick="nav(S.perfil?'conta':'login')">
-        ${S.perfil ? "Olá, "+esc(S.perfil.nome.split(" ")[0]) : "Entrar"}</button>
-      <button class="cart-btn" aria-label="Carrinho com ${cones} ${cones===1?"cone":"cones"}"
-        onclick="nav('carrinho')">${iconeCarrinho(20)}
-        ${cones>0?`<span class="cart-count">${cones}</span>`:""}</button>
-    </nav>
-  </div></header>`;
+  </header>
+  ${S.view !== "home" ? `<div class="barra-voltar">${backBtn()}</div>` : ""}`;
 }
+
 function vFooter(){
-  return `<footer><p class="display" style="font-size:.875rem;font-weight:700;color:rgb(62 39 35/.7)">Cones da Casa</p>
-    <p style="margin-top:.25rem">Pagamento combinado direto com o vendedor, de preferência via Pix.</p>
+  return `<footer><p class="display" style="font-size:.875rem;font-weight:700;color:rgb(62 39 35/.7)">Conezyn</p>
     <p style="margin-top:.25rem">Entrega exclusivamente dentro da empresa.</p></footer>`;
 }
 function vCardProduto(p){
@@ -1450,8 +1521,8 @@ function vHome(){
       <div style="display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:.75rem">
         <h2 id="t-disp" class="display" style="font-size:1.5rem;font-weight:900">
           ${disponiveis.length === 0 ? "Nossos sabores"
-            : disponiveis.length === 1 ? "Sabor disponível hoje"
-            : "Sabores disponíveis hoje"}</h2>
+            : disponiveis.length === 1 ? "Sabor disponível"
+            : "Sabores disponíveis"}</h2>
         <div class="chips" role="tablist" aria-label="Filtrar por categoria">
           ${[["todos","Todos"],["classico","Clássicos"],["premium","Premium"]].map(([id,l])=>
             `<button class="chip" role="tab" aria-selected="${S.filtro===id}"
@@ -1827,32 +1898,10 @@ function vAuthShell(conteudo){
       <div style="display:flex;justify-content:center;align-items:center;gap:.4rem;margin-bottom:1rem;cursor:pointer"
         onclick="nav('home')">
         ${logoMarca()}<span class="display" style="font-size:1.1rem;font-weight:900">
-          ${MARCA.logo ? "" : "Cones da Casa"}</span></div>
+          ${MARCA.logo ? "" : "Conezyn"}</span></div>
       ${conteudo}
     </div>
   </main>`;
-}
-function vLogin(bloqueio){
-  return vAuthShell(`<div class="card" style="padding:1.5rem">
-    <h1 class="display" style="font-size:1.5rem;font-weight:900">Entrar</h1>
-    <p class="muted" style="margin-top:.25rem;font-size:.875rem">
-      ${bloqueio?"Entre para registrar seu pedido — leva segundos.":"Entre com seu e-mail e senha."}</p>
-    <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem">
-      <div><label class="label" for="l-email">E-mail</label>
-        <input id="l-email" class="field" type="email" inputmode="email" autocomplete="email"
-          placeholder="voce@email.com"></div>
-      <div><label class="label" for="l-senha">Senha</label>
-        ${campoSenha("l-senha", `autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()"`)}</div>
-      ${S.loginErro?`<p class="alerta" role="alert">${esc(S.loginErro)}</p>`:""}
-      <button class="btn btn-primary" onclick="fazerLogin()">Entrar</button>
-      <button style="font-size:.8rem;font-weight:600;color:rgb(62 39 35/.6);text-decoration:underline"
-        onclick="recuperarSenha()">Esqueci minha senha</button>
-    </div>
-    <p style="margin-top:1.25rem;text-align:center;font-size:.875rem" class="muted">
-      Ainda não tem conta?
-      <button style="font-weight:700;color:var(--cacau);text-decoration:underline"
-        onclick="nav('cadastro')">Criar conta</button></p>
-  </div>`);
 }
 /* Campo de senha com botão de mostrar/ocultar. */
 function campoSenha(id, extra = ""){
@@ -1873,10 +1922,7 @@ function alternarSenha(id, botao){
   campo.focus();
 }
 
-function emailValido(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v||"").trim()); }
-
-/* Ícone discreto ao lado do rótulo: mostra a explicação no hover
-   e também no foco por teclado / toque no celular. */
+/* Ícone discreto ao lado do rótulo, com a explicação no hover/foco. */
 function dica(texto){
   return `<span class="dica">
     <button type="button" class="dica-btn" aria-label="Ajuda: ${esc(texto)}">!</button>
@@ -1884,11 +1930,7 @@ function dica(texto){
   </span>`;
 }
 
-/* ============================================================
-   CADASTRO EM 4 ETAPAS
-   1. WhatsApp  →  2. Confirmação da ficha (se houver)
-   3. Nome e e-mail  →  4. Senha
-   ============================================================ */
+/* Barra de progresso do cadastro. */
 function trilha(n){
   const total = 4;
   return `<div class="etapas" role="progressbar" aria-valuenow="${n}" aria-valuemin="1" aria-valuemax="${total}"
@@ -1899,12 +1941,39 @@ function trilha(n){
   <span class="etapa-num">Etapa ${n} de ${total}</span>`;
 }
 
+function vLogin(bloqueio){
+  return vAuthShell(`<div class="card" style="padding:1.5rem">
+    <h1 class="display" style="font-size:1.5rem;font-weight:900">Entrar</h1>
+    <p class="muted" style="margin-top:.25rem;font-size:.875rem">
+      ${bloqueio?"Entre para registrar seu pedido — leva segundos.":"Entre com seu WhatsApp e senha."}</p>
+    <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem">
+      <div><label class="label" for="l-tel">WhatsApp</label>
+        <input id="l-tel" class="field" type="tel" inputmode="tel" autocomplete="tel"
+          placeholder="(11) 9 9999-9999" maxlength="16" oninput="aoDigitarTelefone(this)"></div>
+      <div><label class="label" for="l-senha">Senha</label>
+        ${campoSenha("l-senha", `autocomplete="current-password" onkeydown="if(event.key==='Enter')fazerLogin()"`)}</div>
+      ${S.loginErro?`<p class="alerta" role="alert">${esc(S.loginErro)}
+        ${S.ultimoErro?`<br><span style="font-weight:400;font-size:.72rem;opacity:.8">
+          Detalhe técnico: ${esc(S.ultimoErro)}</span>`:""}</p>`:""}
+      ${S.loginAviso?`<p class="ok" role="status">${esc(S.loginAviso)}</p>`:""}
+      <button class="btn btn-primary" ${S.ocupado?"disabled":""} onclick="fazerLogin()">
+        ${S.ocupado ? "Entrando..." : "Entrar"}</button>
+      <button style="font-size:.8rem;font-weight:600;color:rgb(62 39 35/.6);text-decoration:underline"
+        onclick="recuperarSenha()">Esqueci minha senha</button>
+    </div>
+    <p style="margin-top:1.25rem;text-align:center;font-size:.875rem" class="muted">
+      Ainda não tem conta?
+      <button style="font-weight:700;color:var(--cacau);text-decoration:underline"
+        onclick="nav('cadastro')">Criar conta</button></p>
+  </div>`);
+}
+
 function vCadastro(){
   const c = S.cad;
   const corpo =
     c.etapa === 1 ? `
       <label class="label" for="r-tel">Qual o seu WhatsApp?
-        ${dica("Usamos para falar com você sobre o pedido. Se você já é cliente, a gente te reconhece por ele.")}</label>
+        ${dica("É com ele que você entra no site. Se já é cliente, a gente te reconhece por ele.")}</label>
       <input id="r-tel" class="field" type="tel" inputmode="tel" autocomplete="tel"
         placeholder="(11) 9 9999-9999" maxlength="16" value="${esc(c.tel)}"
         oninput="aoDigitarTelefone(this)" onkeydown="if(event.key==='Enter')etapaTelefone()">
@@ -1917,8 +1986,7 @@ function vCadastro(){
       <div class="ficha-card">
         <p class="display" style="font-size:1.2rem;font-weight:900">${esc(c.ficha.primeiro_nome)}</p>
         ${c.ficha.setor
-          ? `<p class="muted" style="font-size:.85rem;margin-top:.15rem">📍 ${esc(c.ficha.setor)}</p>`
-          : ""}
+          ? `<p class="muted" style="font-size:.85rem;margin-top:.15rem">📍 ${esc(c.ficha.setor)}</p>` : ""}
         <p class="muted" style="font-size:.8rem;margin-top:.4rem">${esc(mascaraTelefone(c.tel))}</p>
       </div>
       <button class="btn btn-primary" style="width:100%;margin-top:1rem"
@@ -1930,11 +1998,7 @@ function vCadastro(){
       <div><label class="label" for="r-nome">Nome
         ${dica("Aparece nas suas avaliações e no seu cartão fidelidade.")}</label>
         <input id="r-nome" class="field" autocomplete="name" value="${esc(c.nome)}"
-          placeholder="Como quer ser chamado"></div>
-      <div style="margin-top:.75rem"><label class="label" for="r-email">E-mail
-        ${dica("É com ele que você entra e recupera a senha, caso esqueça.")}</label>
-        <input id="r-email" class="field" type="email" inputmode="email" autocomplete="email"
-          value="${esc(c.email)}" placeholder="voce@email.com"
+          placeholder="Como quer ser chamado"
           onkeydown="if(event.key==='Enter')etapaDados()"></div>
       ${S.cadastroErro?`<p class="alerta" role="alert" style="margin-top:.75rem">${esc(S.cadastroErro)}</p>`:""}
       <button class="btn btn-primary" style="width:100%;margin-top:1rem" onclick="etapaDados()">Continuar</button>`
@@ -1956,7 +2020,7 @@ function vCadastro(){
     <h1 class="display" style="font-size:1.4rem;font-weight:900;margin-bottom:.9rem">
       ${c.etapa === 1 ? "Criar conta"
       : c.etapa === 2 ? "Confirme quem é você"
-      : c.etapa === 3 ? "Seus dados"
+      : c.etapa === 3 ? "Seu nome"
       : "Quase lá"}</h1>
     ${corpo}
     ${c.etapa > 1 ? `<button style="display:block;margin:1rem auto 0;font-size:.8rem;font-weight:600;
@@ -2015,13 +2079,8 @@ function confirmarFicha(sim){
 /* Etapa 3 — nome e e-mail. */
 function etapaDados(){
   const c = S.cad;
-  c.nome  = document.getElementById("r-nome").value.trim();
-  c.email = document.getElementById("r-email").value.trim().toLowerCase();
+  c.nome = document.getElementById("r-nome").value.trim();
   if (!c.nome){ S.cadastroErro = "Informe seu nome."; return render(); }
-  if (!emailValido(c.email)){
-    S.cadastroErro = "Digite um e-mail válido — é por ele que você recupera a senha.";
-    return render();
-  }
   S.cadastroErro = null; c.etapa = 4; render();
 }
 
@@ -2036,28 +2095,42 @@ function voltarEtapa(){
 
 async function fazerLogin(){
   if (S.ocupado) return;
-  const email = document.getElementById("l-email").value.trim().toLowerCase();
+  const tel = document.getElementById("l-tel").value.trim();
   const senha = document.getElementById("l-senha").value;
-  if (!email || !senha){ S.loginErro="Informe e-mail e senha."; return render(); }
-  if (!emailValido(email)){ S.loginErro="Digite um e-mail válido."; return render(); }
-  S.ocupado = true; S.loginErro = null; render();
-  const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+  if (!telefoneValido(tel)){ S.loginErro="Digite o WhatsApp com DDD."; return render(); }
+  if (!senha){ S.loginErro="Informe a senha."; return render(); }
+
+  S.ocupado = true; S.loginErro = null; S.loginAviso = null; render();
+  const { error } = await sb.auth.signInWithPassword({
+    email: emailApelido(tel), password: senha,
+  });
   S.ocupado = false;
   if (error){ S.loginErro = erroAmigavel(error); return render(); }
   await carregarPerfil();
   await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
+
+/* Sem e-mail, a redefinição é combinada por WhatsApp: o pedido entra
+   numa fila que aparece no painel do administrador. */
 async function recuperarSenha(){
-  const email = document.getElementById("l-email").value.trim().toLowerCase();
-  if (!emailValido(email)){
-    S.loginErro = "Digite seu e-mail no campo acima para receber o link de recuperação.";
+  const campo = document.getElementById("l-tel");
+  const tel = campo ? campo.value.trim() : "";
+  if (!telefoneValido(tel)){
+    S.loginErro = "Digite seu WhatsApp no campo acima para pedir a redefinição.";
+    S.loginAviso = null;
     return render();
   }
+  const { data, error } = await sb.rpc("solicitar_redefinicao_senha", { p_telefone: tel });
+  if (error){ S.loginErro = erroAmigavel(error); return render(); }
+
   S.loginErro = null;
-  await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-  alert("Se existir uma conta com " + email + ", enviaremos um link para redefinir a senha.\n\nConfira também a caixa de spam.");
+  S.loginAviso = data === true
+    ? "Pedido registrado! Em breve entramos em contato pelo seu WhatsApp para redefinir a senha."
+    : "Não encontramos conta com este WhatsApp. Confira o número ou crie uma conta.";
+  render();
 }
+
 async function fazerCadastro(){
   if (S.ocupado) return;
   const c = S.cad;
@@ -2068,7 +2141,7 @@ async function fazerCadastro(){
 
   S.ocupado = true; S.cadastroErro = null; render();
   const { error } = await sb.auth.signUp({
-    email: c.email, password: senha,
+    email: emailApelido(c.tel), password: senha,
     options: { data: { nome: c.nome, telefone: mascaraTelefone(c.tel) } },
   });
   S.ocupado = false;
@@ -2077,13 +2150,14 @@ async function fazerCadastro(){
   const { data:{ session } } = await sb.auth.getSession();
   S.cad = { etapa:1, tel:"", nome:"", email:"", ficha:null, checando:false };
   if (!session){
-    S.loginErro = "Conta criada! Confirme seu e-mail e depois entre.";
+    S.loginAviso = "Conta criada! Agora entre com seu WhatsApp e senha.";
     return nav("login");
   }
   await carregarPerfil();
   await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
+
 async function sair(){
   await sb.auth.signOut();
   S.perfil = null; S.pedidos = []; S.fidelidade = { total:0, historico:[] };
@@ -2454,7 +2528,7 @@ function vAdminHeader(){
     <div class="row1">
       <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
         ${backBtn("background:transparent;color:var(--chantilly);border-color:rgb(255 249 242/.3);box-shadow:none")}
-        <p class="display" style="font-size:1.1rem;font-weight:900">🍦 Cones da Casa · <span style="color:var(--casquinha-claro)">Painel</span></p>
+        <p class="display" style="font-size:1.1rem;font-weight:900">🍦 Conezyn · <span style="color:var(--casquinha-claro)">Painel</span></p>
       </div>
       <div style="display:flex;align-items:center;gap:.75rem">
         <span class="pill-pend" aria-live="polite">Pedidos pendentes: ${pend}</span>
@@ -2854,7 +2928,7 @@ function vCarregando(){
   return `<main style="min-height:100dvh;display:grid;place-items:center;padding:2rem;text-align:center">
     <div>
       <p style="font-size:3rem" aria-hidden>🍦</p>
-      <p class="display" style="margin-top:.75rem;font-weight:900">Cones da Casa</p>
+      <p class="display" style="margin-top:.75rem;font-weight:900">Conezyn</p>
       <p class="muted" style="margin-top:.25rem;font-size:.875rem">Carregando o cardápio de hoje...</p>
     </div>
   </main>`;
@@ -2938,13 +3012,14 @@ async function abrirAdmin(aba){
 
 async function carregarAdmin(){
   if (!S.perfil?.admin) return;
-  const [prod, avs, sug, cli, fic, comp] = await Promise.all([
+  const [prod, avs, sug, cli, fic, comp, senhas] = await Promise.all([
     sb.from("products").select("*, categories(nome, slug)").order("nome"),
     sb.from("reviews").select("*, products(nome), profiles(nome)").order("criado_em", { ascending:false }),
     sb.from("suggestions").select("*, profiles(nome, telefone)").order("criado_em", { ascending:false }),
     sb.from("clientes_admin").select("*").order("nome"),
     sb.from("fichas_admin").select("*").order("nome"),
     sb.from("pre_compras").select("*").order("data_entrega", { ascending:false }),
+    sb.from("pedidos_senha").select("*").is("atendido_em", null).order("criado_em"),
   ]);
   if (!prod.error) S.admin.produtos  = prod.data || [];
   if (!avs.error)  S.admin.avaliacoes = avs.data || [];
@@ -2952,6 +3027,7 @@ async function carregarAdmin(){
   if (!cli.error)  S.admin.clientes   = cli.data || [];
   if (!fic.error)  S.admin.fichas     = fic.data || [];
   if (!comp.error) S.admin.compras    = comp.data || [];
+  if (!senhas.error) S.admin.senhas   = senhas.data || [];
   S.admin.carregado = true;
   if (S.admin.avaliacoes.some(a => a.excluida_em)) limparLixeira(true);   // some com o que passou de 48h
 }
@@ -3795,6 +3871,26 @@ function verCliente(id){
 }
 
 /* Junta tudo que foi digitado como setor e separa o que não está na lista. */
+async function atenderPedidoSenha(id){
+  const { error } = await sb.from("pedidos_senha")
+    .update({ atendido_em: new Date().toISOString() }).eq("id", id);
+  if (error){ avisarErro(error, "marcar o pedido de senha como resolvido"); return; }
+  await carregarAdmin(); render();
+}
+
+async function apagarSetor(indice){
+  const fora = setoresForaDaLista();
+  const alvo = fora[indice];
+  if (!alvo) return;
+  if (!confirm(`Remover o setor "${alvo.texto}" de todos os cadastros?\n\n` +
+               `As pessoas ficam sem setor até informarem um novo pedido.`)) return;
+  const { data, error } = await sb.rpc("limpar_setor", { p_texto: alvo.texto });
+  if (error){ avisarErro(error, "remover o setor"); return; }
+  await Promise.all([carregarAdmin(), carregarPedidos()]);
+  render();
+  alert(`Removido de ${data.perfis} perfil(is) e ${data.fichas} ficha(s).`);
+}
+
 async function vincularSetor(indice){
   const fora = setoresForaDaLista();
   const alvo = fora[indice];
@@ -3944,6 +4040,31 @@ function vAdminClientes(){
           : ""}</p>
     </div>
 
+    ${S.admin.senhas.length ? `<section class="card" style="padding:1rem;border-left:4px solid var(--framboesa)"
+        aria-labelledby="senhas">
+      <h2 id="senhas" class="display" style="font-size:1rem;font-weight:800">
+        🔑 Pedidos de redefinição de senha (${S.admin.senhas.length})</h2>
+      <p class="muted" style="font-size:.78rem;margin-top:.2rem">
+        Estas pessoas esqueceram a senha. Combine com elas pelo WhatsApp e redefina em
+        Authentication → Users, no painel do Supabase. Depois marque como resolvido aqui.</p>
+      <ul style="list-style:none;margin-top:.6rem;display:flex;flex-direction:column;gap:.4rem">
+        ${S.admin.senhas.map(p => `<li style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;
+            background:var(--chantilly);border-radius:.5rem;padding:.45rem .65rem">
+          <span style="flex:1;font-size:.82rem">
+            <strong>${esc(p.nome || "Cliente")}</strong>
+            <span class="muted"> · ${esc(mascaraTelefone(p.telefone || ""))}</span>
+          </span>
+          <span class="muted" style="font-size:.72rem">
+            ${new Date(p.criado_em).toLocaleDateString("pt-BR")}</span>
+          <a class="btn btn-ghost" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.72rem"
+            href="https://wa.me/55${esc(digitos(p.telefone || ""))}" target="_blank" rel="noopener">
+            Chamar no WhatsApp</a>
+          <button class="btn btn-primary" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.72rem"
+            onclick="atenderPedidoSenha('${p.id}')">Resolvido</button>
+        </li>`).join("")}
+      </ul>
+    </section>` : ""}
+
     <section aria-labelledby="c-ativos">
       <h2 id="c-ativos" class="display" style="font-size:1.1rem;font-weight:700">Contas ativas</h2>
       ${cadastrados.length === 0
@@ -4072,6 +4193,9 @@ function vAdminClientes(){
               </select>
               <button class="btn btn-primary" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.72rem"
                 onclick="vincularSetor(${fora.indexOf(f)})">Vincular</button>
+              <button class="btn" style="background:var(--framboesa);color:#fff;min-height:1.9rem;
+                padding:.15rem .6rem;font-size:.72rem"
+                onclick="apagarSetor(${fora.indexOf(f)})">Excluir</button>
             </span>
           </li>`).join("")}
         </ul>
