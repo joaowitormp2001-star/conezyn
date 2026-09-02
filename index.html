@@ -3811,6 +3811,13 @@ async function confirmarImportacao(){
   render();
 }
 
+async function definirGeneroFicha(fichaId, genero){
+  const { error } = await sb.from("pre_clientes")
+    .update({ genero: genero || null }).eq("id", fichaId);
+  if (error){ avisarErro(error, "definir o trato no cartão"); return; }
+  await carregarAdmin(); render();
+}
+
 async function salvarFicha(){
   const nome  = document.getElementById("f-nome").value.trim();
   const tel   = document.getElementById("f-tel").value.trim();
@@ -3819,7 +3826,8 @@ async function salvarFicha(){
     alert("Informe o nome e um WhatsApp com DDD."); return;
   }
   const { error } = await sb.from("pre_clientes")
-    .insert({ nome, telefone: digitos(tel), setor: setorOficial(setor) || setor || null });
+    .insert({ nome, telefone: digitos(tel), setor: setorOficial(setor) || setor || null,
+              genero: document.getElementById("f-genero")?.value || null });
   if (error){
     alert(/duplicate|unique/i.test(error.message)
       ? "Já existe uma ficha com este WhatsApp." : erroAmigavel(error));
@@ -4425,6 +4433,11 @@ function vAdminClientes(){
             placeholder="(11) 9 9999-9999" oninput="aoDigitarTelefone(this)">
           <input id="f-setor" class="field" style="flex:1.2;min-width:8rem" placeholder="Setor (ex: TI)"
             autocomplete="off" oninput="desenharSetores('f-setor-tags','f-setor')">
+          <select id="f-genero" class="field" style="width:auto;min-width:7rem">
+            <option value="">Neutro</option>
+            <option value="m">Masculino</option>
+            <option value="f">Feminino</option>
+          </select>
           <button class="btn btn-primary" onclick="salvarFicha()">Adicionar</button>
         </div>
         <div id="f-setor-tags" class="setor-caixa"></div>
@@ -4528,6 +4541,13 @@ function vFicha(f){
              onclick="verCliente('${f.vinculado_a}')">
              Vinculado a ${esc(dono ? dono.nome : "conta ativa")} ↗</button>`
         : `<span class="badge b-novo">sem vínculo</span>`}
+      <select class="field" style="width:auto;padding:.25rem .5rem;font-size:.74rem"
+        aria-label="Trato no cartão de ${esc(f.nome)}"
+        onchange="definirGeneroFicha('${f.id}', this.value)">
+        <option value="" ${!f.genero?"selected":""}>Neutro</option>
+        <option value="m" ${f.genero==="m"?"selected":""}>Masculino</option>
+        <option value="f" ${f.genero==="f"?"selected":""}>Feminino</option>
+      </select>
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
         onclick="abrirFicha('${f.id}')">${aberta ? "Fechar" : "Detalhes"}</button>
       <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
