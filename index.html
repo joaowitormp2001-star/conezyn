@@ -350,6 +350,11 @@
   @media(prefers-reduced-motion:reduce){
     #app.animar .card,#app.animar .hero,#app.animar .fid-slide,
     #app.animar section > .grid > *{animation:none}}
+  /* indicador enquanto o administrador não enviou os quadros */
+  .carregando-ponto{width:3rem;height:3rem;margin:0 auto;border-radius:9999px;
+    border:3px solid rgb(62 39 35/.15);border-top-color:var(--casquinha);
+    animation:girar .9s linear infinite}
+  @keyframes girar{to{transform:rotate(360deg)}}
   section{scroll-margin-top:6rem}
   footer{margin-top:4rem;border-top:1px solid rgb(62 39 35 / .08);padding:2rem 0;
     text-align:center;font-size:.75rem;color:rgb(62 39 35 / .5)}
@@ -412,7 +417,18 @@ const MIN_DEPOIMENTOS = 7;
 const STATUS = ["Pedido feito","Entregue","Pagamento concluído"];   // fluxo normal
 const STATUS_TODOS = [...STATUS, "Cancelado"];                       // + saída de emergência
 let META_CARIMBOS = 10;
-const MARCA = { logo: null, hero: null };
+const MARCA = { logo: null, hero: null, quadros: [null, null, null] };
+
+/* Os quadros da animação de carregamento ficam guardados neste
+   navegador, porque a tela aparece antes de o banco responder. */
+const QUADROS_CACHE = "cones.quadros";
+function lerQuadrosCache(){
+  try { const v = JSON.parse(localStorage.getItem(QUADROS_CACHE) || "[]");
+        return Array.isArray(v) ? v : []; } catch { return []; }
+}
+function salvarQuadrosCache(q){
+  try { localStorage.setItem(QUADROS_CACHE, JSON.stringify(q)); } catch { /* ignora */ }
+}
 
 /* Níveis do cartão fidelidade. Cada cartão completo abre o próximo nível.
    Cores tiradas das artes originais.
@@ -584,6 +600,8 @@ async function carregarCatalogo(){
   if (conf.meta_carimbos) META_CARIMBOS = Number(conf.meta_carimbos) || 10;
   MARCA.logo = conf.logo_url || null;
   MARCA.hero = conf.hero_url || null;
+  MARCA.quadros = [conf.quadro1_url || null, conf.quadro2_url || null, conf.quadro3_url || null];
+  salvarQuadrosCache(MARCA.quadros);
 
   const lista = document.getElementById("sabores-lista");
   if (lista) lista.innerHTML = PRODUTOS.map(p => `<option value="${esc(p.nome)}">`).join("");
@@ -720,7 +738,7 @@ function erroAmigavel(e){
     return "Este e-mail foi recusado pelo servidor. Tente outro endereço.";
   if (/confirm|not confirmed/i.test(m))
     return "Confirme seu e-mail antes de entrar.";
-  if (/Invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
+  if (/Invalid login credentials/i.test(m)) return "WhatsApp ou senha incorretos.";
   if (/already registered|already been registered/i.test(m)) return "Já existe uma conta com este e-mail.";
   if (/Password should be/i.test(m)) return "A senha deve ter no mínimo 6 caracteres.";
   if (/duplicate key.*telefone/i.test(m)) return "Já existe uma conta com este WhatsApp.";
@@ -2558,7 +2576,13 @@ function vAdminHeader(){
     <div class="row1">
       <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
         ${backBtn("background:transparent;color:var(--chantilly);border-color:rgb(255 249 242/.3);box-shadow:none")}
-        <p class="display" style="font-size:1.1rem;font-weight:900">🍦 Conezyn · <span style="color:var(--casquinha-claro)">Painel</span></p>
+        <p class="display" style="font-size:1.1rem;font-weight:900;display:flex;align-items:center;gap:.45rem">
+          ${MARCA.logo
+            ? `<img src="${MARCA.logo}" alt="Conezyn" style="height:1.8rem;width:auto;max-width:6rem;
+                 object-fit:contain;display:block">`
+            : `<span class="carimbo" aria-hidden style="width:1.8rem;height:1.8rem;display:grid;
+                 place-items:center;font-size:.9rem;color:var(--casquinha)">🍦</span>Conezyn`}
+          <span style="color:var(--casquinha-claro)">· Painel Adm</span></p>
       </div>
       <div style="display:flex;align-items:center;gap:.75rem">
         <span class="pill-pend" aria-live="polite">Pedidos pendentes: ${pend}</span>
@@ -2744,6 +2768,45 @@ async function enviarHero(input){
   }
 }
 
+async function enviarQuadro(input, n){
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)){ alert("Escolha um arquivo de imagem."); return; }
+  const rotulo = document.getElementById("q-rotulo-" + n);
+  if (rotulo) rotulo.textContent = "Enviando...";
+  try {
+    const ehPng = /png/i.test(f.type);
+    const corpo = ehPng ? f : await prepararImagem(f, 400, 0.9);
+    const caminho = `marca/quadro${n}.${ehPng ? "png" : "webp"}`;
+    const up = await sb.storage.from("produtos")
+      .upload(caminho, corpo, { upsert: true, contentType: ehPng ? "image/png" : "image/webp" });
+    if (up.error) throw up.error;
+    await sb.storage.from("produtos").remove([`marca/quadro${n}.${ehPng ? "webp" : "png"}`]);
+
+    const { data } = sb.storage.from("produtos").getPublicUrl(caminho);
+    const url = data.publicUrl + "?v=" + Date.now();
+    const { error } = await sb.from("settings")
+      .upsert({ chave: `quadro${n}_url`, valor: url }, { onConflict: "chave" });
+    if (error) throw error;
+    MARCA.quadros[n - 1] = url;
+    salvarQuadrosCache(MARCA.quadros);
+    render();
+  } catch (e) {
+    avisarErro(e, `enviar o quadro ${n}`);
+    if (rotulo) rotulo.textContent = "Enviar";
+  }
+}
+
+async function removerQuadro(n){
+  if (!confirm(`Remover o quadro ${n} da animação?`)) return;
+  await sb.storage.from("produtos").remove([`marca/quadro${n}.webp`, `marca/quadro${n}.png`]);
+  const { error } = await sb.from("settings").delete().eq("chave", `quadro${n}_url`);
+  if (error){ avisarErro(error, "remover o quadro"); return; }
+  MARCA.quadros[n - 1] = null;
+  salvarQuadrosCache(MARCA.quadros);
+  render();
+}
+
 async function removerHero(){
   if (!confirm("Remover a imagem de destaque do topo?")) return;
   await sb.storage.from("produtos").remove([HERO_WEBP, HERO_PNG]);
@@ -2839,6 +2902,34 @@ function vAdminDash(){
         ${MARCA.hero ? `<button style="font-size:.78rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
           onclick="removerHero()">remover</button>` : ""}
       </div>
+
+      <h2 class="display" style="font-size:1.1rem;font-weight:700;margin-top:1.5rem">
+        Animação de carregamento</h2>
+      <p class="muted" style="font-size:.8rem;margin-top:.25rem">
+        Três quadros que se alternam a cada meio segundo, na ordem
+        <strong>2 → 3 → 2 → 1</strong>, repetindo. Use PNG com fundo transparente e o mesmo
+        enquadramento nos três, para o movimento ficar contínuo.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:.9rem">
+        ${[1,2,3].map(n => `<div style="text-align:center">
+          <div style="background:var(--cacau);border-radius:.8rem;padding:.6rem;display:grid;
+            place-items:center;width:6rem;height:6rem">
+            ${MARCA.quadros[n-1]
+              ? `<img src="${MARCA.quadros[n-1]}" alt="Quadro ${n}"
+                   style="max-width:4.6rem;max-height:4.6rem;object-fit:contain;display:block">`
+              : `<span style="color:var(--chantilly);opacity:.5;font-size:.8rem">quadro ${n}</span>`}
+          </div>
+          <label class="btn btn-ghost" style="cursor:pointer;margin-top:.4rem;min-height:2rem;
+            padding:.2rem .7rem;font-size:.74rem">
+            <span id="q-rotulo-${n}">${MARCA.quadros[n-1] ? "Trocar" : "Enviar"}</span>
+            <input type="file" accept="image/*" style="display:none" onchange="enviarQuadro(this,${n})">
+          </label>
+          ${MARCA.quadros[n-1] ? `<br><button style="font-size:.72rem;font-weight:700;
+            color:var(--framboesa);text-decoration:underline"
+            onclick="removerQuadro(${n})">remover</button>` : ""}
+        </div>`).join("")}
+      </div>
+      <p class="muted" style="font-size:.75rem;margin-top:.5rem">
+        Com menos de dois quadros enviados, o site mostra um indicador simples girando.</p>
     </section>
 
     <button class="btn btn-primary" style="align-self:start;min-height:3rem" onclick="S.adminTab='pedidos';render()">Gerenciar pedidos →</button>
@@ -2969,15 +3060,47 @@ function ligarTempoReal(){
 /* ============================================================
    INICIALIZAÇÃO
    ============================================================ */
+/* Animação quadro a quadro do carregamento.
+   Ordem pedida: 2 → 3 → 2 → 1 e recomeça. */
+const SEQUENCIA_QUADROS = [1, 2, 1, 0];
+let animCarregamento = null;
+
+function pararAnimacaoCarregamento(){
+  if (animCarregamento){ clearInterval(animCarregamento); animCarregamento = null; }
+}
+
+function iniciarAnimacaoCarregamento(){
+  pararAnimacaoCarregamento();
+  const alvo = document.getElementById("quadro-carregando");
+  if (!alvo) return;
+  const quadros = lerQuadrosCache();
+  if (quadros.filter(Boolean).length < 2) return;   // precisa de ao menos dois
+
+  let i = 0;
+  animCarregamento = setInterval(() => {
+    i = (i + 1) % SEQUENCIA_QUADROS.length;
+    const url = quadros[SEQUENCIA_QUADROS[i]] || quadros.find(Boolean);
+    if (url) alvo.src = url;
+  }, 500);
+}
+
 function vCarregando(){
+  const quadros = lerQuadrosCache();
+  const temQuadros = quadros.filter(Boolean).length >= 1;
+  const primeiro = quadros[SEQUENCIA_QUADROS[0]] || quadros.find(Boolean);
+
   return `<main style="min-height:100dvh;display:grid;place-items:center;padding:2rem;text-align:center">
     <div>
-      <p style="font-size:3rem" aria-hidden>🍦</p>
+      ${temQuadros
+        ? `<img id="quadro-carregando" src="${primeiro}" alt=""
+             style="width:7rem;height:7rem;object-fit:contain;display:block;margin:0 auto">`
+        : `<div class="carregando-ponto" aria-hidden></div>`}
       <p class="display" style="margin-top:.75rem;font-weight:900">Conezyn</p>
       <p class="muted" style="margin-top:.25rem;font-size:.875rem">Carregando o cardápio de hoje...</p>
     </div>
   </main>`;
 }
+
 function vErroBanco(){
   return `<main style="min-height:100dvh;display:grid;place-items:center;padding:2rem">
     <div class="card" style="padding:2rem;max-width:26rem;text-align:center">
@@ -4381,7 +4504,12 @@ function vFicha(f){
 }
 
 function render(){
-  if (S.carregando) { document.getElementById("app").innerHTML = vCarregando(); return; }
+  if (S.carregando) {
+    document.getElementById("app").innerHTML = vCarregando();
+    iniciarAnimacaoCarregamento();
+    return;
+  }
+  pararAnimacaoCarregamento();
   if (S.erroBanco)  { document.getElementById("app").innerHTML = vErroBanco();  return; }
   if (S.perfil?.admin) ligarTempoReal();
   if (S.perfil?.admin && S.view === "admin" && !S.admin.carregado) carregarAdmin().then(render);
