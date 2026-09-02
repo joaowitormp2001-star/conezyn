@@ -576,7 +576,7 @@ const S = {
            abaAvaliacao: 'pendentes' },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
-  menuPerfil: false, loginAviso: null,
+  menuPerfil: false, loginAviso: null, senhaErro: null, senhaOk: null,
   qtdCard: {},   // quantidade escolhida em cada card do catálogo
   avaliar: { produtoId:null, nota:0, podeAvaliar:false, minha:null, enviando:false },
 };
@@ -928,6 +928,7 @@ function nav(view, param){
   S.menuPerfil = false;
   if (view==="cadastro") S.cad = { etapa:1, tel:"", nome:"", email:"", ficha:null, checando:false };
   S.loginErro = null; S.cadastroErro = null; S.loginAviso = null;
+  S.senhaErro = null; S.senhaOk = null;
   render(); window.scrollTo({top:0});
 }
 function voltar(){
@@ -2289,6 +2290,41 @@ async function sair(){
   S.perfil = null; S.pedidos = []; S.fidelidade = { total:0, historico:[] };
   nav("home");
 }
+async function trocarSenha(){
+  if (S.ocupado) return;
+  const atual = document.getElementById("s-atual").value;
+  const nova  = document.getElementById("s-nova").value;
+  const conf  = document.getElementById("s-conf").value;
+
+  S.senhaErro = null; S.senhaOk = null;
+  if (!atual){ S.senhaErro = "Informe sua senha atual."; return render(); }
+  if (nova.length < 6){ S.senhaErro = "A nova senha deve ter no mínimo 6 caracteres."; return render(); }
+  if (nova !== conf){ S.senhaErro = "As senhas novas não coincidem."; return render(); }
+  if (nova === atual){ S.senhaErro = "A nova senha precisa ser diferente da atual."; return render(); }
+
+  S.ocupado = true; render();
+
+  // Confirma a identidade entrando de novo com a senha atual.
+  const check = await sb.auth.signInWithPassword({
+    email: emailApelido(S.perfil.tel), password: atual,
+  });
+  if (check.error){
+    S.ocupado = false;
+    S.senhaErro = "Senha atual incorreta.";
+    return render();
+  }
+
+  const { error } = await sb.auth.updateUser({ password: nova });
+  S.ocupado = false;
+  if (error){ S.senhaErro = erroAmigavel(error); return render(); }
+
+  S.senhaOk = "Senha alterada! Use a nova da próxima vez que entrar.";
+  render();
+  ["s-atual","s-nova","s-conf"].forEach(id => {
+    const c = document.getElementById(id); if (c) c.value = "";
+  });
+}
+
 async function salvarPerfil(){
   const nome  = document.getElementById("c-nome").value.trim();
   const tel   = document.getElementById("c-tel").value.trim();
@@ -2357,6 +2393,26 @@ function vConta(){
         </div>
       </div>
     </section>
+
+    <section class="card" style="padding:1.5rem" aria-labelledby="troca-senha">
+      <h2 id="troca-senha" class="display" style="font-size:1.1rem;font-weight:700">Trocar senha</h2>
+      <p class="muted" style="font-size:.8rem;margin-top:.25rem">
+        Pedimos a senha atual para confirmar que é você.</p>
+      <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1rem">
+        <div><label class="label" for="s-atual">Senha atual</label>
+          ${campoSenha("s-atual", 'autocomplete="current-password"')}</div>
+        <div><label class="label" for="s-nova">Nova senha
+          ${dica("Mínimo de 6 caracteres.")}</label>
+          ${campoSenha("s-nova", 'autocomplete="new-password"')}</div>
+        <div><label class="label" for="s-conf">Confirmar nova senha</label>
+          ${campoSenha("s-conf", `autocomplete="new-password" onkeydown="if(event.key==='Enter')trocarSenha()"`)}</div>
+        ${S.senhaErro?`<p class="alerta" role="alert">${esc(S.senhaErro)}</p>`:""}
+        ${S.senhaOk?`<p class="ok" role="status">${esc(S.senhaOk)}</p>`:""}
+        <button class="btn btn-primary" style="align-self:start" ${S.ocupado?"disabled":""}
+          onclick="trocarSenha()">${S.ocupado ? "Trocando..." : "Trocar senha"}</button>
+      </div>
+    </section>
+
     <button class="btn btn-ghost" onclick="sair()">Sair da conta</button>
   </main>${vFooter()}`;
 }
