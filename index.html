@@ -404,7 +404,7 @@ const S = {
   view: "home", param: null,
   perfil: null,               // { id, nome, tel, email, foto, admin }
   carrinho: {},
-  pedidos: [],
+  pedidos: [], pedidosAntigos: [],
   fidelidade: { total: 0, historico: [] },
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
@@ -563,6 +563,27 @@ async function carregarPedidos(){
   }
   S.erroPedidos = null;
   S.pedidos = (data||[]).map(mapearPedido);
+}
+
+/* Pedidos importados da planilha que pertencem a este cliente. */
+async function carregarPedidosAntigos(){
+  if (!S.perfil){ S.pedidosAntigos = []; return; }
+  const { data, error } = await sb.rpc("meus_pedidos_antigos");
+  if (error){ console.error("meus_pedidos_antigos:", error); S.pedidosAntigos = []; return; }
+  S.pedidosAntigos = (data || []).map(c => ({
+    id: c.id,
+    antigo: true,
+    itens: Array.isArray(c.itens) && c.itens.length
+      ? c.itens.map(i => ({ nome: i.sabor, q: i.quantidade }))
+      : [{ nome: c.sabores || "Cones", q: c.quantidade }],
+    cones: c.quantidade,
+    total: c.valor_centavos,
+    forma: c.forma_pagamento,
+    entrega: c.data_entrega,
+    pagamento: c.data_pagamento,
+    status: c.data_pagamento ? "Pagamento concluído" : c.data_entrega ? "Entregue" : "Pedido feito",
+    data: c.data_entrega || c.data_pagamento || null,
+  }));
 }
 
 async function carregarFidelidade(){
@@ -1979,7 +2000,7 @@ async function fazerLogin(){
   S.ocupado = false;
   if (error){ S.loginErro = erroAmigavel(error); return render(); }
   await carregarPerfil();
-  await Promise.all([carregarPedidos(), carregarFidelidade()]);
+  await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
 async function recuperarSenha(){
@@ -2015,7 +2036,7 @@ async function fazerCadastro(){
     return nav("login");
   }
   await carregarPerfil();
-  await Promise.all([carregarPedidos(), carregarFidelidade()]);
+  await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
 async function sair(){
@@ -2096,36 +2117,78 @@ function vConta(){
 }
 function vPedidos(){
   if (!S.perfil){ S.voltarPara="pedidos"; return vLogin(false); }
-  const meus = S.pedidos;   // o RLS do banco já entrega só os do cliente
+
+  // Junta os pedidos feitos no site com os que vieram da planilha.
+  const novos = S.pedidos.map(p => ({
+    chave: "n" + p.id, numero: p.numero, antigo: false,
+    data: p.criadoEm, status: p.status, total: p.total,
+    itens: p.itens.map(i => ({ nome: i.nome, q: i.q, valor: i.efetivo })),
+    local: p.local, quando: p.quando, brinde: p.brinde, presente: p.presente,
+    destinatario: p.destinatario,
+  }));
+  const antigos = S.pedidosAntigos.map(p => ({
+    chave: "a" + p.id, numero: null, antigo: true,
+    data: p.data ? new Date(p.data + "T12:00") : null,
+    status: p.status, total: p.total,
+    itens: p.itens.map(i => ({ nome: i.nome, q: i.q, valor: null })),
+    entrega: p.entrega, pagamento: p.pagamento, forma: p.forma,
+  }));
+  const todos = [...novos, ...antigos]
+    .sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+
+  const dataBr = d => d
+    ? new Date(String(d).length <= 10 ? d + "T12:00" : d).toLocaleDateString("pt-BR")
+    : null;
+
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
     <h1 class="display" style="font-size:1.9rem;font-weight:900">Meus pedidos</h1>
-    ${meus.length===0
-      ? `<div class="card" style="margin-top:1rem;padding:3.5rem 1.5rem;text-align:center;display:flex;flex-direction:column;gap:.75rem;align-items:center">
+    ${antigos.length ? `<p class="muted" style="font-size:.8rem;margin-top:.25rem">
+      Inclui ${antigos.length} pedido(s) feitos antes do site existir.</p>` : ""}
+
+    ${todos.length === 0
+      ? `<div class="card" style="margin-top:1rem;padding:3.5rem 1.5rem;text-align:center;
+            display:flex;flex-direction:column;gap:.75rem;align-items:center">
           <span style="font-size:3rem" aria-hidden>📦</span>
           <h2 class="display" style="font-size:1.25rem;font-weight:900">Nenhum pedido ainda</h2>
           <p class="muted" style="font-size:.875rem">Seu primeiro cone está a poucos cliques de distância.</p>
           <button class="btn btn-primary" onclick="nav('home')">Ver o catálogo</button></div>`
       : `<ul style="list-style:none;margin-top:1rem;display:flex;flex-direction:column;gap:.75rem">
-          ${meus.map(p=>`<li class="card" style="padding:1.25rem">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <p class="display" style="font-weight:900">Pedido #${p.numero}</p>
-              <span class="status st-${p.status.replace(" ","_")}">${p.status}</span>
+          ${todos.map(p => `<li class="card" style="padding:1.25rem">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:center">
+              <p class="display" style="font-weight:900">
+                ${p.numero ? "Pedido #" + p.numero : "Pedido anterior"}
+                ${p.antigo ? `<span class="badge b-classico" style="margin-left:.35rem;font-size:.62rem">
+                  antes do site</span>` : ""}</p>
+              <span class="status st-${String(p.status).replace(/ /g,"_")}">${p.status}</span>
             </div>
+
             <p class="muted" style="margin-top:.25rem;font-size:.75rem">
-              ${p.criadoEm.toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})} · Entrega: ${esc(p.local)} ·
-              ${p.quando==="agora"?"Agora":"às "+p.quando}</p>
+              ${p.antigo
+                ? `${p.entrega ? "entrega " + dataBr(p.entrega) : "sem data de entrega"}
+                   ${p.pagamento ? " · pago em " + dataBr(p.pagamento) : " · pagamento pendente"}
+                   ${p.forma ? " · " + esc(p.forma) : ""}`
+                : `${new Date(p.data).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}
+                   · Entrega: ${esc(p.local || "")}
+                   · ${p.quando === "agora" ? "Agora" : "às " + esc(p.quando || "")}`}
+            </p>
+
             <dl class="linhas" style="margin-top:.75rem">
-              ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
+              ${p.itens.map(i => `<div><dt>${i.q}× ${esc(i.nome)}</dt>
+                <dd style="font-weight:600">${i.valor != null ? reais(i.valor) : ""}</dd></div>`).join("")}
             </dl>
-            ${p.presente?`<p style="margin-top:.4rem;font-size:.75rem;font-weight:700;color:var(--cacau-claro)">
-              🎁 Presente para ${esc(p.destinatario || "")}</p>`:""}
-            ${p.brinde>0?`<p style="margin-top:.4rem;font-size:.75rem;font-weight:700;color:#B4590F">
-              🎁 Brinde do cartão fidelidade: − ${reais(p.brinde)}</p>`:""}
-            <p class="display" style="margin-top:.5rem;border-top:1px solid rgb(62 39 35/.1);padding-top:.5rem;
-              text-align:right;font-weight:900">${reais(p.total)}</p>
+
+            ${p.presente ? `<p style="margin-top:.4rem;font-size:.75rem;font-weight:700;color:var(--cacau-claro)">
+              🎁 Presente para ${esc(p.destinatario || "")}</p>` : ""}
+            ${p.brinde > 0 ? `<p style="margin-top:.4rem;font-size:.75rem;font-weight:700;color:#B4590F">
+              🎁 Brinde do cartão fidelidade: − ${reais(p.brinde)}</p>` : ""}
+
+            ${p.total != null ? `<p class="display" style="margin-top:.5rem;
+              border-top:1px solid rgb(62 39 35/.1);padding-top:.5rem;text-align:right;font-weight:900">
+              ${reais(p.total)}</p>` : ""}
           </li>`).join("")}</ul>`}
   </main>${vFooter()}`;
 }
+
 /* Silhuetas de fundo, uma para cada nível. */
 function svgEnfeite(tipo){
   const c = "currentColor";
@@ -2151,7 +2214,7 @@ function svgEnfeite(tipo){
   return svgCone({ recheio:c, casquinha:c });
 }
 
-/* Cone em SVG. `marca` aceita "mais" (+ laranja) ou "check" (✓ verde).
+/* Cone em SVG. `marca` aceita/* Cone em SVG. `marca` aceita "mais" (+ laranja) ou "check" (✓ verde).
    Ambos levam contorno branco para destacar sobre o cone. */
 function svgCone({ recheio="#A18D80", casquinha="#A18D80", marca=null } = {}){
   const cruz = "M -2 -7.5 H 2 V -2 H 7.5 V 2 H 2 V 7.5 H -2 V 2 H -7.5 V -2 H -2 Z";
@@ -2281,7 +2344,11 @@ function vFidelidade(){
     ${carrosselCartoes(d.total, S.perfil.nome)}
 
     <section class="card" style="padding:1.25rem">
-      <h2 class="display" style="font-size:1.1rem;font-weight:700">Histórico de carimbos</h2>
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.5rem">
+        <h2 class="display" style="font-size:1.1rem;font-weight:700">Histórico de carimbos</h2>
+        <button style="font-size:.78rem;font-weight:700;text-decoration:underline"
+          onclick="nav('pedidos')">Ver meus pedidos →</button>
+      </div>
       ${d.historico.length===0
         ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">
             Ainda sem carimbos — eles aparecem aqui quando um pedido é marcado como <strong>Entregue</strong> no painel.</p>`
@@ -2688,7 +2755,7 @@ async function iniciar(){
   try {
     await carregarPerfil();
     await carregarCatalogo();
-    if (S.perfil) await Promise.all([carregarPedidos(), carregarFidelidade()]);
+    if (S.perfil) await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
     if (S.perfil) checarPresentes();
     restaurarNotificacoes();
   } catch (e){
