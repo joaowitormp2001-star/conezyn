@@ -603,6 +603,7 @@ const S = {
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], tentativas: [], categorias: [],
            produtoEditando: null, fichaAberta: null, carregado: false,
            novoPedido: false, pedidoEditando: null, formPedido: null, clienteAberto: null,
+           filtroCliente: "",
            pedidosCliente: {},
            form: {}, pedidosExpandidos: {}, clienteEditando: null, fichaEditando: null,
            setoresExpandidos: false, importacao: null,
@@ -3340,6 +3341,11 @@ function formPedido(){
 }
 const hoje = () => new Date().toISOString().slice(0, 10);
 
+function aplicarFiltroCliente(_id, nome){
+  S.admin.filtroCliente = (nome || "").trim();
+  render();
+}
+
 function abrirNovoPedido(){
   S.admin.pedidoEditando = null;
   S.admin.novoPedido = true;
@@ -3666,12 +3672,29 @@ function vCardPedido(p){
 function vAdminPedidos(){
   if (!S.admin.carregado) return `<p class="muted">Carregando pedidos...</p>`;
 
-  const lista = pedidosUnificados();
+  const todos = pedidosUnificados();
+
+  // Filtro por cliente: vale para as abas e para os totais.
+  const alvo = S.admin.filtroCliente || "";
+  const lista = alvo
+    ? todos.filter(p => semAcentoMin(p.cliente) === semAcentoMin(alvo))
+    : todos;
+
   const aba = S.adminFiltro || "todos";
   const filtrada =
       aba === "todos"   ? lista
     : aba === "brindes" ? lista.filter(p => p.ehBrinde)
     : lista.filter(p => p.status === aba);
+
+  // A receber: entregue ou aguardando, com valor e sem pagamento registrado.
+  const aReceber = lista.filter(p =>
+    !p.ehBrinde && p.status !== "Cancelado" && p.status !== "Pagamento concluído" && (p.valor || 0) > 0);
+  const totalReceber = aReceber.reduce((n, p) => n + (p.valor || 0), 0);
+  const recebido = lista
+    .filter(p => p.status === "Pagamento concluído")
+    .reduce((n, p) => n + (p.valor || 0), 0);
+
+  const nomes = [...new Set(todos.map(p => p.cliente).filter(x => x && x !== "—"))].sort();
 
   const contar = st => lista.filter(p => p.status === st).length;
   const abas = [
@@ -3694,6 +3717,33 @@ function vAdminPedidos(){
       <button class="btn btn-primary" onclick="abrirNovoPedido()">+ Novo pedido</button>
     </div>
 
+    <section class="card" style="padding:1rem;display:flex;flex-wrap:wrap;gap:1.25rem;
+        align-items:center;border-left:4px solid var(--casquinha)">
+      <div style="flex:1;min-width:11rem">
+        <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
+          letter-spacing:.05em">A receber${alvo ? " de " + esc(alvo) : ""}</p>
+        <p class="display" style="font-size:1.8rem;font-weight:900;color:#B4590F;line-height:1.1">
+          ${reais(totalReceber)}</p>
+        <p class="muted" style="font-size:.75rem">
+          ${aReceber.length} pedido(s) aguardando pagamento</p>
+      </div>
+      <div style="min-width:9rem">
+        <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
+          letter-spacing:.05em">Já recebido</p>
+        <p class="display" style="font-size:1.2rem;font-weight:900;color:var(--pistache)">
+          ${reais(recebido)}</p>
+      </div>
+      <div style="min-width:12rem;flex:1">
+        <label class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
+          letter-spacing:.05em" for="filtro-cliente">Filtrar por cliente</label>
+        ${campoComLista("filtro-cliente", { valor: alvo, placeholder: "Todos os clientes",
+          opcoes: nomes.map(n => ({ rotulo: n })), aoEscolher: "aplicarFiltroCliente" })}
+        ${alvo ? `<button style="font-size:.74rem;font-weight:700;color:var(--framboesa);
+          text-decoration:underline;margin-top:.3rem" onclick="aplicarFiltroCliente(null,'')">
+          limpar filtro</button>` : ""}
+      </div>
+    </section>
+
     ${S.admin.novoPedido ? vFormularioPedido() : ""}
 
     <div class="chips" role="tablist" aria-label="Filtrar pedidos">
@@ -3702,7 +3752,8 @@ function vAdminPedidos(){
     </div>
 
     ${filtrada.length === 0
-      ? `<p class="muted" style="font-size:.875rem">Nenhum pedido nesta aba.</p>`
+      ? `<p class="muted" style="font-size:.875rem">
+           Nenhum pedido nesta aba${alvo ? ` para ${esc(alvo)}` : ""}.</p>`
       : `<div style="display:flex;flex-direction:column;gap:.75rem">
           ${filtrada.map(vCardPedido).join("")}
         </div>`}
