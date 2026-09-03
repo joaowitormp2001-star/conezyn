@@ -376,7 +376,9 @@
 <datalist id="formas-lista">
   <option value="Pix"><option value="Dinheiro"><option value="Cartão"><option value="Transferência">
 </datalist>
-<button class="btn btn-primary switch" id="switch-btn" onclick="toggleAdmin()">Painel admin</button>
+<!-- O botão do painel é criado pelo script apenas depois que o servidor
+     confirma que a conta é administradora. Ver atualizarBotaoAdmin(). -->
+<div id="switch-slot"></div>
 
 <script>
 /* ============================================================
@@ -570,7 +572,7 @@ const S = {
   cad: { etapa: 1, tel: "", nome: "", email: "", ficha: null, checando: false },
   hist: [],
   adminTab: "dash", adminFiltro: "todos",
-  admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], fichaAberta: null, carregado: false,
+  admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], tentativas: [], fichaAberta: null, carregado: false,
            form: {}, pedidosExpandidos: {}, clienteEditando: null, fichaEditando: null,
            setoresExpandidos: false, importacao: null,
            abaAvaliacao: 'pendentes' },
@@ -673,6 +675,28 @@ async function carregarCatalogo(){
 
   const lista = document.getElementById("sabores-lista");
   if (lista) lista.innerHTML = PRODUTOS.map(p => `<option value="${esc(p.nome)}">`).join("");
+}
+
+/* O navegador não decide quem é administrador: o servidor decide.
+   Guardamos aqui a resposta oficial. */
+let ADMIN_CONFIRMADO = false;
+
+async function confirmarAdmin(){
+  ADMIN_CONFIRMADO = false;
+  if (!S.perfil) return false;
+  const { data, error } = await sb.rpc("sou_admin");
+  ADMIN_CONFIRMADO = !error && data === true;
+  return ADMIN_CONFIRMADO;
+}
+
+/* Cria o botão do painel só para quem o servidor confirmou.
+   Para os demais, ele nem existe na página. */
+function atualizarBotaoAdmin(){
+  const slot = document.getElementById("switch-slot");
+  if (!slot) return;
+  if (!ADMIN_CONFIRMADO){ slot.innerHTML = ""; return; }
+  slot.innerHTML = `<button class="btn btn-primary switch" id="switch-btn" onclick="toggleAdmin()">
+    ${S.view === "admin" ? "← Ver loja" : "Painel admin"}</button>`;
 }
 
 async function carregarPerfil(){
@@ -2234,6 +2258,7 @@ async function fazerLogin(){
   S.ocupado = false;
   if (error){ S.loginErro = erroAmigavel(error); return render(); }
   await carregarPerfil();
+  await confirmarAdmin();
   await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
@@ -2281,11 +2306,13 @@ async function fazerCadastro(){
     return nav("login");
   }
   await carregarPerfil();
+  await confirmarAdmin();
   await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
 
 async function sair(){
+  ADMIN_CONFIRMADO = false;
   await sb.auth.signOut();
   S.perfil = null; S.pedidos = []; S.fidelidade = { total:0, historico:[] };
   nav("home");
@@ -2777,7 +2804,27 @@ function vAdminHeader(){
     </nav>
   </div></header>`;
 }
+function vSemPermissao(){
+  return `${vHeader()}<main class="wrap" style="padding-top:2rem;max-width:30rem">
+    <div class="card" style="padding:2.5rem 1.5rem;text-align:center">
+      <p style="font-size:2.5rem" aria-hidden>🔒</p>
+      <h1 class="display" style="margin-top:.5rem;font-size:1.4rem;font-weight:900">
+        Área restrita</h1>
+      <p class="muted" style="margin-top:.5rem;font-size:.875rem">
+        Esta parte do site é da administração da Conezyn.
+        Seu acesso foi registrado.</p>
+      <button class="btn btn-primary" style="margin-top:1.25rem" onclick="nav('home')">
+        Voltar para a loja</button>
+    </div>
+  </main>${vFooter()}`;
+}
+
 function vAdmin(){
+  // Vale a resposta do servidor, não a memória do navegador.
+  if (!ADMIN_CONFIRMADO){
+    sb.rpc("registrar_tentativa_admin", { p_origem: "tela admin" });
+    return vSemPermissao();
+  }
   const tabs = { dash: vAdminDash, pedidos: vAdminPedidos, notif: vAdminNotif,
                  produtos: vAdminProdutos, avaliacoes: vAdminAvaliacoes, sugestoes: vAdminSugestoes,
                  clientes: vAdminClientes };
@@ -3385,7 +3432,10 @@ async function iniciar(){
   try {
     await carregarPerfil();
     await carregarCatalogo();
-    if (S.perfil) await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
+    if (S.perfil){
+    await confirmarAdmin();
+    await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
+  }
     if (S.perfil) checarPresentes();
     restaurarNotificacoes();
   } catch (e){
@@ -3417,7 +3467,7 @@ async function abrirAdmin(aba){
 
 async function carregarAdmin(){
   if (!S.perfil?.admin) return;
-  const [prod, avs, sug, cli, fic, comp, senhas] = await Promise.all([
+  const [prod, avs, sug, cli, fic, comp, senhas, tent] = await Promise.all([
     sb.from("products").select("*, categories(nome, slug)").order("nome"),
     sb.from("reviews").select("*, products(nome), profiles(nome)").order("criado_em", { ascending:false }),
     sb.from("suggestions").select("*, profiles(nome, telefone)").order("criado_em", { ascending:false }),
@@ -3425,6 +3475,7 @@ async function carregarAdmin(){
     sb.from("fichas_admin").select("*").order("nome"),
     sb.from("pre_compras").select("*").order("data_entrega", { ascending:false }),
     sb.from("pedidos_senha").select("*").is("atendido_em", null).order("criado_em"),
+    sb.rpc("tentativas_painel"),
   ]);
   if (!prod.error) S.admin.produtos  = prod.data || [];
   if (!avs.error)  S.admin.avaliacoes = avs.data || [];
@@ -3433,6 +3484,7 @@ async function carregarAdmin(){
   if (!fic.error)  S.admin.fichas     = fic.data || [];
   if (!comp.error) S.admin.compras    = comp.data || [];
   if (!senhas.error) S.admin.senhas   = senhas.data || [];
+  if (!tent.error)   S.admin.tentativas = tent.data || [];
   S.admin.carregado = true;
   if (S.admin.avaliacoes.some(a => a.excluida_em)) limparLixeira(true);   // some com o que passou de 48h
 }
@@ -4503,6 +4555,24 @@ function vAdminClientes(){
       </section>`;
     })()}
 
+    ${S.admin.tentativas?.length ? `<section class="card" style="padding:1rem;border-left:4px solid #950007"
+        aria-labelledby="tentativas">
+      <h2 id="tentativas" class="display" style="font-size:1rem;font-weight:800">
+        🔒 Tentativas de abrir o painel (${S.admin.tentativas.length})</h2>
+      <p class="muted" style="font-size:.78rem;margin-top:.2rem">
+        Contas que tentaram entrar aqui sem permissão. Elas não conseguiram acessar dado nenhum —
+        o bloqueio é no banco. Serve para você saber quem andou tentando.</p>
+      <ul style="list-style:none;margin-top:.6rem;display:flex;flex-direction:column;gap:.35rem">
+        ${S.admin.tentativas.map(t => `<li style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;
+            background:var(--chantilly);border-radius:.5rem;padding:.45rem .65rem;font-size:.8rem">
+          <strong style="flex:1">${esc(t.nome || "Cliente")}</strong>
+          <span class="muted">${esc(mascaraTelefone(t.telefone || ""))}</span>
+          <span class="muted" style="font-size:.72rem">
+            ${t.vezes}× · última em ${new Date(t.quando).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span>
+        </li>`).join("")}
+      </ul>
+    </section>` : ""}
+
     ${S.admin.senhas.length ? `<section class="card" style="padding:1rem;border-left:4px solid var(--framboesa)"
         aria-labelledby="senhas">
       <h2 id="senhas" class="display" style="font-size:1rem;font-weight:800">
@@ -4888,9 +4958,7 @@ function render(){
     carrossel.onscroll = atualizarSetasCartoes;
     setTimeout(atualizarSetasCartoes, 60);
   }
-  const sw = document.getElementById("switch-btn");
-  sw.style.display = S.perfil?.admin ? "inline-flex" : "none";
-  sw.textContent = S.view==="admin" ? "← Ver loja" : "Painel admin";
+  atualizarBotaoAdmin();
 }
 iniciar();
 </script>
