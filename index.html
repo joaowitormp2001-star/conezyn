@@ -138,6 +138,7 @@
   .st-Pedido_feito{background:var(--casquinha-claro);color:var(--cacau)}
   .st-Entregue{background:var(--cacau-claro);color:#fff}
   .st-Pagamento_concluído{background:var(--pistache);color:#fff}
+  .st-Brinde{background:rgba(235,121,28,.16);color:#B4590F}
   .st-Cancelado{background:var(--framboesa);color:#fff}
   /* mesmo fundo claro do cabeçalho da loja, para a logo contrastar */
   header.admin{position:sticky;top:0;z-index:40;background:var(--chantilly);color:var(--cacau);
@@ -342,6 +343,14 @@
   .opcoes li + li button{border-top:1px solid rgb(62 39 35/.1)}
   .opcoes .criar{color:var(--framboesa)}
   .opcoes .vazio{padding:.6rem .8rem;font-size:.8rem;color:rgb(62 39 35/.6)}
+  /* blocos de dados: o rótulo fica logo acima do valor, não do outro lado da linha */
+  .dados-grade{display:grid;gap:.5rem;margin-top:.6rem;
+    grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr))}
+  .dado{background:var(--chantilly);border-radius:.6rem;padding:.5rem .65rem;min-width:0}
+  .dado dt{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+    color:rgb(62 39 35/.5)}
+  .dado dd{font-size:.88rem;font-weight:600;margin-top:.1rem;word-break:break-word}
+  .dado.destaque dd{color:var(--pistache);font-weight:800}
   .setor-caixa{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem}
   .setor-tag{border:1px solid rgb(62 39 35/.2);background:#fff;border-radius:9999px;
     padding:.28rem .7rem;font-size:.75rem;font-weight:600;transition:.12s;line-height:1.2}
@@ -3325,7 +3334,7 @@ function vAdminDash(){
 function formPedido(){
   if (!S.admin.formPedido){
     S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                           forma:"", valor:"", linhas:[{ sabor:"", qtd:1 }] };
+                           forma:"", valor:"", brinde:false, linhas:[{ sabor:"", qtd:1 }] };
   }
   return S.admin.formPedido;
 }
@@ -3335,7 +3344,7 @@ function abrirNovoPedido(){
   S.admin.pedidoEditando = null;
   S.admin.novoPedido = true;
   S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                         forma:"", valor:"", linhas:[{ sabor:"", qtd:1 }] };
+                         forma:"", valor:"", brinde:false, linhas:[{ sabor:"", qtd:1 }] };
   render();
 }
 
@@ -3352,6 +3361,7 @@ function editarPedidoFicha(id){
     entrega: c.data_entrega || "", pagamento: c.data_pagamento || "",
     forma: c.forma_pagamento || "",
     valor: c.valor_centavos != null ? (c.valor_centavos / 100).toFixed(2).replace(".", ",") : "",
+    brinde: ehBrindeDaFicha(c),
     linhas: Array.isArray(c.itens) && c.itens.length
       ? c.itens.map(i => ({ sabor: i.sabor, qtd: i.quantidade }))
       : [{ sabor: c.sabores || "", qtd: c.quantidade || 1 }],
@@ -3381,7 +3391,18 @@ function lerFormPedido(){
   pega("fp-pagamento", "pagamento");
   pega("fp-forma", "forma");
   pega("fp-valor", "valor");
+  const cb = document.getElementById("fp-brinde");
+  if (cb) f.brinde = cb.checked;
   return f;
+}
+
+/* Marcar como brinde zera o valor e limpa o pagamento —
+   é assim que o pedido entra na categoria Brindes. */
+function marcarComoBrinde(marcado){
+  const f = lerFormPedido();
+  f.brinde = marcado;
+  if (marcado){ f.valor = "0,00"; f.pagamento = ""; }
+  render();
 }
 
 function addLinhaPedido(){ const f = lerFormPedido(); f.linhas.push({ sabor:"", qtd:1 }); render(); }
@@ -3422,7 +3443,7 @@ async function salvarFormPedido(){
   if (!f.cliente.trim()){ alert("Informe o nome do cliente."); return; }
   if (!itens.length){ alert("Adicione ao menos um sabor."); return; }
 
-  const centavos = (() => {
+  const centavos = f.brinde ? 0 : (() => {
     const t = String(f.valor).replace(/[^\d,.-]/g, "").trim();
     if (!t) return null;
     const n = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
@@ -3435,16 +3456,18 @@ async function salvarFormPedido(){
       itens, quantidade: total,
       sabores: itens.map(i => `${i.quantidade}× ${i.sabor}`).join(", "),
       data_entrega: f.entrega || null,
-      data_pagamento: f.pagamento || null,
-      forma_pagamento: f.forma.trim() || null,
+      data_pagamento: f.brinde ? null : (f.pagamento || null),
+      forma_pagamento: f.brinde ? null : (f.forma.trim() || null),
       valor_centavos: centavos,
     }).eq("id", f.id);
     if (error){ avisarErro(error, "salvar o pedido"); return; }
   } else {
     const { error } = await sb.rpc("importar_pedido_ficha", {
       p_nome: f.cliente.trim(), p_itens: itens,
-      p_data_entrega: f.entrega || null, p_data_pagamento: f.pagamento || null,
-      p_forma_pagamento: f.forma.trim() || null, p_valor_centavos: centavos,
+      p_data_entrega: f.entrega || null,
+      p_data_pagamento: f.brinde ? null : (f.pagamento || null),
+      p_forma_pagamento: f.brinde ? null : (f.forma.trim() || null),
+      p_valor_centavos: centavos,
       p_telefone: f.telefone || null,
     });
     if (error){ avisarErro(error, "criar o pedido"); return; }
@@ -3504,6 +3527,12 @@ function vFormularioPedido(){
           placeholder="0,00" style="display:block;margin-top:.15rem"></label>
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .7rem;font-size:.72rem"
         onclick="sugerirValorPedido()">Sugerir valor</button>
+      <label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;font-weight:700;
+        color:#B4590F;cursor:pointer;padding-bottom:.4rem">
+        <input type="checkbox" id="fp-brinde" ${f.brinde ? "checked" : ""}
+          onchange="marcarComoBrinde(this.checked)" style="width:1rem;height:1rem">
+        🎁 Foi brinde
+      </label>
     </div>
     <p class="muted" style="font-size:.72rem;margin-top:.3rem">
       ${f.id ? "O valor veio da ficha. Pode alterar à vontade."
@@ -3528,9 +3557,15 @@ function verNota(id){
 /* ============================================================
    PEDIDOS UNIFICADOS — os do site e os lançados nas fichas
    ============================================================ */
+/* Pedido sem pagamento e com valor zerado foi cone de brinde. */
+function ehBrindeDaFicha(c){
+  return !c.data_pagamento && c.valor_centavos === 0;
+}
+
 function statusDaFicha(c){
-  if (c.data_pagamento) return "Pagamento concluído";
-  if (c.data_entrega)   return "Entregue";
+  if (ehBrindeDaFicha(c))  return "Brinde";
+  if (c.data_pagamento)    return "Pagamento concluído";
+  if (c.data_entrega)      return "Entregue";
   return "Pedido feito";
 }
 
@@ -3540,7 +3575,7 @@ function pedidosUnificados(){
     cliente: p.cliente?.nome || "—", telefone: p.cliente?.tel || "",
     itens: p.itens.map(i => ({ sabor: i.nome, quantidade: i.q })),
     cones: p.itens.reduce((n, i) => n + i.q, 0),
-    valor: p.total, brinde: p.brinde,
+    valor: p.total, brinde: p.brinde, ehBrinde: p.brinde > 0,
     entrega: null, pagamento: null, forma: p.forma_pagamento || null,
     status: p.status, quando: p.criadoEm, local: p.local,
     presente: p.presente, destinatario: p.destinatario,
@@ -3555,7 +3590,7 @@ function pedidosUnificados(){
         ? c.itens.map(i => ({ sabor: i.sabor, quantidade: i.quantidade }))
         : [{ sabor: c.sabores || "Cones", quantidade: c.quantidade }],
       cones: c.quantidade,
-      valor: c.valor_centavos, brinde: 0,
+      valor: c.valor_centavos, brinde: 0, ehBrinde: ehBrindeDaFicha(c),
       entrega: c.data_entrega, pagamento: c.data_pagamento, forma: c.forma_pagamento,
       status: statusDaFicha(c),
       quando: c.data_entrega || c.data_pagamento || c.criado_em,
@@ -3583,7 +3618,7 @@ function vCardPedido(p){
           ${p.numero ? "Pedido #" + p.numero : "Pedido da ficha"}
           ${p.tipo === "ficha" ? `<span class="badge b-classico" style="margin-left:.35rem;font-size:.62rem">
             lançado por você</span>` : ""}
-          ${p.brinde > 0 ? `<span class="badge" style="background:#EB791C;color:#fff;
+          ${p.ehBrinde ? `<span class="badge" style="background:#EB791C;color:#fff;
             margin-left:.35rem;text-transform:none">🎁 brinde</span>` : ""}</p>
         <p class="muted" style="font-size:.78rem">
           <strong style="color:var(--cacau)">${esc(p.cliente)}</strong>
@@ -3633,7 +3668,10 @@ function vAdminPedidos(){
 
   const lista = pedidosUnificados();
   const aba = S.adminFiltro || "todos";
-  const filtrada = aba === "todos" ? lista : lista.filter(p => p.status === aba);
+  const filtrada =
+      aba === "todos"   ? lista
+    : aba === "brindes" ? lista.filter(p => p.ehBrinde)
+    : lista.filter(p => p.status === aba);
 
   const contar = st => lista.filter(p => p.status === st).length;
   const abas = [
@@ -3642,6 +3680,7 @@ function vAdminPedidos(){
     ["Entregue", `Entregue (${contar("Entregue")})`],
     ["Pagamento concluído", `Pagamento concluído (${contar("Pagamento concluído")})`],
     ["Cancelado", `Cancelado (${contar("Cancelado")})`],
+    ["brindes", `🎁 Brindes (${lista.filter(p => p.ehBrinde).length})`],
   ];
 
   return `<div style="display:flex;flex-direction:column;gap:1rem">
@@ -5295,13 +5334,13 @@ function vFicha(f){
         <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
           onclick="editarFicha('${f.id}')">Cancelar</button>
       </div>`
-      : `<dl class="linhas">
-          <div><dt class="muted">Nome</dt><dd>${esc(f.nome)}</dd></div>
-          <div><dt class="muted">WhatsApp</dt><dd>${esc(mascaraTelefone(f.telefone || "—"))}</dd></div>
-          <div><dt class="muted">Setor</dt><dd>${esc(f.setor || "—")}</dd></div>
-          <div><dt class="muted">Trato no cartão</dt><dd>${trato}</dd></div>
-          <div><dt class="muted">Cones consumidos</dt><dd><strong>${cones}</strong></dd></div>
-          <div><dt class="muted">Pedidos</dt><dd>${compras.length}</dd></div>
+      : `<dl class="dados-grade">
+          <div class="dado"><dt>Nome</dt><dd>${esc(f.nome)}</dd></div>
+          <div class="dado"><dt>WhatsApp</dt><dd>${esc(mascaraTelefone(f.telefone || "—"))}</dd></div>
+          <div class="dado"><dt>Setor</dt><dd>${esc(f.setor || "—")}</dd></div>
+          <div class="dado"><dt>Trato no cartão</dt><dd>${trato}</dd></div>
+          <div class="dado destaque"><dt>Cones consumidos</dt><dd>${cones}</dd></div>
+          <div class="dado"><dt>Pedidos</dt><dd>${compras.length}</dd></div>
         </dl>
         <button class="btn btn-ghost" style="margin-top:.6rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
           onclick="editarFicha('${f.id}')">Editar dados</button>`}
