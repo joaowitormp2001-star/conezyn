@@ -330,6 +330,18 @@
   .fid-slide-rotulo{font-size:.72rem;font-weight:700;color:rgb(62 39 35/.55);
     margin-bottom:.35rem;display:block}
   .fid-slide.completo .fid{opacity:.92}
+  /* lista de opções que abre abaixo de um campo, no padrão do menu de perfil */
+  .campo-lista{position:relative}
+  .opcoes{position:absolute;z-index:40;left:0;right:0;top:calc(100% + .3rem);max-height:15rem;
+    overflow-y:auto;background:var(--chantilly);border:1px solid rgb(62 39 35/.2);
+    border-radius:.8rem;box-shadow:0 12px 26px -10px rgb(62 39 35/.35)}
+  .opcoes::before{content:"";display:block;height:3px;background:var(--casquinha)}
+  .opcoes button{display:block;width:100%;text-align:left;padding:.55rem .8rem;font-size:.85rem;
+    font-weight:600;background:transparent}
+  .opcoes button:hover,.opcoes button:focus-visible{background:var(--chantilly-esc)}
+  .opcoes li + li button{border-top:1px solid rgb(62 39 35/.1)}
+  .opcoes .criar{color:var(--framboesa)}
+  .opcoes .vazio{padding:.6rem .8rem;font-size:.8rem;color:rgb(62 39 35/.6)}
   .setor-caixa{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem}
   .setor-tag{border:1px solid rgb(62 39 35/.2);background:#fff;border-radius:9999px;
     padding:.28rem .7rem;font-size:.75rem;font-weight:600;transition:.12s;line-height:1.2}
@@ -581,6 +593,8 @@ const S = {
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], tentativas: [], categorias: [],
            produtoEditando: null, fichaAberta: null, carregado: false,
+           novoPedido: false, pedidoEditando: null, formPedido: null, clienteAberto: null,
+           pedidosCliente: {},
            form: {}, pedidosExpandidos: {}, clienteEditando: null, fichaEditando: null,
            setoresExpandidos: false, importacao: null,
            abaAvaliacao: 'pendentes' },
@@ -1364,6 +1378,77 @@ let buscaTimer = null;
 /* A lista de sugestões é desenhada SOZINHA, sem re-renderizar a tela.
    Chamar render() a cada tecla destruía o campo e tirava o foco. */
 /* Tags de setor: filtram enquanto se digita, sem redesenhar a tela. */
+/* ============================================================
+   CAMPO COM LISTA DE OPÇÕES
+   Abre abaixo do campo, filtra conforme se digita e — quando
+   permitido — deixa usar um valor que não está na lista.
+   ============================================================ */
+const LISTAS = {};   // idCampo -> { opcoes, permitirNovo, aoEscolher }
+
+function campoComLista(id, { valor = "", placeholder = "", opcoes = [], permitirNovo = false,
+                             aoEscolher = "", extra = "" } = {}){
+  LISTAS[id] = { opcoes, permitirNovo, aoEscolher };
+  return `<span class="campo-lista" style="display:block">
+    <input id="${id}" class="field" autocomplete="off" value="${esc(valor)}"
+      placeholder="${esc(placeholder)}" ${extra}
+      oninput="abrirLista('${id}')" onfocus="abrirLista('${id}')"
+      onblur="setTimeout(()=>fecharLista('${id}'), 150)">
+    <span id="${id}-opcoes"></span>
+  </span>`;
+}
+
+function abrirLista(id){
+  const cfg = LISTAS[id];
+  const campo = document.getElementById(id);
+  const caixa = document.getElementById(id + "-opcoes");
+  if (!cfg || !campo || !caixa) return;
+
+  const termo = semAcentoMin(campo.value);
+  const achadas = cfg.opcoes.filter(o => !termo || semAcentoMin(o.rotulo).includes(termo));
+  const exato = cfg.opcoes.some(o => semAcentoMin(o.rotulo) === termo);
+  const podeCriar = cfg.permitirNovo && campo.value.trim().length >= 2 && !exato;
+
+  if (achadas.length === 0 && !podeCriar){
+    caixa.innerHTML = `<div class="opcoes"><p class="vazio">Nada encontrado.</p></div>`;
+    return;
+  }
+
+  caixa.innerHTML = `<ul class="opcoes">
+    ${achadas.map((o, i) => `<li><button type="button" onmousedown="event.preventDefault()"
+      onclick="escolherDaLista('${id}', ${i})">
+      ${esc(o.rotulo)}${o.detalhe ? `<span class="muted" style="font-weight:400"> · ${esc(o.detalhe)}</span>` : ""}
+    </button></li>`).join("")}
+    ${podeCriar ? `<li><button type="button" class="criar" onmousedown="event.preventDefault()"
+      onclick="usarValorNovo('${id}')">+ usar “${esc(campo.value.trim())}”</button></li>` : ""}
+  </ul>`;
+  caixa.dataset.filtradas = JSON.stringify(achadas.map(o => o.valor ?? o.rotulo));
+}
+
+function fecharLista(id){
+  const caixa = document.getElementById(id + "-opcoes");
+  if (caixa) caixa.innerHTML = "";
+}
+
+function escolherDaLista(id, indice){
+  const cfg = LISTAS[id];
+  const campo = document.getElementById(id);
+  const caixa = document.getElementById(id + "-opcoes");
+  if (!cfg || !campo || !caixa) return;
+  const valores = JSON.parse(caixa.dataset.filtradas || "[]");
+  const escolhido = valores[indice];
+  if (escolhido == null) return;
+  campo.value = escolhido;
+  fecharLista(id);
+  if (cfg.aoEscolher) window[cfg.aoEscolher]?.(id, escolhido);
+}
+
+function usarValorNovo(id){
+  const cfg = LISTAS[id];
+  const campo = document.getElementById(id);
+  fecharLista(id);
+  if (cfg?.aoEscolher) window[cfg.aoEscolher]?.(id, campo.value.trim());
+}
+
 function desenharSetores(idCaixa, idCampo){
   const caixa = document.getElementById(idCaixa);
   const campo = document.getElementById(idCampo);
@@ -2049,7 +2134,11 @@ function vConfirmado(){
       </dl>
       ${blocoPix(p)}
       <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.5rem">
-        <button class="btn btn-primary" style="min-height:3rem;font-weight:700" onclick="nav('pedidos')">Acompanhar meus pedidos</button>
+        ${S.voltarPara === "admin"
+          ? `<button class="btn btn-primary" style="min-height:3rem;font-weight:700"
+               onclick="S.voltarPara=null;nav('admin')">← Voltar ao painel</button>`
+          : `<button class="btn btn-primary" style="min-height:3rem;font-weight:700"
+               onclick="nav('pedidos')">Acompanhar meus pedidos</button>`}
       </div>
     </div>
   </main>${vFooter()}`;
@@ -3230,70 +3319,356 @@ function vAdminDash(){
     <button class="btn btn-primary" style="align-self:start;min-height:3rem" onclick="S.adminTab='pedidos';render()">Gerenciar pedidos →</button>
   </div>`;
 }
-function vAdminPedidos(){
-  const vis = S.pedidos.filter(p=>S.adminFiltro==="todos"||p.status===S.adminFiltro);
-  return `<div style="display:flex;flex-direction:column;gap:1rem">
-    <h1 class="display" style="font-size:1.5rem;font-weight:900">Pedidos</h1>
-    <div class="chips" role="tablist" aria-label="Filtrar pedidos por status">
-      ${["todos",...STATUS_TODOS].map(f=>`<button class="chip" role="tab" aria-selected="${S.adminFiltro===f}"
-        onclick="S.adminFiltro='${f}';render()">${f==="todos"?"Todos":f}</button>`).join("")}
+/* ============================================================
+   FORMULÁRIO DE PEDIDO — criar novo ou editar um da ficha
+   ============================================================ */
+function formPedido(){
+  if (!S.admin.formPedido){
+    S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
+                           forma:"", valor:"", linhas:[{ sabor:"", qtd:1 }] };
+  }
+  return S.admin.formPedido;
+}
+const hoje = () => new Date().toISOString().slice(0, 10);
+
+function abrirNovoPedido(){
+  S.admin.pedidoEditando = null;
+  S.admin.novoPedido = true;
+  S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
+                         forma:"", valor:"", linhas:[{ sabor:"", qtd:1 }] };
+  render();
+}
+
+function editarPedidoFicha(id){
+  const chave = "ficha:" + id;
+  if (S.admin.pedidoEditando === chave){ S.admin.pedidoEditando = null; return render(); }
+  const c = S.admin.compras.find(x => x.id === id);
+  if (!c) return;
+  const f = S.admin.fichas.find(x => x.id === c.pre_cliente_id);
+  S.admin.novoPedido = false;
+  S.admin.pedidoEditando = chave;
+  S.admin.formPedido = {
+    id, cliente: f?.nome || "", telefone: f?.telefone || "",
+    entrega: c.data_entrega || "", pagamento: c.data_pagamento || "",
+    forma: c.forma_pagamento || "",
+    valor: c.valor_centavos != null ? (c.valor_centavos / 100).toFixed(2).replace(".", ",") : "",
+    linhas: Array.isArray(c.itens) && c.itens.length
+      ? c.itens.map(i => ({ sabor: i.sabor, qtd: i.quantidade }))
+      : [{ sabor: c.sabores || "", qtd: c.quantidade || 1 }],
+  };
+  render();
+}
+
+function fecharFormPedido(){
+  S.admin.novoPedido = false;
+  S.admin.pedidoEditando = null;
+  S.admin.formPedido = null;
+  render();
+}
+
+/* Lê o que está digitado antes de redesenhar. */
+function lerFormPedido(){
+  const f = formPedido();
+  f.linhas.forEach((l, i) => {
+    const cs = document.getElementById(`fp-sabor-${i}`);
+    const cq = document.getElementById(`fp-qtd-${i}`);
+    if (cs) l.sabor = cs.value;
+    if (cq) l.qtd = Math.max(1, parseInt(cq.value, 10) || 1);
+  });
+  const pega = (id, campo) => { const c = document.getElementById(id); if (c) f[campo] = c.value; };
+  pega("fp-cliente", "cliente");
+  pega("fp-entrega", "entrega");
+  pega("fp-pagamento", "pagamento");
+  pega("fp-forma", "forma");
+  pega("fp-valor", "valor");
+  return f;
+}
+
+function addLinhaPedido(){ const f = lerFormPedido(); f.linhas.push({ sabor:"", qtd:1 }); render(); }
+function removerLinhaPedido(i){
+  const f = lerFormPedido();
+  f.linhas.splice(i, 1);
+  if (!f.linhas.length) f.linhas.push({ sabor:"", qtd:1 });
+  render();
+}
+
+/* Sugere o valor a partir dos sabores escolhidos, sem travar a edição. */
+function sugerirValorPedido(){
+  const f = lerFormPedido();
+  const itens = f.linhas.filter(l => l.sabor.trim());
+  if (!itens.length) return;
+  const cones = itens.reduce((n, l) => n + l.qtd, 0);
+  let total = 0, menorDelta = null;
+  itens.forEach(l => {
+    const p = PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(l.sabor));
+    const dupla = p ? p.dupla : 1200;
+    const unit  = p ? p.unit  : 1400;
+    total += dupla * l.qtd;
+    const d = unit - dupla;
+    if (menorDelta === null || d < menorDelta) menorDelta = d;
+  });
+  if (cones % 2 === 1) total += menorDelta || 0;
+  f.valor = (total / 100).toFixed(2).replace(".", ",");
+  render();
+}
+function aoEscolherSabor(){ sugerirValorPedido(); }
+
+async function salvarFormPedido(){
+  const f = lerFormPedido();
+  const itens = f.linhas
+    .filter(l => l.sabor.trim())
+    .map(l => ({ sabor: l.sabor.trim(), quantidade: Math.max(1, l.qtd) }));
+
+  if (!f.cliente.trim()){ alert("Informe o nome do cliente."); return; }
+  if (!itens.length){ alert("Adicione ao menos um sabor."); return; }
+
+  const centavos = (() => {
+    const t = String(f.valor).replace(/[^\d,.-]/g, "").trim();
+    if (!t) return null;
+    const n = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+  })();
+
+  if (f.id){
+    const total = itens.reduce((n, i) => n + i.quantidade, 0);
+    const { error } = await sb.from("pre_compras").update({
+      itens, quantidade: total,
+      sabores: itens.map(i => `${i.quantidade}× ${i.sabor}`).join(", "),
+      data_entrega: f.entrega || null,
+      data_pagamento: f.pagamento || null,
+      forma_pagamento: f.forma.trim() || null,
+      valor_centavos: centavos,
+    }).eq("id", f.id);
+    if (error){ avisarErro(error, "salvar o pedido"); return; }
+  } else {
+    const { error } = await sb.rpc("importar_pedido_ficha", {
+      p_nome: f.cliente.trim(), p_itens: itens,
+      p_data_entrega: f.entrega || null, p_data_pagamento: f.pagamento || null,
+      p_forma_pagamento: f.forma.trim() || null, p_valor_centavos: centavos,
+      p_telefone: f.telefone || null,
+    });
+    if (error){ avisarErro(error, "criar o pedido"); return; }
+  }
+
+  fecharFormPedido();
+  await carregarAdmin();
+  render();
+}
+
+function vFormularioPedido(){
+  const f = formPedido();
+  const clientes = [
+    ...S.admin.clientes.map(c => ({ rotulo: c.nome, detalhe: mascaraTelefone(c.telefone || "") })),
+    ...S.admin.fichas.filter(x => !x.vinculado_a)
+        .map(x => ({ rotulo: x.nome, detalhe: mascaraTelefone(x.telefone || "") })),
+  ];
+  const sabores = PRODUTOS.map(p => ({ rotulo: p.nome, detalhe: reais(p.dupla) + " na dupla" }));
+  const formas  = ["Pix","Dinheiro","Cartão","Transferência"].map(x => ({ rotulo: x }));
+
+  return `<div class="card" style="padding:1.1rem;background:var(--chantilly-esc);margin-top:.75rem">
+    <p style="font-weight:700;font-size:.9rem">${f.id ? "Editando pedido" : "Novo pedido"}</p>
+
+    <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.7rem">
+      <label style="font-size:.72rem;font-weight:600;flex:2;min-width:11rem">Cliente
+        ${campoComLista("fp-cliente", { valor:f.cliente, placeholder:"Nome do cliente",
+          opcoes:clientes, permitirNovo:true })}</label>
+      <label style="font-size:.72rem;font-weight:600;min-width:8rem">Data de entrega
+        <input id="fp-entrega" class="field" type="date" value="${f.entrega || ""}"
+          style="display:block;margin-top:.15rem"></label>
     </div>
-    ${vis.length===0
-      ? `<div class="card" style="padding:3.5rem 1.5rem;text-align:center;display:flex;flex-direction:column;gap:.75rem;align-items:center">
-          <span style="font-size:3rem" aria-hidden>📭</span>
-          <h2 class="display" style="font-size:1.25rem;font-weight:900">Nenhum pedido aqui</h2>
-          <p class="muted" style="font-size:.875rem;max-width:24rem">
-            ${S.adminFiltro==="todos"?"Quando um cliente confirmar um pedido, ele aparece nesta lista em tempo real — teste voltando à loja e fazendo um pedido.":`Nenhum pedido com status "${S.adminFiltro}".`}</p>
-          <button class="btn btn-ghost" onclick="nav('home')">Ir para a loja</button></div>`
-      : `<ul style="list-style:none;display:flex;flex-direction:column;gap:.75rem">
-          ${vis.map(p=>`<li class="card" style="padding:1.25rem">
-            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.75rem">
-              <div>
-                <p class="display" style="font-size:1.1rem;font-weight:900">Pedido #${p.numero}
-                  ${p.brinde > 0 ? `<span class="badge" style="background:#EB791C;color:#fff;
-                    margin-left:.35rem;text-transform:none">🎁 brinde</span>` : ""}</p>
-                ${p.presente?`<p style="font-size:.78rem;font-weight:700;color:var(--cacau-claro)">
-                  🎁 Presente para ${esc(p.destinatario)}${p.destinatarioSetor?" · 📍 "+esc(p.destinatarioSetor):""}</p>`:""}
-                <p class="muted" style="font-size:.75rem">${esc(p.cliente.nome)} · ${esc(p.cliente.tel)} ·
-                  ${p.criadoEm.toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</p>
-              </div>
-              <span class="status st-${p.status.replace(" ","_")}">${p.status}</span>
-            </div>
 
-            ${p.brinde > 0 ? `<p style="margin-top:.6rem;background:rgba(235,121,28,.14);color:#B4590F;
-              border-left:3px solid #EB791C;border-radius:.5rem;padding:.5rem .7rem;
-              font-size:.78rem;font-weight:700">
-              🎁 Cartão fidelidade resgatado — 1 cone saiu de graça
-              (${reais(p.brinde)} abatidos). ${p.total === 0
-                ? "Não há nada a receber neste pedido."
-                : "Cobrar apenas " + reais(p.total) + "."}</p>` : ""}
+    <p style="font-weight:700;font-size:.78rem;margin-top:.9rem">Sabores</p>
+    ${f.linhas.map((l, i) => `<div style="display:flex;gap:.5rem;align-items:end;margin-top:.4rem">
+      <label style="font-size:.7rem;font-weight:600">Qtd
+        <input id="fp-qtd-${i}" class="field" type="number" min="1" value="${l.qtd}"
+          onchange="sugerirValorPedido()"
+          style="width:4.2rem;padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
+      <label style="font-size:.7rem;font-weight:600;flex:1">Sabor
+        ${campoComLista(`fp-sabor-${i}`, { valor:l.sabor, placeholder:"Brigadeiro",
+          opcoes:sabores, permitirNovo:true, aoEscolher:"aoEscolherSabor" })}</label>
+      <button style="font-size:1rem;color:var(--framboesa);padding:.3rem .4rem"
+        title="Remover este sabor" aria-label="Remover sabor"
+        onclick="removerLinhaPedido(${i})">×</button>
+    </div>`).join("")}
+    <button class="btn btn-ghost" style="margin-top:.5rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
+      onclick="addLinhaPedido()">+ outro sabor</button>
 
-            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;margin-top:.75rem">
-              <dl class="linhas" style="flex:1;min-width:12rem;max-width:20rem">
-                ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
-              </dl>
-              <div style="font-size:.875rem;text-align:right">
-                ${p.brinde > 0 ? `<p class="muted" style="font-size:.75rem;text-decoration:line-through">
-                  ${reais(p.total + p.brinde)}</p>` : ""}
-                <p class="display" style="font-size:1.1rem;font-weight:900">${reais(p.total)}</p>
-                ${p.brinde > 0 ? `<p style="font-size:.72rem;font-weight:700;color:#B4590F">
-                  − ${reais(p.brinde)} de brinde</p>` : ""}
-                <p class="muted">📍 ${esc(p.local)}</p>
-                <p class="muted">🕐 ${p.quando==="agora"?"Agora":"às "+p.quando}</p>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:.75rem;border-top:1px solid rgb(62 39 35/.08);margin-top:1rem;padding-top:.75rem">
-              <label for="st-${p.id}" class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Status</label>
-              <select id="st-${p.id}" class="field" style="width:auto;border-radius:9999px;min-height:2.5rem;font-weight:600"
-                onchange="mudarStatus('${p.id}', this.value)">
-                ${STATUS_TODOS.map(s=>`<option ${p.status===s?"selected":""}>${s}</option>`).join("")}
-              </select>
-              ${p.status==="Pagamento concluído"?`<span style="font-size:.75rem;font-weight:600;color:var(--pistache)">carimbos creditados ✓</span>`:""}
-            </div>
-          </li>`).join("")}</ul>`}
+    <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.9rem;align-items:end">
+      <label style="font-size:.72rem;font-weight:600;min-width:8rem">Data do pagamento
+        <input id="fp-pagamento" class="field" type="date" value="${f.pagamento || ""}"
+          style="display:block;margin-top:.15rem"></label>
+      <label style="font-size:.72rem;font-weight:600;min-width:8rem">Forma
+        ${campoComLista("fp-forma", { valor:f.forma, placeholder:"Pix", opcoes:formas, permitirNovo:true })}</label>
+      <label style="font-size:.72rem;font-weight:600;min-width:7rem">Valor do pedido
+        <input id="fp-valor" class="field" inputmode="decimal" value="${esc(f.valor)}"
+          placeholder="0,00" style="display:block;margin-top:.15rem"></label>
+      <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .7rem;font-size:.72rem"
+        onclick="sugerirValorPedido()">Sugerir valor</button>
+    </div>
+    <p class="muted" style="font-size:.72rem;margin-top:.3rem">
+      ${f.id ? "O valor veio da ficha. Pode alterar à vontade."
+             : "O valor é sugerido pelo preço dos sabores escolhidos. Pode alterar à vontade."}</p>
+
+    <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="salvarFormPedido()">
+        ${f.id ? "Salvar alterações" : "Criar pedido"}</button>
+      <button class="btn btn-ghost" onclick="fecharFormPedido()">Cancelar</button>
+    </div>
   </div>`;
 }
 
+/* Abre a nota do pedido, a mesma que o cliente vê. */
+function verNota(id){
+  const p = S.pedidos.find(x => x.id === id);
+  if (!p) return;
+  S.voltarPara = "admin";
+  nav("confirmado", p.numero);
+}
+
+/* ============================================================
+   PEDIDOS UNIFICADOS — os do site e os lançados nas fichas
+   ============================================================ */
+function statusDaFicha(c){
+  if (c.data_pagamento) return "Pagamento concluído";
+  if (c.data_entrega)   return "Entregue";
+  return "Pedido feito";
+}
+
+function pedidosUnificados(){
+  const doSite = S.pedidos.map(p => ({
+    tipo: "site", id: p.id, numero: p.numero,
+    cliente: p.cliente?.nome || "—", telefone: p.cliente?.tel || "",
+    itens: p.itens.map(i => ({ sabor: i.nome, quantidade: i.q })),
+    cones: p.itens.reduce((n, i) => n + i.q, 0),
+    valor: p.total, brinde: p.brinde,
+    entrega: null, pagamento: null, forma: p.forma_pagamento || null,
+    status: p.status, quando: p.criadoEm, local: p.local,
+    presente: p.presente, destinatario: p.destinatario,
+  }));
+
+  const daFicha = S.admin.compras.map(c => {
+    const f = S.admin.fichas.find(x => x.id === c.pre_cliente_id);
+    return {
+      tipo: "ficha", id: c.id, numero: null, fichaId: c.pre_cliente_id,
+      cliente: f?.nome || "—", telefone: f?.telefone || "",
+      itens: Array.isArray(c.itens) && c.itens.length
+        ? c.itens.map(i => ({ sabor: i.sabor, quantidade: i.quantidade }))
+        : [{ sabor: c.sabores || "Cones", quantidade: c.quantidade }],
+      cones: c.quantidade,
+      valor: c.valor_centavos, brinde: 0,
+      entrega: c.data_entrega, pagamento: c.data_pagamento, forma: c.forma_pagamento,
+      status: statusDaFicha(c),
+      quando: c.data_entrega || c.data_pagamento || c.criado_em,
+      local: null, presente: false, destinatario: "",
+    };
+  });
+
+  return [...doSite, ...daFicha].sort((a, b) => {
+    const da = new Date(a.entrega || a.quando || 0);
+    const db_ = new Date(b.entrega || b.quando || 0);
+    return db_ - da;
+  });
+}
+
+const dataBrCurta = d => d
+  ? new Date(String(d).length <= 10 ? d + "T12:00" : d).toLocaleDateString("pt-BR")
+  : null;
+
+function vCardPedido(p){
+  const editando = S.admin.pedidoEditando === `${p.tipo}:${p.id}`;
+  return `<div class="card" style="padding:1rem">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:center">
+      <div style="min-width:0">
+        <p class="display" style="font-size:1.05rem;font-weight:900">
+          ${p.numero ? "Pedido #" + p.numero : "Pedido da ficha"}
+          ${p.tipo === "ficha" ? `<span class="badge b-classico" style="margin-left:.35rem;font-size:.62rem">
+            lançado por você</span>` : ""}
+          ${p.brinde > 0 ? `<span class="badge" style="background:#EB791C;color:#fff;
+            margin-left:.35rem;text-transform:none">🎁 brinde</span>` : ""}</p>
+        <p class="muted" style="font-size:.78rem">
+          <strong style="color:var(--cacau)">${esc(p.cliente)}</strong>
+          ${p.telefone ? " · " + esc(mascaraTelefone(p.telefone)) : ""}
+          ${p.local ? " · 📍 " + esc(p.local) : ""}</p>
+        <p class="muted" style="font-size:.75rem;margin-top:.15rem">
+          ${p.entrega ? "entrega " + dataBrCurta(p.entrega)
+            : p.quando ? new Date(p.quando).toLocaleDateString("pt-BR") : "sem data"}
+          ${p.pagamento ? " · pago em " + dataBrCurta(p.pagamento)
+            : p.tipo === "ficha" ? " · pagamento pendente" : ""}
+          ${p.forma ? " · " + esc(p.forma) : ""}</p>
+      </div>
+      <span class="status st-${String(p.status).replace(/ /g,"_")}">${p.status}</span>
+    </div>
+
+    <p style="font-size:.82rem;margin-top:.5rem">
+      <strong>${p.cones} cone(s)</strong> · ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join(", ")}
+      ${p.valor != null ? ` · <strong>${reais(p.valor)}</strong>` : ""}</p>
+
+    ${p.presente ? `<p style="font-size:.75rem;font-weight:700;color:var(--cacau-claro);margin-top:.25rem">
+      🎁 Presente para ${esc(p.destinatario || "")}</p>` : ""}
+
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.75rem;
+        border-top:1px solid rgb(62 39 35/.08);padding-top:.6rem">
+      ${p.tipo === "site" ? `
+        <select class="field" style="width:auto;padding:.25rem .5rem;font-size:.74rem"
+          aria-label="Status do pedido ${p.numero}" onchange="mudarStatus('${p.id}', this.value)">
+          ${["Pedido feito","Entregue","Pagamento concluído","Cancelado"].map(st =>
+            `<option value="${st}" ${p.status===st?"selected":""}>${st}</option>`).join("")}
+        </select>
+        <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
+          onclick="verNota('${p.id}')">Ver nota</button>`
+      : `
+        <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
+          onclick="editarPedidoFicha('${p.id}')">${editando ? "Cancelar" : "Editar"}</button>
+        <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
+          padding:.25rem .8rem;font-size:.74rem"
+          onclick="excluirCompraFicha('${p.id}')">Excluir</button>`}
+    </div>
+
+    ${editando ? vFormularioPedido(p) : ""}
+  </div>`;
+}
+
+function vAdminPedidos(){
+  if (!S.admin.carregado) return `<p class="muted">Carregando pedidos...</p>`;
+
+  const lista = pedidosUnificados();
+  const aba = S.adminFiltro || "todos";
+  const filtrada = aba === "todos" ? lista : lista.filter(p => p.status === aba);
+
+  const contar = st => lista.filter(p => p.status === st).length;
+  const abas = [
+    ["todos", `Todos (${lista.length})`],
+    ["Pedido feito", `Pedido feito (${contar("Pedido feito")})`],
+    ["Entregue", `Entregue (${contar("Entregue")})`],
+    ["Pagamento concluído", `Pagamento concluído (${contar("Pagamento concluído")})`],
+    ["Cancelado", `Cancelado (${contar("Cancelado")})`],
+  ];
+
+  return `<div style="display:flex;flex-direction:column;gap:1rem">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem">
+      <div>
+        <h1 class="display" style="font-size:1.5rem;font-weight:900">Pedidos</h1>
+        <p class="muted" style="font-size:.875rem">
+          Os pedidos do site e os lançados nas fichas, juntos, do mais recente para o mais antigo
+          pela data de entrega.</p>
+      </div>
+      <button class="btn btn-primary" onclick="abrirNovoPedido()">+ Novo pedido</button>
+    </div>
+
+    ${S.admin.novoPedido ? vFormularioPedido() : ""}
+
+    <div class="chips" role="tablist" aria-label="Filtrar pedidos">
+      ${abas.map(([id, rot]) => `<button class="chip" role="tab" aria-selected="${aba === id}"
+        onclick="S.adminFiltro='${id}';render()">${rot}</button>`).join("")}
+    </div>
+
+    ${filtrada.length === 0
+      ? `<p class="muted" style="font-size:.875rem">Nenhum pedido nesta aba.</p>`
+      : `<div style="display:flex;flex-direction:column;gap:.75rem">
+          ${filtrada.map(vCardPedido).join("")}
+        </div>`}
+  </div>`;
+}
 /* ---------- Render ---------- */
 async function mudarStatus(id, status){
   const { error } = await sb.from("orders").update({ status }).eq("id", id);
@@ -4119,7 +4494,7 @@ function editarFicha(id){
 async function salvarDadosFicha(id){
   const nome  = document.getElementById("fe-nome-" + id).value.trim();
   const tel   = document.getElementById("fe-tel-" + id).value.trim();
-  const setor = document.getElementById("fe-setor-" + id).value.trim();
+  const setor = (document.getElementById("fe-setor-" + id)?.value || "").trim();
   const gen   = document.getElementById("fe-genero-" + id).value;
 
   if (nome.length < 2){ alert("Informe o nome completo."); return; }
@@ -4779,8 +5154,8 @@ function vAdminClientes(){
           <input id="f-nome" class="field" style="flex:2;min-width:9rem" placeholder="Nome completo">
           <input id="f-tel" class="field" style="flex:1.4;min-width:9rem" type="tel" maxlength="16"
             placeholder="(11) 9 9999-9999" oninput="aoDigitarTelefone(this)">
-          <input id="f-setor" class="field" style="flex:1.2;min-width:8rem" placeholder="Setor (ex: TI)"
-            autocomplete="off" oninput="desenharSetores('f-setor-tags','f-setor')">
+          <span style="flex:1.2;min-width:8rem">${campoComLista("f-setor", {
+            placeholder:"Setor (ex: TI)", opcoes:SETORES.map(x=>({rotulo:x.nome})), permitirNovo:true })}</span>
           <select id="f-genero" class="field" style="width:auto;min-width:7rem">
             <option value="">Neutro</option>
             <option value="m">Masculino</option>
@@ -4788,7 +5163,6 @@ function vAdminClientes(){
           </select>
           <button class="btn btn-primary" onclick="salvarFicha()">Adicionar</button>
         </div>
-        <div id="f-setor-tags" class="setor-caixa"></div>
         <details style="margin-top:.9rem" ${S.admin.importacao ? "open" : ""}>
           <summary style="cursor:pointer;font-size:.82rem;font-weight:700">
             📋 Colar pedidos da planilha</summary>
@@ -4863,86 +5237,79 @@ function vAdminClientes(){
 function vFicha(f){
   const compras   = S.admin.compras.filter(c => c.pre_cliente_id === f.id);
   const aberta    = S.admin.fichaAberta === f.id;
-  const expandido = !!S.admin.pedidosExpandidos[f.id];
-  const visiveis  = expandido ? compras : compras.slice(0, 3);
-  const dono      = f.vinculado_a ? S.admin.clientes.find(c => c.id === f.vinculado_a) : null;
   const editando  = S.admin.fichaEditando === f.id;
-  const form      = linhasDe(f.id);
+  const dono      = f.vinculado_a ? S.admin.clientes.find(c => c.id === f.vinculado_a) : null;
+  const expandido = !!S.admin.pedidosExpandidos[f.id];
+  const visiveis  = expandido ? compras : compras.slice(0, 5);
+  const cones     = compras.reduce((n, c) => n + (c.quantidade || 0), 0);
 
-  const dataBr = d => d ? new Date(d + "T12:00").toLocaleDateString("pt-BR") : null;
+  const trato = { m: "Masculino", f: "Feminino" }[f.genero] || "Neutro";
 
   return `<div class="card" style="padding:.75rem 1rem">
     <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
       <div style="flex:1;min-width:0">
         <p style="font-weight:700;font-size:.9rem">${esc(f.nome)}</p>
-        <p class="muted" style="font-size:.75rem">${esc(mascaraTelefone(f.telefone))}
-          ${f.setor ? " · 📍 " + esc(f.setor) : ""}
-          ${f.total_cones ? " · 🍦 " + f.total_cones + " cone(s)" : ""}</p>
+        <p class="muted" style="font-size:.75rem">${esc(mascaraTelefone(f.telefone || "sem WhatsApp"))}
+          ${cones ? ` · 🍦 ${cones} cone(s)` : ""}</p>
       </div>
+
       ${f.recusas > 0 && !f.vinculado_a
         ? `<span class="badge b-esgotado" style="text-transform:none"
-             title="Alguém se cadastrou com este WhatsApp e respondeu que não era esta pessoa. Confira se o número está certo.">
-             ⚠️ recusou o vínculo ${f.recusas > 1 ? f.recusas + "×" : ""}</span>`
-        : ""}
+             title="Alguém se cadastrou com este WhatsApp e disse que não era esta pessoa.">
+             ⚠️ recusou ${f.recusas > 1 ? f.recusas + "×" : ""}</span>` : ""}
+
       ${f.vinculado_a
-        ? `<button class="badge b-classico" style="cursor:pointer"
-             title="Ver informações completas do cliente"
-             onclick="verCliente('${f.vinculado_a}')">
-             Vinculado a ${esc(dono ? dono.nome : "conta ativa")} ↗</button>`
+        ? `<button class="badge b-classico" style="cursor:pointer" title="Ver a conta vinculada"
+             onclick="verCliente('${f.vinculado_a}')">${esc(dono ? dono.nome : "conta ativa")} ↗</button>`
         : `<span class="badge b-novo">sem vínculo</span>`}
-      <select class="field" style="width:auto;padding:.25rem .5rem;font-size:.74rem"
-        aria-label="Trato no cartão de ${esc(f.nome)}"
-        onchange="definirGeneroFicha('${f.id}', this.value)">
-        <option value="" ${!f.genero?"selected":""}>Neutro</option>
-        <option value="m" ${f.genero==="m"?"selected":""}>Masculino</option>
-        <option value="f" ${f.genero==="f"?"selected":""}>Feminino</option>
-      </select>
-      <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
-        onclick="editarFicha('${f.id}')">${editando ? "Cancelar" : "Editar"}</button>
+
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
         onclick="abrirFicha('${f.id}')">${aberta ? "Fechar" : "Detalhes"}</button>
       <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
         padding:.25rem .8rem;font-size:.75rem" onclick="excluirFicha('${f.id}')">Excluir</button>
     </div>
 
-    ${!editando ? "" : `<div style="border-top:1px solid rgb(62 39 35/.08);margin-top:.75rem;padding-top:.75rem;
-        display:flex;flex-wrap:wrap;gap:.5rem;align-items:end">
-      <label style="font-size:.72rem;font-weight:600;flex:1.5;min-width:9rem">Nome
-        <input id="fe-nome-${f.id}" class="field" value="${esc(f.nome)}"
-          style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
-      <label style="font-size:.72rem;font-weight:600;flex:1.2;min-width:9rem">WhatsApp
-        <input id="fe-tel-${f.id}" class="field" type="tel" maxlength="16"
-          value="${esc(mascaraTelefone(f.telefone || ""))}" placeholder="(11) 9 9999-9999"
-          oninput="aoDigitarTelefone(this)"
-          style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
-      <label style="font-size:.72rem;font-weight:600;flex:1;min-width:7rem">Setor
-        <input id="fe-setor-${f.id}" class="field" value="${esc(f.setor || "")}" autocomplete="off"
-          oninput="desenharSetores('fe-setor-tags-${f.id}','fe-setor-${f.id}')"
-          style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
-      <label style="font-size:.72rem;font-weight:600;min-width:7rem">Trato no cartão
-        <select id="fe-genero-${f.id}" class="field"
-          style="padding:.4rem .6rem;display:block;margin-top:.15rem">
-          <option value="" ${!f.genero?"selected":""}>Neutro</option>
-          <option value="m" ${f.genero==="m"?"selected":""}>Masculino</option>
-          <option value="f" ${f.genero==="f"?"selected":""}>Feminino</option>
-        </select></label>
-      <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
-        onclick="salvarDadosFicha('${f.id}')">Salvar</button>
-      <div id="fe-setor-tags-${f.id}" class="setor-caixa" style="width:100%"></div>
-      ${f.vinculado_a ? `<p class="muted" style="width:100%;font-size:.72rem">
-        Esta ficha está vinculada a uma conta. Editar aqui muda só a ficha —
-        para alterar a conta, use "Editar" em Contas ativas.</p>` : ""}
-    </div>`}
-
     ${!aberta ? "" : `<div style="border-top:1px solid rgb(62 39 35/.08);margin-top:.75rem;padding-top:.75rem">
 
-      <p style="font-weight:700;font-size:.8rem">
-        Histórico de pedidos
-        ${f.total_cones ? `<span class="muted" style="font-weight:400">
-          — ${f.total_compras} pedido(s), ${f.total_cones} cone(s) no total</span>` : ""}</p>
+      ${editando ? `<div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:end">
+        <label style="font-size:.72rem;font-weight:600;flex:1.5;min-width:9rem">Nome
+          <input id="fe-nome-${f.id}" class="field" value="${esc(f.nome)}"
+            style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
+        <label style="font-size:.72rem;font-weight:600;flex:1.2;min-width:9rem">WhatsApp
+          <input id="fe-tel-${f.id}" class="field" type="tel" maxlength="16"
+            value="${esc(mascaraTelefone(f.telefone || ""))}" placeholder="(11) 9 9999-9999"
+            oninput="aoDigitarTelefone(this)"
+            style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
+        <label style="font-size:.72rem;font-weight:600;flex:1;min-width:8rem">Setor
+          ${campoComLista(`fe-setor-${f.id}`, { valor: f.setor || "", placeholder:"Ex: TI",
+            opcoes: SETORES.map(x => ({ rotulo: x.nome })), permitirNovo:true })}</label>
+        <label style="font-size:.72rem;font-weight:600;min-width:7rem">Trato no cartão
+          <select id="fe-genero-${f.id}" class="field"
+            style="padding:.4rem .6rem;display:block;margin-top:.15rem">
+            <option value="" ${!f.genero?"selected":""}>Neutro</option>
+            <option value="m" ${f.genero==="m"?"selected":""}>Masculino</option>
+            <option value="f" ${f.genero==="f"?"selected":""}>Feminino</option>
+          </select></label>
+        <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
+          onclick="salvarDadosFicha('${f.id}')">Salvar</button>
+        <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+          onclick="editarFicha('${f.id}')">Cancelar</button>
+      </div>`
+      : `<dl class="linhas">
+          <div><dt class="muted">Nome</dt><dd>${esc(f.nome)}</dd></div>
+          <div><dt class="muted">WhatsApp</dt><dd>${esc(mascaraTelefone(f.telefone || "—"))}</dd></div>
+          <div><dt class="muted">Setor</dt><dd>${esc(f.setor || "—")}</dd></div>
+          <div><dt class="muted">Trato no cartão</dt><dd>${trato}</dd></div>
+          <div><dt class="muted">Cones consumidos</dt><dd><strong>${cones}</strong></dd></div>
+          <div><dt class="muted">Pedidos</dt><dd>${compras.length}</dd></div>
+        </dl>
+        <button class="btn btn-ghost" style="margin-top:.6rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
+          onclick="editarFicha('${f.id}')">Editar dados</button>`}
 
+      <p style="font-weight:700;font-size:.8rem;margin-top:1rem">Pedidos</p>
       ${compras.length === 0
-        ? `<p class="muted" style="font-size:.75rem;margin-top:.25rem">Nenhum pedido registrado.</p>`
+        ? `<p class="muted" style="font-size:.75rem;margin-top:.25rem">
+             Nenhum pedido. Use a aba <strong>Pedidos</strong> para lançar.</p>`
         : `<ul style="list-style:none;margin-top:.5rem;display:flex;flex-direction:column;gap:.4rem">
             ${visiveis.map(c => {
               const itens = Array.isArray(c.itens) && c.itens.length
@@ -4953,60 +5320,22 @@ function vFicha(f){
                 <span style="flex:1">
                   <strong>${c.quantidade} cone(s)</strong> · ${itens}
                   <span class="muted" style="display:block;font-size:.72rem;margin-top:.15rem">
-                    ${dataBr(c.data_entrega) ? "entrega " + dataBr(c.data_entrega) : "sem data de entrega"}
-                    ${dataBr(c.data_pagamento) ? " · pago em " + dataBr(c.data_pagamento) : " · pagamento não registrado"}
+                    ${dataBrCurta(c.data_entrega) ? "entrega " + dataBrCurta(c.data_entrega) : "sem data"}
+                    ${dataBrCurta(c.data_pagamento) ? " · pago em " + dataBrCurta(c.data_pagamento)
+                                                     : " · pagamento pendente"}
                     ${c.forma_pagamento ? " · " + esc(c.forma_pagamento) : ""}
                     ${c.valor_centavos ? " · " + reais(c.valor_centavos) : ""}
                   </span>
                 </span>
                 <button style="font-size:.72rem;font-weight:700;color:var(--cacau);text-decoration:underline"
-                  onclick="editarCompra('${f.id}','${c.id}')">editar</button>
-                <button style="font-size:.72rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
-                  onclick="excluirCompraFicha('${c.id}')">excluir</button>
+                  onclick="S.adminTab='pedidos';editarPedidoFicha('${c.id}')">editar</button>
               </li>`;
             }).join("")}
           </ul>
-          ${compras.length > 3 ? `<button class="btn btn-ghost"
+          ${compras.length > 5 ? `<button class="btn btn-ghost"
             style="margin-top:.5rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
             onclick="verTodosPedidos('${f.id}')">
             ${expandido ? "Mostrar menos" : `Ver todos os ${compras.length} pedidos`}</button>` : ""}`}
-
-      <div style="background:var(--chantilly-esc);border-radius:.7rem;padding:.7rem;margin-top:.9rem">
-        <p style="font-weight:700;font-size:.78rem">
-          ${form.editando ? "Editando um pedido" : "Registrar um pedido antigo"}</p>
-
-        ${form.linhas.map((l, i) => `<div style="display:flex;gap:.4rem;align-items:end;margin-top:.45rem">
-          <label style="font-size:.7rem;font-weight:600">Qtd
-            <input id="lc-qtd-${f.id}-${i}" class="field" type="number" min="1" value="${l.qtd}"
-              style="width:4.2rem;padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
-          <label style="font-size:.7rem;font-weight:600;flex:1">Sabor
-            <input id="lc-sab-${f.id}-${i}" class="field" list="sabores-lista" value="${esc(l.sabor)}"
-              placeholder="Brigadeiro" style="padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
-          <button style="font-size:1rem;color:var(--framboesa);padding:.3rem .4rem"
-            title="Remover esta linha" aria-label="Remover linha"
-            onclick="removerLinha('${f.id}',${i})">×</button>
-        </div>`).join("")}
-
-        <button class="btn btn-ghost" style="margin-top:.5rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
-          onclick="addLinha('${f.id}')">+ outro sabor</button>
-
-        <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:end;margin-top:.6rem">
-          <label style="font-size:.7rem;font-weight:600">Entrega
-            <input id="lc-ent-${f.id}" class="field" type="date" value="${form.entrega || ""}"
-              style="padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
-          <label style="font-size:.7rem;font-weight:600">Pagamento
-            <input id="lc-pag-${f.id}" class="field" type="date" value="${form.pagamento || ""}"
-              style="padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
-          <label style="font-size:.7rem;font-weight:600">Forma
-            <input id="lc-forma-${f.id}" class="field" list="formas-lista" value="${esc(form.forma || "")}"
-              placeholder="Pix" style="width:7rem;padding:.35rem .5rem;display:block;margin-top:.12rem"></label>
-          <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
-            onclick="salvarCompra('${f.id}')">${form.editando ? "Salvar alterações" : "Registrar pedido"}</button>
-          ${form.editando ? `<button class="btn btn-ghost"
-            style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
-            onclick="cancelarEdicao('${f.id}')">Cancelar</button>` : ""}
-        </div>
-      </div>
 
       ${f.vinculado_a ? "" : `
       <p style="font-weight:700;font-size:.8rem;margin-top:1rem">Vincular a uma conta existente</p>
@@ -5023,7 +5352,6 @@ function vFicha(f){
     </div>`}
   </div>`;
 }
-
 function render(){
   if (S.carregando) {
     document.getElementById("app").innerHTML = vCarregando();
@@ -5050,13 +5378,7 @@ function render(){
   // as tags de setor precisam ser desenhadas depois que a tela existe
   if (document.getElementById("local-tags")) desenharSetores("local-tags", "local");
   if (document.getElementById("pr-setor-tags")) desenharSetores("pr-setor-tags", "pr-setor");
-  if (document.getElementById("f-setor-tags")) desenharSetores("f-setor-tags", "f-setor");
   if (document.getElementById("c-setor-tags")) desenharSetores("c-setor-tags", "c-setor");
-  if (S.admin.fichaEditando){
-    const id = S.admin.fichaEditando;
-    if (document.getElementById(`fe-setor-tags-${id}`))
-      desenharSetores(`fe-setor-tags-${id}`, `fe-setor-${id}`);
-  }
   // o carrossel abre no cartão atual, com os completos à esquerda
   const carrossel = document.getElementById("fid-carrossel");
   if (carrossel){
