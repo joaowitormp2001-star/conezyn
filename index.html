@@ -4943,6 +4943,53 @@ async function ajustarCarimbos(id){
   verCliente(id);
 }
 
+/* O cartão fidelidade de um cliente, visto pelo administrador.
+   Fica só aqui: o cliente continua vendo apenas o próprio. */
+function verCartaoCliente(id){
+  if (!ADMIN_CONFIRMADO) return;
+  const c = S.admin.clientes.find(x => x.id === id);
+  if (!c) return;
+  const prog = progressoCartoes(c.carimbos);
+  const resgates = S.pedidos.filter(p =>
+    p.clienteId === id && p.brinde > 0 && p.status !== "Cancelado").length;
+
+  document.getElementById("modal-slot").innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)fecharModal()">
+      <div class="modal card" role="dialog" aria-modal="true" style="max-width:34rem">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:.75rem">
+          <div>
+            <h2 class="display" style="font-size:1.2rem;font-weight:900">
+              Cartão de ${esc(c.nome)}</h2>
+            <p class="muted" style="font-size:.78rem;margin-top:.15rem">
+              ${c.carimbos} carimbo(s) · ${prog.completos} cartão(ões) completo(s) ·
+              ${resgates} brinde(s) usado(s)
+              ${prog.completos > resgates
+                ? ` · <strong style="color:#B4590F">tem brinde a receber</strong>` : ""}</p>
+          </div>
+          <button class="back-btn" style="box-shadow:none" aria-label="Fechar"
+            onclick="fecharModal()">✕</button>
+        </div>
+
+        <div style="margin-top:1rem">
+          ${cartaoFidelidade(prog.passouDoFim ? nivelDe(prog.completos).meta : prog.noAtual,
+                             c.nome, Math.min(prog.completos, NIVEIS.length - 1), c.genero)}
+        </div>
+
+        <p class="muted" style="font-size:.78rem;text-align:center;margin-top:.75rem">
+          ${prog.passouDoFim
+            ? "🏆 Completou todos os cartões."
+            : `Faltam <strong style="color:var(--cacau)">${nivelDe(prog.completos).meta - prog.noAtual}</strong>
+               carimbo(s) para fechar o cartão ${esc(tituloNivel(nivelDe(prog.completos), c.genero))}.`}
+        </p>
+
+        <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+            onclick="verCliente('${id}')">← Dados do cliente</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function verCliente(id){
   const c = S.admin.clientes.find(x => x.id === id);
   if (!c) return;
@@ -4983,6 +5030,8 @@ function verCliente(id){
               style="width:6rem;padding:.4rem .6rem">
             <button class="btn btn-primary" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
               onclick="ajustarCarimbos('${id}')">Definir</button>
+            <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
+              onclick="verCartaoCliente('${id}')">Ver cartão</button>
             <span class="muted" style="font-size:.72rem">
               ${c.cartoes_completos ?? progressoCartoes(c.carimbos).completos} cartão(ões) completo(s) ·
               ${(S.pedidos.filter(p => p.clienteId === id && p.brinde > 0 && p.status !== "Cancelado").length)} brinde(s) usado(s)</span>
