@@ -1644,7 +1644,9 @@ async function confirmarPedido(){
   }
 
   S.carrinho = {};
-  await Promise.all([carregarCatalogo(), carregarPedidos()]);
+  // recarrega a fidelidade também: é o que faz a promoção de boas-vindas
+  // e o brinde do cartão sumirem na hora, sem precisar atualizar a página
+  await Promise.all([carregarCatalogo(), carregarPedidos(), carregarFidelidade()]);
   nav("confirmado", linha.numero);
 }
 function notificarAdmin(pedido){
@@ -1976,7 +1978,7 @@ function vBreakdown(pr){
     ${pr.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia</dt><dd>− ${reais(pr.economia)}</dd></div>`:""}
     ${brinde>0?`<div style="font-weight:700;color:#B4590F"><dt>🎁 Cone de brinde</dt>
       <dd>− ${reais(brinde)}</dd></div>`:""}
-    ${boas>0?`<div style="font-weight:700;color:var(--framboesa)"><dt>✨ 10% do primeiro pedido</dt>
+    ${boas>0?`<div style="font-weight:700;color:var(--pistache)"><dt>✨ 10% do primeiro pedido</dt>
       <dd>− ${reais(boas)}</dd></div>`:""}
     <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total - brinde - boas)}</dd></div>
   </dl>`;
@@ -2095,8 +2097,8 @@ function vCheckout(){
     </div>
     <aside class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Resumo do pedido</h2>
-      ${descontoPrimeira(pr) > 0 ? `<p style="margin-top:.5rem;background:rgba(200,58,90,.1);
-        color:var(--framboesa);border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
+      ${descontoPrimeira(pr) > 0 ? `<p style="margin-top:.5rem;background:rgba(63,191,127,.14);
+        color:#1F7A4D;border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
         ✨ Bem-vindo! 10% do primeiro pedido já descontados —
         ${reais(descontoPrimeira(pr))} a menos.</p>` : ""}
       ${(() => {
