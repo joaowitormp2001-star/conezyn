@@ -92,6 +92,24 @@
     /* bloco mais alto no celular: a imagem desce e não encosta no título */
     .hero{padding-bottom:14rem}
   }
+  /* faixa da promoção, enrolada no canto superior direito do bloco */
+  .faixa-canto{position:absolute;top:0;right:0;width:12rem;height:9rem;overflow:hidden;
+    pointer-events:none;z-index:3;border-top-right-radius:1.5rem}
+  /* inclinação suave; a faixa é mais larga que a caixa, então as pontas
+     ficam recortadas e ela parece atravessar o canto */
+  .faixa{position:absolute;top:2.1rem;right:-5.5rem;width:21rem;transform:rotate(26deg);
+    background:linear-gradient(180deg,#F0C98A,var(--casquinha));color:var(--cacau);
+    text-align:center;padding:.38rem 0 .42rem;
+    box-shadow:0 6px 16px -8px rgb(0 0 0/.45), inset 0 1px 0 rgb(255 255 255/.5);
+    display:flex;flex-direction:column;line-height:1.05}
+  .faixa strong{font-family:var(--font-display);font-size:1rem;font-weight:900;letter-spacing:.01em}
+  .faixa small{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+    opacity:.85}
+  @media(max-width:700px){
+    .faixa-canto{width:9.5rem;height:7.5rem}
+    .faixa{top:1.7rem;right:-4.6rem;width:17rem;padding:.28rem 0 .32rem}
+    .faixa strong{font-size:.85rem}
+    .faixa small{font-size:.53rem;letter-spacing:.05em}}
   .hero .big{position:absolute;right:-1.5rem;bottom:-2rem;font-size:10rem;opacity:.2;pointer-events:none}
   /* imagem de destaque no canto inferior direito do bloco */
   .hero-img{position:absolute;right:-2rem;bottom:-2.5rem;width:min(34rem,64%);
@@ -592,7 +610,7 @@ const S = {
   perfil: null,               // { id, nome, tel, email, foto, admin }
   carrinho: {},
   pedidos: [], pedidosAntigos: [],
-  fidelidade: { total: 0, historico: [], resgates: 0, temBrinde: false },
+  fidelidade: { total: 0, historico: [], resgates: 0, temBrinde: false, primeiraCompra: null },
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
   presente: { ativo:false, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false },
@@ -830,6 +848,7 @@ async function carregarFidelidade(){
     resgates: r ? Number(r.resgates) : 0,
     temBrinde: r ? r.tem_brinde === true : false,
     completos: r ? Number(r.completos) : 0,
+    primeiraCompra: r ? r.primeira_compra === true : null,
     maximo: r ? Number(r.maximo) : CARIMBOS_MAXIMOS(),
   };
   if (r && r.genero && S.perfil) S.perfil.genero = r.genero;
@@ -931,6 +950,20 @@ function copiarPix(codigo, botao){
 /* Valor do cone de brinde, com a mesma regra do banco:
    um cone só no pedido usa o preço avulso; dois ou mais, o de dupla.
    Nunca passa do total. */
+/* 10% de boas-vindas: vale uma vez, no primeiro pedido da conta.
+   Incide sobre o total já com preço de dupla e já descontado o brinde. */
+function temDescontoPrimeira(){
+  if (!S.perfil) return true;   // visitante: a promoção existe para ele quando criar conta
+  if (S.fidelidade?.primeiraCompra != null) return S.fidelidade.primeiraCompra;
+  return S.pedidos.filter(p => p.status !== "Cancelado").length === 0;
+}
+
+function descontoPrimeira(pr){
+  if (!S.perfil || !temDescontoPrimeira()) return 0;
+  const base = pr.total - descontoBrinde(pr);
+  return base > 0 ? Math.round(base * 0.10) : 0;
+}
+
 function descontoBrinde(pr){
   if (!S.fidelidade?.temBrinde || pr.cones < 1) return 0;
   const menorUnit  = Math.min(...pr.linhas.map(l => l.unit));
@@ -1752,6 +1785,12 @@ function vHome(){
     : conesRestantes===1 ? "Resta 1 cone hoje" : `Restam ${conesRestantes} cones hoje`;
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;display:flex;flex-direction:column;gap:3rem">
     <section class="hero">
+      ${temDescontoPrimeira() ? `<div class="faixa-canto" aria-label="10% de desconto no primeiro pedido pelo site">
+        <span class="faixa">
+          <strong>10% OFF</strong>
+          <small>1º pedido pelo site</small>
+        </span>
+      </div>` : ""}
       ${MARCA.hero
         ? `<img class="hero-img" src="${MARCA.hero}" alt="" aria-hidden="true">`
         : `<span class="big" aria-hidden>🍦</span>`}
@@ -1763,6 +1802,8 @@ function vHome(){
       <p style="position:relative;z-index:2;margin-top:.75rem;font-size:.875rem;
         color:rgb(255 249 242/.7);max-width:22rem">
         Leve dois cones e pague menos.</p>
+
+
       <a href="#catalogo" class="btn" style="position:relative;z-index:2;margin-top:1.5rem;
         background:var(--casquinha);color:var(--cacau);font-weight:700">Ver os sabores</a>
     </section>
@@ -1929,12 +1970,15 @@ function pq(d){ const p=byId(S.param); pqv=Math.min(Math.max(1,pqv+d),Math.max(p
 
 function vBreakdown(pr){
   const brinde = descontoBrinde(pr);
+  const boas = descontoPrimeira(pr);
   return `<dl class="linhas">
     <div class="muted"><dt>Subtotal individual</dt><dd>${reais(pr.subtotal)}</dd></div>
     ${pr.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia</dt><dd>− ${reais(pr.economia)}</dd></div>`:""}
     ${brinde>0?`<div style="font-weight:700;color:#B4590F"><dt>🎁 Cone de brinde</dt>
       <dd>− ${reais(brinde)}</dd></div>`:""}
-    <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total - brinde)}</dd></div>
+    ${boas>0?`<div style="font-weight:700;color:var(--framboesa)"><dt>✨ 10% do primeiro pedido</dt>
+      <dd>− ${reais(boas)}</dd></div>`:""}
+    <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total - brinde - boas)}</dd></div>
   </dl>`;
 }
 function vCarrinho(){
@@ -2051,6 +2095,10 @@ function vCheckout(){
     </div>
     <aside class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Resumo do pedido</h2>
+      ${descontoPrimeira(pr) > 0 ? `<p style="margin-top:.5rem;background:rgba(200,58,90,.1);
+        color:var(--framboesa);border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
+        ✨ Bem-vindo! 10% do primeiro pedido já descontados —
+        ${reais(descontoPrimeira(pr))} a menos.</p>` : ""}
       ${(() => {
         const desc = descontoBrinde(pr);
         if (!desc) return "";
