@@ -1500,11 +1500,7 @@ function desenharSetores(idCaixa, idCampo){
   const lista = filtrarSetores(texto);
   const oficial = setorOficial(texto);
 
-  if (lista.length === 0){
-    caixa.innerHTML = setorForaDaLista(texto)
-      ? `<p class="setor-aviso">Setor fora da lista — vamos registrar assim mesmo.</p>` : "";
-    return;
-  }
+  if (lista.length === 0){ caixa.innerHTML = ""; return; }
   caixa.innerHTML = lista.map(s => `<button type="button"
       class="setor-tag ${oficial === s.nome ? "ativa" : ""}"
       onmousedown="event.preventDefault()"
@@ -2039,7 +2035,6 @@ function vCheckout(){
           placeholder="Ex: Banco de Dados, Comercial, TI,..." value="${esc(c.local)}"
           oninput="S.checkout.local=this.value;atualizarResumo();desenharSetores('local-tags','local')">
         <div id="local-tags" class="setor-caixa"></div>
-        <p class="muted" style="margin-top:.5rem;font-size:.75rem">A entrega acontece exclusivamente dentro da empresa.</p>
       </div>
       <div class="card" style="padding:1.25rem">
         <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
@@ -2181,7 +2176,11 @@ function vConfirmado(){
     <div class="card" style="padding:2rem;text-align:center">
       <span class="carimbo" aria-hidden style="margin:0 auto;width:5rem;height:5rem;display:grid;
         place-items:center;font-size:2.25rem;color:var(--pistache)">✓</span>
-      <h1 class="display" style="margin-top:1rem;font-size:1.9rem;font-weight:900">Pedido realizado com sucesso!</h1>
+      <h1 class="display" style="margin-top:1rem;font-size:1.9rem;font-weight:900">
+        ${p.status === "Pagamento concluído" ? "Pagamento confirmado!"
+        : p.status === "Entregue" ? "Pedido entregue!"
+        : p.status === "Cancelado" ? "Pedido cancelado"
+        : "Pedido realizado com sucesso!"}</h1>
       <p class="display" style="margin-top:.5rem;font-size:1.25rem;font-weight:700;color:var(--casquinha)">Pedido #${p.numero}</p>
       <dl class="linhas" style="margin-top:1.5rem;background:var(--chantilly);border-radius:1rem;padding:1rem;text-align:left">
         ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
@@ -2192,7 +2191,7 @@ function vConfirmado(){
         <div style="padding-top:.25rem"><dt class="muted">Entrega</dt><dd style="font-weight:600">${esc(p.local)}</dd></div>
         <div><dt class="muted">Receber</dt><dd style="font-weight:600">${p.quando==="agora"?"Agora":"às "+p.quando}</dd></div>
       </dl>
-      ${blocoPix(p)}
+      ${p.status === "Pagamento concluído" || p.status === "Cancelado" ? "" : blocoPix(p)}
       <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.5rem">
         ${S.voltarPara === "admin"
           ? `<button class="btn btn-primary" style="min-height:3rem;font-weight:700"
@@ -2674,6 +2673,10 @@ function vPedidos(){
             ${p.total != null ? `<p class="display" style="margin-top:.5rem;
               border-top:1px solid rgb(62 39 35/.1);padding-top:.5rem;text-align:right;font-weight:900">
               ${reais(p.total)}</p>` : ""}
+
+            ${p.numero ? `<button class="btn btn-ghost"
+              style="width:100%;margin-top:.5rem;min-height:2.4rem;font-size:.8rem"
+              onclick="nav('confirmado', ${p.numero})">Ver nota do pedido</button>` : ""}
           </li>`).join("")}</ul>`}
   </main>${vFooter()}`;
 }
