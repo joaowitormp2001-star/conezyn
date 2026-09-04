@@ -3388,7 +3388,7 @@ function vAdminDash(){
 function formPedido(){
   if (!S.admin.formPedido){
     S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                           forma:"", valor:"", brinde:false, linhas:[{ sabor:"", qtd:1 }] };
+                           forma:"", valor:"", brinde:false, baixarEstoque:true, linhas:[{ sabor:"", qtd:1 }] };
   }
   return S.admin.formPedido;
 }
@@ -3403,7 +3403,7 @@ function abrirNovoPedido(){
   S.admin.pedidoEditando = null;
   S.admin.novoPedido = true;
   S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                         forma:"", valor:"", brinde:false, linhas:[{ sabor:"", qtd:1 }] };
+                         forma:"", valor:"", brinde:false, baixarEstoque:true, linhas:[{ sabor:"", qtd:1 }] };
   render();
 }
 
@@ -3452,6 +3452,8 @@ function lerFormPedido(){
   pega("fp-valor", "valor");
   const cb = document.getElementById("fp-brinde");
   if (cb) f.brinde = cb.checked;
+  const cbe = document.getElementById("fp-baixa");
+  if (cbe) f.baixarEstoque = cbe.checked;
   return f;
 }
 
@@ -3530,6 +3532,24 @@ async function salvarFormPedido(){
       p_telefone: f.telefone || null,
     });
     if (error){ avisarErro(error, "criar o pedido"); return; }
+
+    // Baixa do estoque: só em pedido novo, e só se você pediu.
+    // Importação de histórico antigo nunca passa por aqui.
+    if (f.baixarEstoque !== false){
+      const baixa = await sb.rpc("baixar_estoque", { p_itens: itens });
+      if (baixa.error){
+        avisarErro(baixa.error, "dar baixa no estoque");
+      } else if (baixa.data){
+        const d = baixa.data;
+        const avisos = [];
+        if ((d.ignorados || []).length)
+          avisos.push(`Sem baixa (sabor fora do catálogo): ${d.ignorados.join(", ")}.`);
+        (d.sem_estoque || []).forEach(x =>
+          avisos.push(`${x.sabor}: pedido ${x.pedido}, havia só ${x.havia}. Estoque zerado.`));
+        if (avisos.length) alert("Pedido criado.\n\n" + avisos.join("\n"));
+      }
+      await carregarCatalogo();
+    }
   }
 
   fecharFormPedido();
@@ -3592,6 +3612,12 @@ function vFormularioPedido(){
           onchange="marcarComoBrinde(this.checked)" style="width:1rem;height:1rem">
         🎁 Foi brinde
       </label>
+      ${f.id ? "" : `<label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;
+        font-weight:700;color:var(--cacau);cursor:pointer;padding-bottom:.4rem">
+        <input type="checkbox" id="fp-baixa" ${f.baixarEstoque !== false ? "checked" : ""}
+          style="width:1rem;height:1rem">
+        📦 Descontar do estoque
+      </label>`}
     </div>
     <p class="muted" style="font-size:.72rem;margin-top:.3rem">
       ${f.id ? "O valor veio da ficha. Pode alterar à vontade."
