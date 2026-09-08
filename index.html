@@ -764,10 +764,23 @@ const Seguranca = (() => {
     const { data, error } = await sb.rpc("aprovar_dispositivo",
       { p_pin: pin, p_apelido: apelido });
     if (error) return { erro: erroAmigavel(error) };
-    if (!data)  return { erro: "PIN incorreto." };
-    guardarChaveDispositivo(data);
-    dispositivo = true;
-    return { ok: true };
+    if (!data)  return { erro: "Não foi possível verificar agora." };
+
+    if (data.ok === true){
+      guardarChaveDispositivo(data.token);
+      dispositivo = true;
+      return { ok: true };
+    }
+    if (data.motivo === "bloqueado"){
+      const min = Math.ceil((data.faltam_segundos || 0) / 60);
+      return { erro: `Muitas tentativas erradas. Tente de novo em ${min} minuto(s).` };
+    }
+    if (data.motivo === "sem_pin"){
+      return { erro: "Nenhum PIN configurado ainda. Defina um no painel do Supabase." };
+    }
+    const restam = data.restantes;
+    return { erro: "PIN incorreto." +
+      (restam > 0 ? ` Restam ${restam} tentativa(s) antes do bloqueio.` : " Próximo erro bloqueia por 15 minutos.") };
   }
 
   return Object.freeze({
@@ -805,7 +818,17 @@ async function aprovarEsteDispositivo(){
   render();
 }
 
+async function verSituacaoPin(){
+  const { data } = await sb.rpc("situacao_pin");
+  if (data && data.bloqueado){
+    const min = Math.ceil((data.faltam_segundos || 0) / 60);
+    S.pinErro = `Muitas tentativas erradas. Tente de novo em ${min} minuto(s).`;
+    render();
+  }
+}
+
 function vPedirPin(){
+  setTimeout(verSituacaoPin, 0);
   return `${vHeader()}<main class="wrap" style="padding-top:2rem;max-width:26rem">
     <div class="card" style="padding:2rem 1.5rem;text-align:center">
       <p style="font-size:2.2rem" aria-hidden>🔐</p>
