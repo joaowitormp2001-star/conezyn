@@ -610,7 +610,7 @@ const S = {
   perfil: null,               // { id, nome, tel, email, foto, admin }
   carrinho: {},
   pedidos: [], pedidosAntigos: [],
-  fidelidade: { total: 0, historico: [], resgates: 0, temBrinde: false, primeiraCompra: null },
+  fidelidade: { total: 0, historico: [], resgates: 0, temBrinde: false, primeiraCompra: null, descontoPct: 0 },
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
   presente: { ativo:false, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false },
@@ -961,6 +961,7 @@ async function carregarFidelidade(){
     resgates: r ? Number(r.resgates) : 0,
     temBrinde: r ? r.tem_brinde === true : false,
     completos: r ? Number(r.completos) : 0,
+    descontoPct: r ? Number(r.desconto_pct || 0) : 0,
     primeiraCompra: r ? r.primeira_compra === true : null,
     maximo: r ? Number(r.maximo) : CARIMBOS_MAXIMOS(),
   };
@@ -1073,8 +1074,20 @@ function temDescontoPrimeira(){
 
 function descontoPrimeira(pr){
   if (!S.perfil || !temDescontoPrimeira()) return 0;
-  const base = pr.total - descontoBrinde(pr);
+  const base = pr.total - descontoBrinde(pr) - descontoCartao(pr);
   return base > 0 ? Math.round(base * 0.10) : 0;
+}
+
+/* Desconto percentual do cartão: incide sobre UM cone, o de maior
+   valor, já no preço de dupla. Só vale quando não há cone de brinde. */
+function descontoCartao(pr){
+  const pct = S.fidelidade?.descontoPct || 0;
+  if (!S.perfil || pct <= 0 || pr.cones < 1) return 0;
+  if (descontoBrinde(pr) > 0) return 0;   // brinde tem preferência
+  const maior = pr.cones === 1
+    ? Math.max(...pr.linhas.map(l => l.unit))
+    : Math.max(...pr.linhas.map(l => l.dupla));
+  return Math.min(Math.round(maior * pct / 100), pr.total);
 }
 
 function descontoBrinde(pr){
@@ -2085,15 +2098,19 @@ function pq(d){ const p=byId(S.param); pqv=Math.min(Math.max(1,pqv+d),Math.max(p
 
 function vBreakdown(pr){
   const brinde = descontoBrinde(pr);
+  const cartao = descontoCartao(pr);
   const boas = descontoPrimeira(pr);
   return `<dl class="linhas">
     <div class="muted"><dt>Subtotal individual</dt><dd>${reais(pr.subtotal)}</dd></div>
     ${pr.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia</dt><dd>− ${reais(pr.economia)}</dd></div>`:""}
     ${brinde>0?`<div style="font-weight:700;color:#B4590F"><dt>🎁 Cone de brinde</dt>
       <dd>− ${reais(brinde)}</dd></div>`:""}
+    ${cartao>0?`<div style="font-weight:700;color:var(--pistache)">
+      <dt>🎫 ${S.fidelidade.descontoPct}% do cartão (1 cone)</dt>
+      <dd>− ${reais(cartao)}</dd></div>`:""}
     ${boas>0?`<div style="font-weight:700;color:var(--pistache)"><dt>✨ 10% do primeiro pedido</dt>
       <dd>− ${reais(boas)}</dd></div>`:""}
-    <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total - brinde - boas)}</dd></div>
+    <div class="total-row display"><dt>Total</dt><dd>${reais(pr.total - brinde - cartao - boas)}</dd></div>
   </dl>`;
 }
 function vCarrinho(){
@@ -2209,6 +2226,10 @@ function vCheckout(){
     </div>
     <aside class="card" style="padding:1.25rem">
       <h2 class="display" style="font-size:1.1rem;font-weight:700">Resumo do pedido</h2>
+      ${descontoCartao(pr) > 0 ? `<p style="margin-top:.5rem;background:rgba(63,191,127,.14);
+        color:#1F7A4D;border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
+        🎫 ${S.fidelidade.descontoPct}% do seu cartão aplicados no cone mais caro —
+        ${reais(descontoCartao(pr))} a menos.</p>` : ""}
       ${descontoPrimeira(pr) > 0 ? `<p style="margin-top:.5rem;background:rgba(63,191,127,.14);
         color:#1F7A4D;border-radius:.6rem;padding:.5rem .7rem;font-size:.78rem;font-weight:700">
         ✨ Bem-vindo! 10% do primeiro pedido já descontados —
@@ -3027,6 +3048,12 @@ function vFidelidade(){
       ${progressoCartoes(d.total).passouDoFim
         ? `<br><strong style="color:#B4590F">🏆 Você completou todos os cartões!
            Um novo nível está sendo preparado — em breve ele aparece aqui.</strong>` : ""}
+      ${d.descontoPct > 0 && !d.temBrinde ? `<br><strong style="color:var(--pistache)">
+        🎫 Você tem ${d.descontoPct}% de desconto guardado — entra sozinho no próximo pedido,
+        no cone mais caro.</strong>` : ""}
+      ${d.descontoPct > 0 && d.temBrinde ? `<br><span class="muted">
+        Você também tem ${d.descontoPct}% guardado; ele fica para o pedido seguinte,
+        já que o cone de brinde vem primeiro.</span>` : ""}
       ${d.temBrinde ? `<br><strong style="color:#B4590F">🎁 Você tem um cone grátis esperando!
         Ele entra sozinho no seu próximo pedido.</strong>` : ""}</p>
 
