@@ -620,6 +620,7 @@ const S = {
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], tentativas: [], categorias: [],
            produtoEditando: null, fichaAberta: null, carregado: false,
+           descontos: [],
            novoPedido: false, pedidoEditando: null, formPedido: null, formSite: null,
            clienteAberto: null,
            filtroCliente: "",
@@ -3564,7 +3565,8 @@ function vAdminDash(){
 function formPedido(){
   if (!S.admin.formPedido){
     S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                           forma:"", valor:"", brinde:false, baixarEstoque:true, linhas:[{ sabor:"", qtd:1 }] };
+                           forma:"", valor:"", brinde:false, baixarEstoque:true, descontos:[],
+                         linhas:[{ sabor:"", qtd:1 }] };
   }
   return S.admin.formPedido;
 }
@@ -3579,7 +3581,8 @@ function abrirNovoPedido(){
   S.admin.pedidoEditando = null;
   S.admin.novoPedido = true;
   S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                         forma:"", valor:"", brinde:false, baixarEstoque:true, linhas:[{ sabor:"", qtd:1 }] };
+                         forma:"", valor:"", brinde:false, baixarEstoque:true, descontos:[],
+                         linhas:[{ sabor:"", qtd:1 }] };
   render();
 }
 
@@ -3635,6 +3638,15 @@ function lerFormPedido(){
 
 /* Marcar como brinde zera o valor e limpa o pagamento —
    é assim que o pedido entra na categoria Brindes. */
+function alternarDesconto(id, marcado){
+  const f = lerFormPedido();
+  f.descontos = f.descontos || [];
+  f.descontos = marcado
+    ? [...new Set([...f.descontos, id])]
+    : f.descontos.filter(x => x !== id);
+  sugerirValorPedido();
+}
+
 function marcarComoBrinde(marcado){
   const f = lerFormPedido();
   f.brinde = marcado;
@@ -3666,6 +3678,23 @@ function sugerirValorPedido(){
     if (menorDelta === null || d < menorDelta) menorDelta = d;
   });
   if (cones % 2 === 1) total += menorDelta || 0;
+
+  // desconto do cartão: sobre o cone mais caro, como no site
+  const disp = descontosDoNome(f.cliente);
+  const marcados = (f.descontos || []).filter(id => disp.some(d => d.id === id));
+  const pct = Math.min(disp.filter(d => marcados.includes(d.id))
+    .reduce((n, d) => n + d.percentual, 0), 100);
+
+  if (pct > 0){
+    let maior = 0;
+    itens.forEach(l => {
+      const p = PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(l.sabor));
+      const preco = cones === 1 ? (p ? p.unit : 1400) : (p ? p.dupla : 1200);
+      if (preco > maior) maior = preco;
+    });
+    total = Math.max(total - Math.round(maior * pct / 100), 0);
+  }
+
   f.valor = mascaraValor(String(total));
   render();
 }
@@ -3706,6 +3735,12 @@ async function salvarFormPedido(){
 
     // Baixa do estoque: só em pedido novo, e só se você pediu.
     // Importação de histórico antigo nunca passa por aqui.
+    // consome os descontos escolhidos
+    if ((f.descontos || []).length){
+      const uso = await sb.rpc("usar_descontos", { p_ids: f.descontos });
+      if (uso.error) avisarErro(uso.error, "registrar o uso do desconto");
+    }
+
     if (f.baixarEstoque !== false){
       const baixa = await sb.rpc("baixar_estoque", { p_itens: itens });
       if (baixa.error){
@@ -3726,6 +3761,21 @@ async function salvarFormPedido(){
   fecharFormPedido();
   await carregarAdmin();
   render();
+}
+
+/* Descontos guardados da pessoa digitada no campo cliente.
+   Vale tanto o nome da conta quanto o da ficha vinculada a ela. */
+function descontosDoNome(nome){
+  const alvo = semAcentoMin(nome || "");
+  if (!alvo) return [];
+
+  let cliente = S.admin.clientes.find(c => semAcentoMin(c.nome) === alvo);
+  if (!cliente){
+    const ficha = S.admin.fichas.find(f => semAcentoMin(f.nome) === alvo && f.vinculado_a);
+    if (ficha) cliente = S.admin.clientes.find(c => c.id === ficha.vinculado_a);
+  }
+  if (!cliente) return [];
+  return (S.admin.descontos || []).filter(d => d.cliente_id === cliente.id);
 }
 
 function vFormularioPedido(){
@@ -3765,6 +3815,33 @@ function vFormularioPedido(){
     </div>`).join("")}
     <button class="btn btn-ghost" style="margin-top:.5rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
       onclick="addLinhaPedido()">+ outro sabor</button>
+
+    ${(() => {
+      const disp = descontosDoNome(f.cliente);
+      if (!disp.length) return "";
+      const marcados = f.descontos || [];
+      const soma = Math.min(disp.filter(d => marcados.includes(d.id))
+        .reduce((n, d) => n + d.percentual, 0), 100);
+      return `<div style="margin-top:.9rem;padding:.7rem .8rem;border-radius:.6rem;
+          background:rgba(63,191,127,.12);border-left:3px solid var(--pistache)">
+        <p style="font-weight:700;font-size:.78rem;color:#1F7A4D">
+          🎫 Descontos guardados de ${esc(f.cliente)}</p>
+        <p class="muted" style="font-size:.7rem;margin-top:.15rem">
+          Incide sobre um cone, o de maior valor do pedido. Marcando mais de um, os
+          percentuais somam.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem">
+          ${disp.map(d => `<label style="display:flex;align-items:center;gap:.35rem;
+              font-size:.8rem;font-weight:700;cursor:pointer;background:var(--chantilly);
+              border-radius:9999px;padding:.3rem .7rem">
+            <input type="checkbox" value="${d.id}" ${marcados.includes(d.id) ? "checked" : ""}
+              onchange="alternarDesconto('${d.id}', this.checked)" style="width:.95rem;height:.95rem">
+            ${d.percentual}% OFF
+          </label>`).join("")}
+        </div>
+        ${soma > 0 ? `<p style="font-size:.78rem;font-weight:700;color:#1F7A4D;margin-top:.5rem">
+          Aplicando ${soma}% no cone mais caro.</p>` : ""}
+      </div>`;
+    })()}
 
     <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.9rem;align-items:end">
       <label style="font-size:.72rem;font-weight:600;min-width:8rem">Data do pagamento
@@ -4358,7 +4435,7 @@ async function abrirAdmin(aba){
 
 async function carregarAdmin(){
   if (!S.perfil?.admin) return;
-  const [prod, cats, avs, sug, cli, fic, comp, senhas, tent] = await Promise.all([
+  const [prod, cats, avs, sug, cli, fic, comp, senhas, tent, desc] = await Promise.all([
     sb.from("products").select("*, categories(nome, slug)").order("nome"),
     sb.from("categories").select("id, nome").order("nome"),
     sb.from("reviews").select("*, products(nome), profiles(nome)").order("criado_em", { ascending:false }),
@@ -4368,6 +4445,7 @@ async function carregarAdmin(){
     sb.from("pre_compras").select("*").order("data_entrega", { ascending:false }),
     sb.from("pedidos_senha").select("*").is("atendido_em", null).order("criado_em"),
     sb.rpc("tentativas_painel"),
+    sb.from("descontos_cartao").select("id, cliente_id, percentual, carimbo_num").is("usado_em", null),
   ]);
   if (!prod.error) S.admin.produtos  = prod.data || [];
   if (!cats.error) S.admin.categorias = cats.data || [];
@@ -4378,6 +4456,7 @@ async function carregarAdmin(){
   if (!comp.error) S.admin.compras    = comp.data || [];
   if (!senhas.error) S.admin.senhas   = senhas.data || [];
   if (!tent.error)   S.admin.tentativas = tent.data || [];
+  if (!desc.error)   S.admin.descontos  = desc.data || [];
   S.admin.carregado = true;
   if (S.admin.avaliacoes.some(a => a.excluida_em)) limparLixeira(true);   // some com o que passou de 48h
 }
