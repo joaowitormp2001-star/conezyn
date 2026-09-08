@@ -5168,6 +5168,17 @@ function historicoCompleto(clienteId){
   return [...antigos, ...meus].sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
 }
 
+async function ajustarBrindesFora(id){
+  const campo = document.getElementById("bf-" + id);
+  const valor = parseInt(campo.value, 10);
+  if (!Number.isFinite(valor) || valor < 0){ alert("Informe um número igual ou maior que zero."); return; }
+  const { error } = await sb.rpc("ajustar_brindes_fora", { p_cliente: id, p_quantidade: valor });
+  if (error){ avisarErro(error, "ajustar os brindes já usados"); return; }
+  await carregarAdmin();
+  render();
+  verCliente(id);
+}
+
 async function ajustarCarimbos(id){
   const campo = document.getElementById("cr-" + id);
   const valor = parseInt(campo.value, 10);
@@ -5278,7 +5289,20 @@ function verCliente(id){
               onclick="verCartaoCliente('${id}')">Ver cartão</button>
             <span class="muted" style="font-size:.72rem">
               ${c.cartoes_completos ?? progressoCartoes(c.carimbos).completos} cartão(ões) completo(s) ·
-              ${(S.pedidos.filter(p => p.clienteId === id && p.brinde > 0 && p.status !== "Cancelado").length)} brinde(s) usado(s)</span>
+              ${c.brindes_usados ?? 0} brinde(s) usado(s)
+              ${c.tem_brinde ? ` · <strong style="color:#B4590F">tem brinde a receber</strong>` : ""}</span>
+          </div>
+
+          <p class="muted" style="font-size:.72rem;margin-top:.8rem;padding-top:.6rem;
+            border-top:1px solid rgb(62 39 35/.1)">
+            <strong style="color:var(--cacau)">Brindes entregues antes do site</strong><br>
+            Se você já deu cones grátis para esta pessoa no cartão de papel, informe aqui.
+            Sem isso, o sistema oferece o brinde de novo.</p>
+          <div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem">
+            <input id="bf-${id}" class="field" type="number" min="0"
+              value="${c.brindes_usados_fora ?? 0}" style="width:6rem;padding:.4rem .6rem">
+            <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .9rem;font-size:.75rem"
+              onclick="ajustarBrindesFora('${id}')">Salvar</button>
           </div>
         </div>
 
