@@ -3855,6 +3855,8 @@ function statusDaFicha(c){
 function pedidosUnificados(){
   const doSite = S.pedidos.map(p => ({
     tipo: "site", id: p.id, numero: p.numero,
+    // a chave identifica a PESSOA, não o texto do nome
+    chave: p.clienteId ? "c:" + p.clienteId : "n:" + semAcentoMin(p.cliente?.nome || ""),
     cliente: p.cliente?.nome || "—", telefone: p.cliente?.tel || "",
     itens: p.itens.map(i => ({ sabor: i.nome, quantidade: i.q })),
     cones: p.itens.reduce((n, i) => n + i.q, 0),
@@ -3866,9 +3868,15 @@ function pedidosUnificados(){
 
   const daFicha = S.admin.compras.map(c => {
     const f = S.admin.fichas.find(x => x.id === c.pre_cliente_id);
+    // Quando a ficha está vinculada a uma conta, vale o nome da CONTA.
+    // Assim "Guima" (ficha) e "Guilherme" (conta) viram uma pessoa só.
+    const dono = f?.vinculado_a ? S.admin.clientes.find(x => x.id === f.vinculado_a) : null;
     return {
       tipo: "ficha", id: c.id, numero: null, fichaId: c.pre_cliente_id,
-      cliente: f?.nome || "—", telefone: f?.telefone || "",
+      chave: dono ? "c:" + dono.id : "n:" + semAcentoMin(f?.nome || ""),
+      cliente: dono?.nome || f?.nome || "—",
+      apelidoFicha: dono && f && semAcentoMin(dono.nome) !== semAcentoMin(f.nome) ? f.nome : null,
+      telefone: dono?.telefone || f?.telefone || "",
       itens: Array.isArray(c.itens) && c.itens.length
         ? c.itens.map(i => ({ sabor: i.sabor, quantidade: i.quantidade }))
         : [{ sabor: c.sabores || "Cones", quantidade: c.quantidade }],
@@ -3905,6 +3913,7 @@ function vCardPedido(p){
             margin-left:.35rem;text-transform:none">🎁 brinde</span>` : ""}</p>
         <p class="muted" style="font-size:.78rem">
           <strong style="color:var(--cacau)">${esc(p.cliente)}</strong>
+          ${p.apelidoFicha ? ` <span class="muted">(ficha: ${esc(p.apelidoFicha)})</span>` : ""}
           ${p.telefone ? " · " + esc(mascaraTelefone(p.telefone)) : ""}
           ${p.local ? " · 📍 " + esc(p.local) : ""}</p>
         <p class="muted" style="font-size:.75rem;margin-top:.15rem">
@@ -3953,11 +3962,13 @@ function vAdminPedidos(){
 
   const todos = pedidosUnificados();
 
-  // Filtro por cliente: vale para as abas e para os totais.
+  // Filtro por cliente: identifica a pessoa, não o texto do nome,
+  // então pedidos do site e da ficha vêm juntos.
   const alvo = S.admin.filtroCliente || "";
-  const lista = alvo
-    ? todos.filter(p => semAcentoMin(p.cliente) === semAcentoMin(alvo))
-    : todos;
+  const chaveAlvo = alvo
+    ? (todos.find(p => semAcentoMin(p.cliente) === semAcentoMin(alvo))?.chave || null)
+    : null;
+  const lista = chaveAlvo ? todos.filter(p => p.chave === chaveAlvo) : todos;
 
   const aba = S.adminFiltro || "todos";
   const filtrada =
@@ -3973,7 +3984,17 @@ function vAdminPedidos(){
     .filter(p => p.status === "Pagamento concluído")
     .reduce((n, p) => n + (p.valor || 0), 0);
 
-  const nomes = [...new Set(todos.map(p => p.cliente).filter(x => x && x !== "—"))].sort();
+  // uma entrada por pessoa, com o nome da conta quando existir
+  const porChave = new Map();
+  todos.forEach(p => {
+    if (!p.cliente || p.cliente === "—") return;
+    const atual = porChave.get(p.chave);
+    // guarda o registro que conhece o apelido da ficha, para mostrá-lo na lista
+    if (!atual || (!atual.apelidoFicha && p.apelidoFicha)) porChave.set(p.chave, p);
+  });
+  const nomes = [...porChave.values()]
+    .sort((a, b) => a.cliente.localeCompare(b.cliente))
+    .map(p => ({ rotulo: p.cliente, detalhe: p.apelidoFicha ? "ficha: " + p.apelidoFicha : "" }));
 
   const contar = st => lista.filter(p => p.status === st).length;
   const abas = [
@@ -4016,7 +4037,7 @@ function vAdminPedidos(){
         <label class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
           letter-spacing:.05em" for="filtro-cliente">Filtrar por cliente</label>
         ${campoComLista("filtro-cliente", { valor: alvo, placeholder: "Todos os clientes",
-          opcoes: nomes.map(n => ({ rotulo: n })), aoEscolher: "aplicarFiltroCliente" })}
+          opcoes: nomes, aoEscolher: "aplicarFiltroCliente" })}
         ${alvo ? `<button style="font-size:.74rem;font-weight:700;color:var(--framboesa);
           text-decoration:underline;margin-top:.3rem" onclick="aplicarFiltroCliente(null,'')">
           limpar filtro</button>` : ""}
