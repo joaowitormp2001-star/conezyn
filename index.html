@@ -4009,17 +4009,16 @@ const dataBrCurta = d => d
 function vCardPedido(p){
   const editando = S.admin.pedidoEditando === `${p.tipo}:${p.id}`;
   return `<div class="card" style="padding:1rem">
-    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:center">
-      <div style="min-width:0">
-        <p class="display" style="font-size:1.05rem;font-weight:900">
-          ${p.numero ? "Pedido #" + p.numero : "Pedido da ficha"}
-          ${p.tipo === "ficha" ? `<span class="badge b-classico" style="margin-left:.35rem;font-size:.62rem">
-            lançado por você</span>` : ""}
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.75rem;align-items:start">
+      <div style="min-width:0;flex:1">
+        <p class="display" style="font-size:1.15rem;font-weight:900;line-height:1.2">
+          ${esc(p.cliente)}
           ${p.ehBrinde ? `<span class="badge" style="background:#EB791C;color:#fff;
-            margin-left:.35rem;text-transform:none">🎁 brinde</span>` : ""}</p>
-        <p class="muted" style="font-size:.78rem">
-          <strong style="color:var(--cacau)">${esc(p.cliente)}</strong>
-          ${p.apelidoFicha ? ` <span class="muted">(ficha: ${esc(p.apelidoFicha)})</span>` : ""}
+            margin-left:.35rem;text-transform:none;vertical-align:middle">🎁 brinde</span>` : ""}</p>
+        <p class="muted" style="font-size:.75rem;margin-top:.1rem">
+          ${p.numero ? "Pedido #" + p.numero
+            : `<span class="badge b-classico" style="font-size:.6rem">lançado por você</span>`}
+          ${p.apelidoFicha ? ` · ficha: ${esc(p.apelidoFicha)}` : ""}
           ${p.telefone ? " · " + esc(mascaraTelefone(p.telefone)) : ""}
           ${p.local ? " · 📍 " + esc(p.local) : ""}</p>
         <p class="muted" style="font-size:.75rem;margin-top:.15rem">
@@ -4029,12 +4028,17 @@ function vCardPedido(p){
             : p.tipo === "ficha" ? " · pagamento pendente" : ""}
           ${p.forma ? " · " + esc(p.forma) : ""}</p>
       </div>
-      <span class="status st-${String(p.status).replace(/ /g,"_")}">${p.status}</span>
+
+      <div style="text-align:right;flex-shrink:0">
+        <span class="status st-${String(p.status).replace(/ /g,"_")}">${p.status}</span>
+        ${p.valor != null ? `<p class="display" style="font-size:1.45rem;font-weight:900;
+          margin-top:.35rem;line-height:1;color:${p.valor === 0 ? "#B4590F" : "var(--cacau)"}">
+          ${reais(p.valor)}</p>` : ""}
+      </div>
     </div>
 
     <p style="font-size:.82rem;margin-top:.5rem">
-      <strong>${p.cones} cone(s)</strong> · ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join(", ")}
-      ${p.valor != null ? ` · <strong>${reais(p.valor)}</strong>` : ""}</p>
+      <strong>${p.cones} cone(s)</strong> · ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join(", ")}</p>
 
     ${p.presente ? `<p style="font-size:.75rem;font-weight:700;color:var(--cacau-claro);margin-top:.25rem">
       🎁 Presente para ${esc(p.destinatario || "")}</p>` : ""}
