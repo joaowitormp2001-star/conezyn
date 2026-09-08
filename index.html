@@ -620,7 +620,8 @@ const S = {
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], tentativas: [], categorias: [],
            produtoEditando: null, fichaAberta: null, carregado: false,
-           novoPedido: false, pedidoEditando: null, formPedido: null, clienteAberto: null,
+           novoPedido: false, pedidoEditando: null, formPedido: null, formSite: null,
+           clienteAberto: null,
            filtroCliente: "",
            pedidosCliente: {},
            form: {}, pedidosExpandidos: {}, clienteEditando: null, fichaEditando: null,
@@ -885,6 +886,7 @@ async function carregarPerfil(){
 function mapearPedido(row){
   return {
     id: row.id, numero: row.numero, clienteId: row.cliente_id,
+    forma_pagamento: row.forma_pagamento || null,
     cliente: { nome: row.profiles?.nome || (S.perfil?.nome ?? "Cliente"),
                tel:  row.profiles?.telefone || (S.perfil?.tel ?? "") },
     itens: (row.order_items||[]).map(i => ({
@@ -3779,6 +3781,84 @@ function vFormularioPedido(){
 /* Abre a nota do pedido, a mesma que o cliente vê. */
 /* Nota de um pedido lançado na ficha. Eles não passaram pelo site,
    então não têm número nem Pix — a nota é o comprovante do registro. */
+/* Mudar o status de um pedido lançado na ficha ajusta as datas. */
+async function mudarStatusFicha(id, status){
+  const { error } = await sb.rpc("mudar_status_ficha", { p_id: id, p_status: status });
+  if (error){ avisarErro(error, "mudar o status do pedido"); return; }
+  await carregarAdmin();
+  render();
+}
+
+async function excluirPedidoSite(id){
+  const p = S.pedidos.find(x => x.id === id);
+  if (!confirm(`Excluir o pedido #${p?.numero || ""}?\n\n` +
+               `Os carimbos e descontos que ele gerou voltam para o cliente. ` +
+               `Não dá para desfazer.`)) return;
+  const { error } = await sb.rpc("excluir_pedido_site", { p_id: id });
+  if (error){ avisarErro(error, "excluir o pedido"); return; }
+  await Promise.all([carregarAdmin(), carregarPedidos()]);
+  render();
+}
+
+function editarPedidoSite(id){
+  const chave = "site:" + id;
+  if (S.admin.pedidoEditando === chave){ S.admin.pedidoEditando = null; return render(); }
+  const p = S.pedidos.find(x => x.id === id);
+  if (!p) return;
+  S.admin.novoPedido = false;
+  S.admin.pedidoEditando = chave;
+  S.admin.formSite = { id, local: p.local || "", quando: p.quando || "agora",
+                       forma: p.forma_pagamento || "" };
+  render();
+}
+
+async function salvarPedidoSite(){
+  const f = S.admin.formSite;
+  if (!f) return;
+  const pega = id => document.getElementById(id)?.value || "";
+  const { error } = await sb.rpc("editar_pedido_site", {
+    p_id: f.id,
+    p_local: pega("fs-local"),
+    p_quando: pega("fs-quando"),
+    p_forma: pega("fs-forma"),
+  });
+  if (error){ avisarErro(error, "salvar o pedido"); return; }
+  S.admin.pedidoEditando = null;
+  S.admin.formSite = null;
+  await Promise.all([carregarAdmin(), carregarPedidos()]);
+  render();
+}
+
+/* Pedido do site: itens e valores vêm do próprio site e não são
+   editáveis aqui. O que dá para corrigir é a entrega e o pagamento. */
+function vFormularioPedidoSite(p){
+  const f = S.admin.formSite || { local: p.local || "", quando: p.quando || "", forma: "" };
+  const formas = ["Pix","Dinheiro","Cartão","Transferência"].map(x => ({ rotulo: x }));
+  return `<div class="card" style="padding:1.1rem;background:var(--chantilly-esc);margin-top:.75rem">
+    <p style="font-weight:700;font-size:.9rem">Editando pedido #${p.numero}</p>
+    <p class="muted" style="font-size:.72rem;margin-top:.2rem">
+      Sabores e valores vêm do pedido feito pelo cliente e não mudam aqui.
+      Para corrigi-los, exclua e lance de novo como pedido seu.</p>
+
+    <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.7rem;align-items:end">
+      <label style="font-size:.72rem;font-weight:600;flex:1.3;min-width:9rem">Local de entrega
+        ${campoComLista("fs-local", { valor: f.local, placeholder: "Ex: TI",
+          opcoes: SETORES.map(x => ({ rotulo: x.nome })), permitirNovo: true })}</label>
+      <label style="font-size:.72rem;font-weight:600;min-width:7rem">Horário
+        <input id="fs-quando" class="field" value="${esc(f.quando)}" placeholder="agora ou 15:30"
+          style="display:block;margin-top:.15rem"></label>
+      <label style="font-size:.72rem;font-weight:600;min-width:8rem">Forma de pagamento
+        ${campoComLista("fs-forma", { valor: f.forma, placeholder: "Pix",
+          opcoes: formas, permitirNovo: true })}</label>
+    </div>
+
+    <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="salvarPedidoSite()">Salvar alterações</button>
+      <button class="btn btn-ghost" onclick="editarPedidoSite('${p.id}')">Cancelar</button>
+    </div>
+  </div>`;
+}
+
 function verNotaFicha(id){
   const c = S.admin.compras.find(x => x.id === id);
   if (!c) return;
@@ -3846,6 +3926,7 @@ function ehBrindeDaFicha(c){
 }
 
 function statusDaFicha(c){
+  if (c.cancelado)         return "Cancelado";
   if (ehBrindeDaFicha(c))  return "Brinde";
   if (c.data_pagamento)    return "Pagamento concluído";
   if (c.data_entrega)      return "Entregue";
@@ -3935,25 +4016,29 @@ function vCardPedido(p){
 
     <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.75rem;
         border-top:1px solid rgb(62 39 35/.08);padding-top:.6rem">
-      ${p.tipo === "site" ? `
-        <select class="field" style="width:auto;padding:.25rem .5rem;font-size:.74rem"
-          aria-label="Status do pedido ${p.numero}" onchange="mudarStatus('${p.id}', this.value)">
-          ${["Pedido feito","Entregue","Pagamento concluído","Cancelado"].map(st =>
-            `<option value="${st}" ${p.status===st?"selected":""}>${st}</option>`).join("")}
-        </select>
-        <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
-          onclick="verNota('${p.id}')">Ver nota</button>`
-      : `
-        <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
-          onclick="verNotaFicha('${p.id}')">Ver nota</button>
-        <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
-          onclick="editarPedidoFicha('${p.id}')">${editando ? "Cancelar" : "Editar"}</button>
-        <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
-          padding:.25rem .8rem;font-size:.74rem"
-          onclick="excluirCompraFicha('${p.id}')">Excluir</button>`}
+      <select class="field" style="width:auto;padding:.25rem .5rem;font-size:.74rem"
+        aria-label="Status do pedido de ${esc(p.cliente)}"
+        onchange="${p.tipo === "site"
+          ? `mudarStatus('${p.id}', this.value)`
+          : `mudarStatusFicha('${p.id}', this.value)`}">
+        ${["Pedido feito","Entregue","Pagamento concluído","Brinde","Cancelado"]
+          .filter(st => st !== "Brinde" || p.tipo === "ficha")
+          .map(st => `<option value="${st}" ${p.status===st?"selected":""}>${st}</option>`).join("")}
+      </select>
+      <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
+        onclick="${p.tipo === "site" ? `verNota('${p.id}')` : `verNotaFicha('${p.id}')`}">Ver nota</button>
+      <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
+        onclick="${p.tipo === "site"
+          ? `editarPedidoSite('${p.id}')`
+          : `editarPedidoFicha('${p.id}')`}">${editando ? "Cancelar" : "Editar"}</button>
+      <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
+        padding:.25rem .8rem;font-size:.74rem"
+        onclick="${p.tipo === "site"
+          ? `excluirPedidoSite('${p.id}')`
+          : `excluirCompraFicha('${p.id}')`}">Excluir</button>
     </div>
 
-    ${editando ? vFormularioPedido(p) : ""}
+    ${editando ? (p.tipo === "site" ? vFormularioPedidoSite(p) : vFormularioPedido(p)) : ""}
   </div>`;
 }
 
