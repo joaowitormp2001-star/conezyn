@@ -1221,6 +1221,35 @@ function mascaraTelefone(v){
   if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
   return `(${d.slice(0,2)}) ${d.slice(2,3)} ${d.slice(3,7)}-${d.slice(7)}`;
 }
+/* ============================================================
+   CAMPOS DE DINHEIRO
+   O que você digita são centavos: 1 → 0,01 · 12 → 0,12 ·
+   1234 → 12,34. Sem precisar colocar vírgula nem R$.
+   ============================================================ */
+function mascaraValor(v){
+  const d = digitos(v).slice(0, 9);
+  if (!d) return "";
+  const n = parseInt(d, 10);
+  const inteiro = Math.floor(n / 100);
+  const centavos = String(n % 100).padStart(2, "0");
+  return inteiro.toLocaleString("pt-BR") + "," + centavos;
+}
+
+function aoDigitarValor(input){
+  input.value = mascaraValor(input.value);
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+/* Texto do campo → centavos. Aceita o formato mascarado e também
+   o que já estava gravado antes ("14", "14,00", "R$ 14,00"). */
+function valorEmCentavos(txt){
+  const t = String(txt ?? "").trim();
+  if (!t) return null;
+  const d = digitos(t);
+  if (!d) return null;
+  return parseInt(d, 10);
+}
+
 /* Aplica a máscara enquanto o usuário digita, preservando o cursor no fim. */
 function aoDigitarTelefone(input){
   const posFim = input.selectionStart === input.value.length;
@@ -3566,7 +3595,7 @@ function editarPedidoFicha(id){
     id, cliente: f?.nome || "", telefone: f?.telefone || "",
     entrega: c.data_entrega || "", pagamento: c.data_pagamento || "",
     forma: c.forma_pagamento || "",
-    valor: c.valor_centavos != null ? (c.valor_centavos / 100).toFixed(2).replace(".", ",") : "",
+    valor: c.valor_centavos != null ? mascaraValor(String(c.valor_centavos)) : "",
     brinde: ehBrindeDaFicha(c),
     linhas: Array.isArray(c.itens) && c.itens.length
       ? c.itens.map(i => ({ sabor: i.sabor, qtd: i.quantidade }))
@@ -3609,7 +3638,7 @@ function lerFormPedido(){
 function marcarComoBrinde(marcado){
   const f = lerFormPedido();
   f.brinde = marcado;
-  if (marcado){ f.valor = "0,00"; f.pagamento = ""; }
+  if (marcado){ f.valor = mascaraValor("0"); f.pagamento = ""; }
   render();
 }
 
@@ -3637,7 +3666,7 @@ function sugerirValorPedido(){
     if (menorDelta === null || d < menorDelta) menorDelta = d;
   });
   if (cones % 2 === 1) total += menorDelta || 0;
-  f.valor = (total / 100).toFixed(2).replace(".", ",");
+  f.valor = mascaraValor(String(total));
   render();
 }
 function aoEscolherSabor(){ sugerirValorPedido(); }
@@ -3651,12 +3680,7 @@ async function salvarFormPedido(){
   if (!f.cliente.trim()){ alert("Informe o nome do cliente."); return; }
   if (!itens.length){ alert("Adicione ao menos um sabor."); return; }
 
-  const centavos = f.brinde ? 0 : (() => {
-    const t = String(f.valor).replace(/[^\d,.-]/g, "").trim();
-    if (!t) return null;
-    const n = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
-    return Number.isFinite(n) ? Math.round(n * 100) : null;
-  })();
+  const centavos = f.brinde ? 0 : valorEmCentavos(f.valor);
 
   if (f.id){
     const total = itens.reduce((n, i) => n + i.quantidade, 0);
@@ -3749,8 +3773,9 @@ function vFormularioPedido(){
       <label style="font-size:.72rem;font-weight:600;min-width:8rem">Forma
         ${campoComLista("fp-forma", { valor:f.forma, placeholder:"Pix", opcoes:formas, permitirNovo:true })}</label>
       <label style="font-size:.72rem;font-weight:600;min-width:7rem">Valor do pedido
-        <input id="fp-valor" class="field" inputmode="decimal" value="${esc(f.valor)}"
-          placeholder="0,00" style="display:block;margin-top:.15rem"></label>
+        <input id="fp-valor" class="field" inputmode="numeric" value="${esc(f.valor)}"
+          placeholder="0,00" oninput="aoDigitarValor(this)"
+          style="display:block;margin-top:.15rem;text-align:right"></label>
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .7rem;font-size:.72rem"
         onclick="sugerirValorPedido()">Sugerir valor</button>
       <label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;font-weight:700;
