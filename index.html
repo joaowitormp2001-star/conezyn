@@ -628,7 +628,7 @@ const S = {
            abaAvaliacao: 'pendentes' },
   notif: { ativo: false, som: true, log: [] },
   carregando: true, erroBanco: null, erroPedidos: null, ultimoErro: null, ocupado: false,
-  menuPerfil: false, loginAviso: null, senhaErro: null, senhaOk: null,
+  menuPerfil: false, loginAviso: null, senhaErro: null, senhaOk: null, pinErro: null,
   qtdCard: {},   // quantidade escolhida em cada card do catálogo
   avaliar: { produtoId:null, nota:0, podeAvaliar:false, minha:null, enviando:false },
 };
@@ -731,16 +731,106 @@ async function carregarCatalogo(){
   if (lista) lista.innerHTML = PRODUTOS.map(p => `<option value="${esc(p.nome)}">`).join("");
 }
 
-/* O navegador não decide quem é administrador: o servidor decide.
-   Guardamos aqui a resposta oficial. */
-let ADMIN_CONFIRMADO = false;
+/* ============================================================
+   ESTADO DE ADMINISTRAÇÃO — fechado dentro deste bloco
+   Antes isto era uma variável solta: bastava abrir o console e
+   escrever ADMIN_CONFIRMADO = true para a interface se abrir.
+   Agora ela vive dentro de uma função e ninguém de fora alcança.
+   Só a própria função altera o valor, e só depois de perguntar
+   ao servidor. O objeto é congelado, então também não dá para
+   trocar os métodos por outros.
+   Lembrando: isto é conforto visual. O que protege os dados são
+   as políticas do banco, que recusam qualquer leitura de quem
+   não é administrador — mesmo que a tela abra.
+   ============================================================ */
+const Seguranca = (() => {
+  let admin = false;
+  let dispositivo = false;
+
+  async function perguntarAoServidor(){
+    admin = false; dispositivo = false;
+    if (!S.perfil) return false;
+
+    const r = await sb.rpc("sou_admin");
+    admin = !r.error && r.data === true;
+    if (!admin) return false;
+
+    const d = await sb.rpc("dispositivo_aprovado", { p_token: lerChaveDispositivo() });
+    dispositivo = !d.error && d.data === true;
+    return admin;
+  }
+
+  async function aprovarComPin(pin, apelido){
+    const { data, error } = await sb.rpc("aprovar_dispositivo",
+      { p_pin: pin, p_apelido: apelido });
+    if (error) return { erro: erroAmigavel(error) };
+    if (!data)  return { erro: "PIN incorreto." };
+    guardarChaveDispositivo(data);
+    dispositivo = true;
+    return { ok: true };
+  }
+
+  return Object.freeze({
+    confirmar: perguntarAoServidor,
+    aprovarComPin,
+    ehAdmin: () => admin,
+    dispositivoOk: () => dispositivo,
+    limpar(){ admin = false; dispositivo = false; },
+  });
+})();
+
+/* Chave deste aparelho, guardada só aqui. Não é senha:
+   sem ser administrador, ela não serve para nada. */
+const CHAVE_DISPOSITIVO = "cones.dispositivo";
+const lerChaveDispositivo = () => {
+  try { return localStorage.getItem(CHAVE_DISPOSITIVO) || ""; } catch { return ""; }
+};
+const guardarChaveDispositivo = t => {
+  try { localStorage.setItem(CHAVE_DISPOSITIVO, t); } catch { /* ignora */ }
+};
+
+async function aprovarEsteDispositivo(){
+  const campo = document.getElementById("pin-campo");
+  const pin = campo ? campo.value.trim() : "";
+  if (!/^\d{4,8}$/.test(pin)){ S.pinErro = "Digite o PIN (de 4 a 8 dígitos)."; return render(); }
+
+  S.ocupado = true; S.pinErro = null; render();
+  const apelido = navigator.userAgent.includes("Mobile") ? "Celular" : "Computador";
+  const r = await Seguranca.aprovarComPin(pin, apelido);
+  S.ocupado = false;
+
+  if (r.erro){ S.pinErro = r.erro; return render(); }
+  S.pinErro = null;
+  await carregarAdmin();
+  render();
+}
+
+function vPedirPin(){
+  return `${vHeader()}<main class="wrap" style="padding-top:2rem;max-width:26rem">
+    <div class="card" style="padding:2rem 1.5rem;text-align:center">
+      <p style="font-size:2.2rem" aria-hidden>🔐</p>
+      <h1 class="display" style="margin-top:.5rem;font-size:1.4rem;font-weight:900">
+        Aparelho novo</h1>
+      <p class="muted" style="margin-top:.5rem;font-size:.85rem">
+        Digite o PIN do painel para liberar este dispositivo.
+        Depois disso ele não pede mais.</p>
+      <div style="margin-top:1.25rem;text-align:left">
+        <label class="label" for="pin-campo">PIN</label>
+        <input id="pin-campo" class="field" type="password" inputmode="numeric"
+          maxlength="8" autocomplete="one-time-code" style="text-align:center;letter-spacing:.4em"
+          onkeydown="if(event.key==='Enter')aprovarEsteDispositivo()">
+        ${S.pinErro ? `<p class="alerta" role="alert" style="margin-top:.6rem">${esc(S.pinErro)}</p>` : ""}
+        <button class="btn btn-primary" style="width:100%;margin-top:.9rem" ${S.ocupado?"disabled":""}
+          onclick="aprovarEsteDispositivo()">${S.ocupado ? "Verificando..." : "Liberar este aparelho"}</button>
+        <button class="btn btn-ghost" style="width:100%;margin-top:.5rem"
+          onclick="nav('home')">Voltar para a loja</button>
+      </div>
+    </div>
+  </main>${vFooter()}`;
+}
 
 async function confirmarAdmin(){
-  ADMIN_CONFIRMADO = false;
-  if (!S.perfil) return false;
-  const { data, error } = await sb.rpc("sou_admin");
-  ADMIN_CONFIRMADO = !error && data === true;
-  return ADMIN_CONFIRMADO;
+  return Seguranca.confirmar();
 }
 
 /* Cria o botão do painel só para quem o servidor confirmou.
@@ -748,7 +838,7 @@ async function confirmarAdmin(){
 function atualizarBotaoAdmin(){
   const slot = document.getElementById("switch-slot");
   if (!slot) return;
-  if (!ADMIN_CONFIRMADO){ slot.innerHTML = ""; return; }
+  if (!Seguranca.ehAdmin()){ slot.innerHTML = ""; return; }
   slot.innerHTML = `<button class="btn btn-primary switch" id="switch-btn" onclick="toggleAdmin()">
     ${S.view === "admin" ? "← Ver loja" : "Painel admin"}</button>`;
 }
@@ -1034,9 +1124,13 @@ function voltar(){
 function backBtn(estilo=""){
   return `<button class="back-btn" aria-label="Voltar" title="Voltar" style="${estilo}" onclick="voltar()">←</button>`;
 }
-function toggleAdmin(){
-  if (S.view.startsWith("admin")) nav("home");
-  else { S.adminTab="dash"; nav("admin"); }
+async function toggleAdmin(){
+  if (S.view.startsWith("admin")) return nav("home");
+  // Pergunta ao servidor toda vez que o painel é aberto, mesmo que
+  // alguém tenha tentado forçar o estado por fora.
+  await Seguranca.confirmar();
+  S.adminTab = "dash";
+  nav("admin");
 }
 function addCart(id, q=1){
   const p = byId(id); if (!p || p.estoque<=0) return;
@@ -2472,7 +2566,7 @@ async function fazerCadastro(){
 }
 
 async function sair(){
-  ADMIN_CONFIRMADO = false;
+  Seguranca.limpar();
   await sb.auth.signOut();
   S.perfil = null; S.pedidos = []; S.fidelidade = { total:0, historico:[] };
   nav("home");
@@ -2985,10 +3079,11 @@ function vSemPermissao(){
 
 function vAdmin(){
   // Vale a resposta do servidor, não a memória do navegador.
-  if (!ADMIN_CONFIRMADO){
+  if (!Seguranca.ehAdmin()){
     sb.rpc("registrar_tentativa_admin", { p_origem: "tela admin" });
     return vSemPermissao();
   }
+  if (!Seguranca.dispositivoOk()) return vPedirPin();
   const tabs = { dash: vAdminDash, pedidos: vAdminPedidos, notif: vAdminNotif,
                  produtos: vAdminProdutos, avaliacoes: vAdminAvaliacoes, sugestoes: vAdminSugestoes,
                  clientes: vAdminClientes };
@@ -4946,7 +5041,7 @@ async function ajustarCarimbos(id){
 /* O cartão fidelidade de um cliente, visto pelo administrador.
    Fica só aqui: o cliente continua vendo apenas o próprio. */
 function verCartaoCliente(id){
-  if (!ADMIN_CONFIRMADO) return;
+  if (!Seguranca.ehAdmin()) return;
   const c = S.admin.clientes.find(x => x.id === id);
   if (!c) return;
   const prog = progressoCartoes(c.carimbos);
