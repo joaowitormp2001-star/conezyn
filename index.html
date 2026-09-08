@@ -3777,6 +3777,59 @@ function vFormularioPedido(){
 }
 
 /* Abre a nota do pedido, a mesma que o cliente vê. */
+/* Nota de um pedido lançado na ficha. Eles não passaram pelo site,
+   então não têm número nem Pix — a nota é o comprovante do registro. */
+function verNotaFicha(id){
+  const c = S.admin.compras.find(x => x.id === id);
+  if (!c) return;
+  const f = S.admin.fichas.find(x => x.id === c.pre_cliente_id);
+  const itens = Array.isArray(c.itens) && c.itens.length
+    ? c.itens : [{ sabor: c.sabores || "Cones", quantidade: c.quantidade }];
+  const status = statusDaFicha(c);
+
+  document.getElementById("modal-slot").innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)fecharModal()">
+      <div class="modal card" role="dialog" aria-modal="true" style="max-width:26rem">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:.75rem">
+          <div>
+            <p class="muted" style="font-size:.72rem;font-weight:700;text-transform:uppercase;
+              letter-spacing:.05em">Pedido registrado no painel</p>
+            <h2 class="display" style="font-size:1.25rem;font-weight:900">
+              ${esc(f?.nome || "Cliente")}</h2>
+            ${f?.telefone ? `<p class="muted" style="font-size:.78rem">
+              ${esc(mascaraTelefone(f.telefone))}</p>` : ""}
+          </div>
+          <button class="back-btn" style="box-shadow:none" aria-label="Fechar"
+            onclick="fecharModal()">✕</button>
+        </div>
+
+        <p style="margin-top:.75rem">
+          <span class="status st-${String(status).replace(/ /g,"_")}">${status}</span></p>
+
+        <dl class="linhas" style="margin-top:.75rem">
+          ${itens.map(i => `<div><dt>${i.quantidade}× ${esc(i.sabor)}</dt><dd></dd></div>`).join("")}
+          <div><dt class="muted">Total de cones</dt><dd><strong>${c.quantidade}</strong></dd></div>
+        </dl>
+
+        <dl class="dados-grade" style="margin-top:.75rem">
+          <div class="dado"><dt>Entrega</dt>
+            <dd>${dataBrCurta(c.data_entrega) || "—"}</dd></div>
+          <div class="dado"><dt>Pagamento</dt>
+            <dd>${dataBrCurta(c.data_pagamento) || "pendente"}</dd></div>
+          <div class="dado"><dt>Forma</dt>
+            <dd>${esc(c.forma_pagamento || "—")}</dd></div>
+          <div class="dado destaque"><dt>Valor</dt>
+            <dd>${c.valor_centavos != null ? reais(c.valor_centavos) : "—"}</dd></div>
+        </dl>
+
+        <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+            onclick="fecharModal();S.adminTab='pedidos';editarPedidoFicha('${c.id}')">Editar pedido</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function verNota(id){
   const p = S.pedidos.find(x => x.id === id);
   if (!p) return;
@@ -3882,6 +3935,8 @@ function vCardPedido(p){
         <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
           onclick="verNota('${p.id}')">Ver nota</button>`
       : `
+        <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
+          onclick="verNotaFicha('${p.id}')">Ver nota</button>
         <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
           onclick="editarPedidoFicha('${p.id}')">${editando ? "Cancelar" : "Editar"}</button>
         <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
@@ -4978,6 +5033,21 @@ function verTodosPedidos(id){
   S.admin.pedidosExpandidos[id] = !S.admin.pedidosExpandidos[id];
   render();
 }
+async function desvincularFicha(fichaId){
+  const f = S.admin.fichas.find(x => x.id === fichaId);
+  const dono = f && S.admin.clientes.find(c => c.id === f.vinculado_a);
+  if (!confirm(
+    `Desvincular a ficha de ${esc(f?.nome || "")}${dono ? ` da conta de ${dono.nome}` : ""}?\n\n` +
+    `Nada é apagado: a ficha volta para a lista de sem vínculo, com todo o histórico. ` +
+    `Os carimbos vindos desses pedidos deixam de contar para a conta.`)) return;
+
+  const { data, error } = await sb.rpc("desvincular_ficha", { p_ficha: fichaId });
+  if (error){ avisarErro(error, "desvincular a ficha"); return; }
+  await carregarAdmin();
+  render();
+  if (data && data.ok) alert(`Ficha desvinculada. A conta ficou com ${data.carimbos_agora} carimbo(s).`);
+}
+
 async function vincularFichaConta(fichaId){
   const sel = document.getElementById("vinc-" + fichaId);
   const clienteId = sel && sel.value;
@@ -5170,6 +5240,14 @@ function verCliente(id){
           <p style="font-weight:700;font-size:.8rem">Carimbos de fidelidade</p>
           <p class="muted" style="font-size:.72rem;margin-top:.15rem">
             Ajustar aqui define o saldo exato. O histórico de movimentos é preservado.</p>
+          ${(() => {
+            const ligadas = S.admin.fichas.filter(x => x.vinculado_a === id);
+            if (!ligadas.length) return "";
+            return `<p class="muted" style="font-size:.72rem;margin-top:.5rem">
+              Ficha(s) ligada(s): ${ligadas.map(x => `${esc(x.nome)}
+                <button style="color:var(--framboesa);font-weight:700;text-decoration:underline"
+                  onclick="desvincularFicha('${x.id}')">desvincular</button>`).join(" · ")}</p>`;
+          })()}
           <div style="display:flex;gap:.4rem;align-items:center;margin-top:.5rem">
             <input id="cr-${id}" class="field" type="number" min="0" value="${c.carimbos}"
               style="width:6rem;padding:.4rem .6rem">
@@ -5623,7 +5701,10 @@ function vFicha(f){
 
       ${f.vinculado_a
         ? `<button class="badge b-classico" style="cursor:pointer" title="Ver a conta vinculada"
-             onclick="verCliente('${f.vinculado_a}')">${esc(dono ? dono.nome : "conta ativa")} ↗</button>`
+             onclick="verCliente('${f.vinculado_a}')">${esc(dono ? dono.nome : "conta ativa")} ↗</button>
+           <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .7rem;font-size:.74rem"
+             title="Soltar esta ficha da conta, sem apagar nada"
+             onclick="desvincularFicha('${f.id}')">Desvincular</button>`
         : `<span class="badge b-novo">sem vínculo</span>`}
 
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
