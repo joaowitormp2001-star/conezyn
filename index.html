@@ -4442,7 +4442,7 @@ function vDetalhePedido(p){
   const soma = unidades.reduce((n, u) => n + (u.preco || 0), 0);
   const temAbatimento = ab.brinde > 0 || ab.cartao > 0 || ab.primeira > 0;
 
-  return `<div style="margin-top:.6rem;border-top:1px solid rgb(62 39 35/.08);padding-top:.5rem">
+  return `<div style="margin-top:.6rem">
     <ul style="list-style:none;display:flex;flex-direction:column;gap:.2rem">
       ${unidades.map(u => `<li class="linha-valor" style="font-size:.82rem">
         <span>1× ${esc(u.sabor)}
@@ -4462,8 +4462,7 @@ function vDetalhePedido(p){
       ${ab.primeira > 0 ? `<div class="linha-valor" style="color:var(--pistache);font-weight:700">
         <dt>✨ 10% do primeiro pedido</dt><dd class="fio"></dd>
         <dd>− ${reais(ab.primeira)}</dd></div>` : ""}
-      <div class="linha-valor" style="border-top:1px solid rgb(62 39 35/.12);
-        padding-top:.35rem;margin-top:.2rem">
+      <div class="linha-valor" style="margin-top:.35rem">
         <dt class="display" style="font-weight:900;font-size:.95rem">Total</dt>
         <dd class="fio"></dd>
         <dd class="display" style="font-size:1.45rem;font-weight:900;line-height:1;
