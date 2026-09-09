@@ -896,6 +896,7 @@ function mapearPedido(row){
     id: row.id, numero: row.numero, clienteId: row.cliente_id,
     forma_pagamento: row.forma_pagamento || null,
     dataPagamento: row.data_pagamento || null,
+    observacao: row.observacao || null,
     descontoCartao: row.desconto_percentual_centavos || 0,
     pctAplicado: row.percentual_aplicado || 0,
     descontoPrimeira: row.desconto_primeira_centavos || 0,
@@ -3623,6 +3624,7 @@ function editarPedidoFicha(id){
     forma: c.forma_pagamento || "",
     valor: c.valor_centavos != null ? mascaraValor(String(c.valor_centavos)) : "",
     brinde: ehBrindeDaFicha(c),
+    observacao: c.observacao || "",
     descontosAplicados: Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : [],
     descontos: (Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : []).map(d => d.id),
     linhas: Array.isArray(c.itens) && c.itens.length
@@ -3654,6 +3656,7 @@ function lerFormPedido(){
   pega("fp-pagamento", "pagamento");
   pega("fp-forma", "forma");
   pega("fp-valor", "valor");
+  pega("fp-obs", "observacao");
   const cb = document.getElementById("fp-brinde");
   if (cb) f.brinde = cb.checked;
   const cbe = document.getElementById("fp-baixa");
@@ -3773,6 +3776,7 @@ async function salvarFormPedido(){
       forma_pagamento: f.brinde ? null : (f.forma.trim() || null),
       valor_centavos: centavos,
       descontos_aplicados: snapshot,
+      observacao: (f.observacao || "").trim() || null,
     }).eq("id", f.id);
     if (error){ avisarErro(error, "salvar o pedido"); return; }
     await aplicarDescontos();
@@ -3788,8 +3792,12 @@ async function salvarFormPedido(){
     if (error){ avisarErro(error, "criar o pedido"); return; }
 
     await aplicarDescontos();
-    if (snapshot.length && data){
-      await sb.rpc("registrar_descontos_pedido", { p_pedido: data, p_lista: snapshot });
+    if (data){
+      if (snapshot.length){
+        await sb.rpc("registrar_descontos_pedido", { p_pedido: data, p_lista: snapshot });
+      }
+      const obs = (f.observacao || "").trim();
+      if (obs) await sb.from("pre_compras").update({ observacao: obs }).eq("id", data);
     }
 
     // Baixa do estoque: só em pedido novo, e só se você pediu.
@@ -3949,6 +3957,11 @@ function vFormularioPedido(){
       ${f.id ? "O valor veio da ficha. Pode alterar à vontade."
              : "O valor é sugerido pelo preço dos sabores escolhidos. Pode alterar à vontade."}</p>
 
+    <label style="font-size:.72rem;font-weight:600;display:block;margin-top:.9rem">Observação
+      <textarea id="fp-obs" class="field" rows="2" placeholder="Anote o que quiser sobre este pedido"
+        style="display:block;margin-top:.15rem;width:100%;resize:vertical;font-family:inherit"
+        >${esc(f.observacao || "")}</textarea></label>
+
     <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="salvarFormPedido()">
         ${f.id ? "Salvar alterações" : "Criar pedido"}</button>
@@ -3997,6 +4010,7 @@ async function editarPedidoSite(id){
     valor:  mascaraValor(String(p.total ?? 0)),
     data:   p.criadoEm ? new Date(p.criadoEm).toISOString().slice(0, 10) : "",
     pagamento: p.dataPagamento ? String(p.dataPagamento).slice(0, 10) : "",
+    observacao: p.observacao || "",
     brinde: (p.brinde || 0) > 0,
     descontos: [],
     descontosAplicados: [],
@@ -4101,6 +4115,11 @@ function vFormularioPedidoSite(p){
       </label>
     </div>
 
+    <label style="font-size:.72rem;font-weight:600;display:block;margin-top:.9rem">Observação
+      <textarea id="fs-obs" class="field" rows="2" placeholder="Anote o que quiser sobre este pedido"
+        style="display:block;margin-top:.15rem;width:100%;resize:vertical;font-family:inherit"
+        >${esc(f.observacao || "")}</textarea></label>
+
     <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="salvarPedidoSite('${p.id}')">Salvar alterações</button>
       <button class="btn btn-ghost" onclick="editarPedidoSite('${p.id}')">Cancelar</button>
@@ -4125,6 +4144,7 @@ function lerFormSite(){
   const v = {
     local: pega("fs-local"), quando: pega("fs-quando"), data: pega("fs-data"),
     pagamento: pega("fs-pagamento"), forma: pega("fs-forma"), valor: pega("fs-valor"),
+    observacao: pega("fs-obs"),
   };
   Object.keys(v).forEach(k => { if (v[k] !== undefined) f[k] = v[k]; });
   const cb = document.getElementById("fs-brinde");
@@ -4218,6 +4238,7 @@ async function salvarPedidoSite(pedidoId){
     p_desconto_ids: f.brinde ? [] : escolhidos,
     p_data_pagamento: f.pagamento || null,
     p_limpar_pagamento: !f.pagamento,
+    p_observacao: f.observacao || null,
   });
   if (error){ avisarErro(error, "salvar o pedido"); return; }
 
@@ -4323,6 +4344,7 @@ function pedidosUnificados(){
     valor: p.total, brinde: p.brinde, ehBrinde: p.brinde > 0,
     entrega: null, pagamento: p.dataPagamento || null, forma: p.forma_pagamento || null,
     status: p.status, quando: p.criadoEm, local: p.local,
+    observacao: p.observacao || null,
     presente: p.presente, destinatario: p.destinatario,
   }));
 
@@ -4346,6 +4368,7 @@ function pedidosUnificados(){
       status: statusDaFicha(c),
       quando: c.data_entrega || c.data_pagamento || c.criado_em,
       local: null, presente: false, destinatario: "",
+      observacao: c.observacao || null,
     };
   });
 
@@ -4403,9 +4426,9 @@ function vConesDoPedido(p, f){
     <ul style="list-style:none;margin-top:.35rem;display:flex;flex-direction:column;gap:.2rem">
       ${unidades.map(u => `<li class="linha-valor" style="font-size:.82rem">
         <span>1× ${esc(u.sabor)}
-          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">🎁 brinde</span>` : ""}
+          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">brinde</span>` : ""}
           ${u.pct ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
-            🎫 ${u.pct}% OFF</span>` : ""}</span>
+            desconto ${u.pct}%</span>` : ""}</span>
         <span class="fio"></span>
         <span style="font-weight:600;white-space:nowrap;${u.brinde ? "color:#B4590F" : ""}">
           ${u.brinde ? reais(0) : reais(u.preco)}</span>
@@ -4446,9 +4469,9 @@ function vDetalhePedido(p){
     <ul style="list-style:none;display:flex;flex-direction:column;gap:.2rem">
       ${unidades.map(u => `<li class="linha-valor" style="font-size:.82rem">
         <span>1× ${esc(u.sabor)}
-          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">🎁 brinde</span>` : ""}
+          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">brinde</span>` : ""}
           ${u.comDesconto ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
-            🎫 ${ab.pctAplicado}% OFF</span>` : ""}</span>
+            desconto ${ab.pctAplicado}%</span>` : ""}</span>
         <span class="fio"></span>
         <span style="font-weight:600;white-space:nowrap;${u.brinde ? "color:#B4590F" : ""}">
           ${u.brinde ? reais(0) : (u.preco != null ? reais(u.preco) : "—")}</span>
@@ -4457,10 +4480,10 @@ function vDetalhePedido(p){
 
     <dl style="margin-top:.5rem;display:flex;flex-direction:column;gap:.15rem;font-size:.78rem">
       ${ab.cartao > 0 ? `<div class="linha-valor" style="color:var(--pistache);font-weight:700">
-        <dt>🎫 ${ab.pctAplicado}% do cartão</dt><dd class="fio"></dd>
+        <dt>Desconto do cartão (${ab.pctAplicado}%)</dt><dd class="fio"></dd>
         <dd>− ${reais(ab.cartao)}</dd></div>` : ""}
       ${ab.primeira > 0 ? `<div class="linha-valor" style="color:var(--pistache);font-weight:700">
-        <dt>✨ 10% do primeiro pedido</dt><dd class="fio"></dd>
+        <dt>Desconto do primeiro pedido (10%)</dt><dd class="fio"></dd>
         <dd>− ${reais(ab.primeira)}</dd></div>` : ""}
       <div class="linha-valor" style="margin-top:.35rem">
         <dt class="display" style="font-weight:900;font-size:.95rem">Total</dt>
@@ -4480,7 +4503,7 @@ function vCardPedido(p){
         <p class="display" style="font-size:1.15rem;font-weight:900;line-height:1.2">
           ${esc(p.cliente)}
           ${p.ehBrinde ? `<span class="badge" style="background:#EB791C;color:#fff;
-            margin-left:.35rem;text-transform:none;vertical-align:middle">🎁 brinde</span>` : ""}</p>
+            margin-left:.35rem;text-transform:none;vertical-align:middle">brinde</span>` : ""}</p>
         <p class="muted" style="font-size:.75rem;margin-top:.1rem">
           ${p.numero ? "Pedido #" + p.numero
             : `<span class="badge b-classico" style="font-size:.6rem">lançado por você</span>`}
@@ -4504,6 +4527,11 @@ function vCardPedido(p){
 
     ${p.presente ? `<p style="font-size:.75rem;font-weight:700;color:var(--cacau-claro);margin-top:.25rem">
       🎁 Presente para ${esc(p.destinatario || "")}</p>` : ""}
+
+    ${p.observacao ? `<p style="font-size:.78rem;margin-top:.5rem;padding:.5rem .65rem;
+      background:var(--chantilly);border-radius:.5rem;white-space:pre-wrap">
+      <strong class="muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em">
+        Observação</strong><br>${esc(p.observacao)}</p>` : ""}
 
     <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.75rem;
         border-top:1px solid rgb(62 39 35/.08);padding-top:.6rem">
