@@ -3600,6 +3600,8 @@ function editarPedidoFicha(id){
     forma: c.forma_pagamento || "",
     valor: c.valor_centavos != null ? mascaraValor(String(c.valor_centavos)) : "",
     brinde: ehBrindeDaFicha(c),
+    descontosAplicados: Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : [],
+    descontos: (Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : []).map(d => d.id),
     linhas: Array.isArray(c.itens) && c.itens.length
       ? c.itens.map(i => ({ sabor: i.sabor, qtd: i.quantidade }))
       : [{ sabor: c.sabores || "", qtd: c.quantidade || 1 }],
@@ -3680,7 +3682,7 @@ function sugerirValorPedido(){
   if (cones % 2 === 1) total += menorDelta || 0;
 
   // desconto do cartão: sobre o cone mais caro, como no site
-  const disp = descontosDoNome(f.cliente);
+  const disp = descontosDoFormulario();
   const marcados = (f.descontos || []).filter(id => disp.some(d => d.id === id));
   const pct = Math.min(disp.filter(d => marcados.includes(d.id))
     .reduce((n, d) => n + d.percentual, 0), 100);
@@ -3711,6 +3713,33 @@ async function salvarFormPedido(){
 
   const centavos = f.brinde ? 0 : valorEmCentavos(f.valor);
 
+  // ---- descontos: o que entrou, o que saiu ----
+  const disp = descontosDoFormulario();
+  const escolhidos = (f.descontos || []).filter(id => disp.some(d => d.id === id));
+  const antes = (f.descontosAplicados || []).map(d => d.id);
+  const novos = escolhidos.filter(id => !antes.includes(id));
+  const removidos = antes.filter(id => !escolhidos.includes(id));
+
+  async function aplicarDescontos(){
+    const porOrigem = (ids, origem) =>
+      ids.filter(id => disp.some(d => d.id === id && d.origem === origem));
+
+    const usarConta = porOrigem(novos, "conta");
+    const usarFicha = porOrigem(novos, "ficha");
+    const voltaConta = porOrigem(removidos, "conta");
+    const voltaFicha = porOrigem(removidos, "ficha");
+
+    if (usarConta.length)  await sb.rpc("usar_descontos", { p_ids: usarConta });
+    if (usarFicha.length)  await sb.rpc("usar_descontos_ficha", { p_ids: usarFicha });
+    if (voltaConta.length) await sb.rpc("devolver_descontos", { p_ids: voltaConta });
+    if (voltaFicha.length) await sb.rpc("devolver_descontos_ficha", { p_ids: voltaFicha });
+  }
+
+  const snapshot = escolhidos.map(id => {
+    const d = disp.find(x => x.id === id);
+    return { id, percentual: d.percentual, origem: d.origem };
+  });
+
   if (f.id){
     const total = itens.reduce((n, i) => n + i.quantidade, 0);
     const { error } = await sb.from("pre_compras").update({
@@ -3720,10 +3749,12 @@ async function salvarFormPedido(){
       data_pagamento: f.brinde ? null : (f.pagamento || null),
       forma_pagamento: f.brinde ? null : (f.forma.trim() || null),
       valor_centavos: centavos,
+      descontos_aplicados: snapshot,
     }).eq("id", f.id);
     if (error){ avisarErro(error, "salvar o pedido"); return; }
+    await aplicarDescontos();
   } else {
-    const { error } = await sb.rpc("importar_pedido_ficha", {
+    const { data, error } = await sb.rpc("importar_pedido_ficha", {
       p_nome: f.cliente.trim(), p_itens: itens,
       p_data_entrega: f.entrega || null,
       p_data_pagamento: f.brinde ? null : (f.pagamento || null),
@@ -3733,26 +3764,13 @@ async function salvarFormPedido(){
     });
     if (error){ avisarErro(error, "criar o pedido"); return; }
 
-    // Baixa do estoque: só em pedido novo, e só se você pediu.
-    // Importação de histórico antigo nunca passa por aqui.
-    // consome os descontos escolhidos, cada um na sua trilha
-    if ((f.descontos || []).length){
-      const disp = descontosDoNome(f.cliente);
-      const daConta = f.descontos.filter(id =>
-        disp.some(d => d.id === id && d.origem === "conta"));
-      const daFicha = f.descontos.filter(id =>
-        disp.some(d => d.id === id && d.origem === "ficha"));
-
-      if (daConta.length){
-        const r = await sb.rpc("usar_descontos", { p_ids: daConta });
-        if (r.error) avisarErro(r.error, "registrar o uso do desconto");
-      }
-      if (daFicha.length){
-        const r = await sb.rpc("usar_descontos_ficha", { p_ids: daFicha });
-        if (r.error) avisarErro(r.error, "registrar o uso do desconto");
-      }
+    await aplicarDescontos();
+    if (snapshot.length && data){
+      await sb.rpc("registrar_descontos_pedido", { p_pedido: data, p_lista: snapshot });
     }
 
+    // Baixa do estoque: só em pedido novo, e só se você pediu.
+    // Importação de histórico antigo nunca passa por aqui.
     if (f.baixarEstoque !== false){
       const baixa = await sb.rpc("baixar_estoque", { p_itens: itens });
       if (baixa.error){
@@ -3803,6 +3821,17 @@ function descontosDoNome(nome){
   return [];
 }
 
+/* Disponíveis + os que ESTE pedido já consumiu.
+   Sem isso, ao reabrir o pedido para editar, o desconto aplicado
+   sumia da lista e dava para escolher outro por cima. */
+function descontosDoFormulario(){
+  const f = formPedido();
+  const disponiveis = descontosDoNome(f.cliente);
+  const jaUsados = (f.descontosAplicados || [])
+    .filter(d => !disponiveis.some(x => x.id === d.id));
+  return [...disponiveis, ...jaUsados];
+}
+
 function vFormularioPedido(){
   const f = formPedido();
   const clientes = [
@@ -3842,7 +3871,7 @@ function vFormularioPedido(){
       onclick="addLinhaPedido()">+ outro sabor</button>
 
     ${(() => {
-      const disp = descontosDoNome(f.cliente);
+      const disp = descontosDoFormulario();
       if (!disp.length) return "";
       const marcados = f.descontos || [];
       const soma = Math.min(disp.filter(d => marcados.includes(d.id))
@@ -5261,8 +5290,11 @@ async function salvarCompra(fichaId){
   await carregarAdmin(); render();
 }
 async function excluirCompraFicha(id){
-  if (!confirm("Excluir este pedido do histórico?")) return;
-  const { error } = await sb.from("pre_compras").delete().eq("id", id);
+  const c = S.admin.compras.find(x => x.id === id);
+  const nDesc = Array.isArray(c?.descontos_aplicados) ? c.descontos_aplicados.length : 0;
+  if (!confirm(`Excluir este pedido do histórico?` +
+    (nDesc ? `\n\nO(s) ${nDesc} desconto(s) usado(s) nele voltam para o cliente.` : ""))) return;
+  const { error } = await sb.rpc("excluir_compra_ficha", { p_id: id });
   if (error){ avisarErro(error, "excluir o pedido da ficha"); return; }
   await carregarAdmin(); render();
 }
