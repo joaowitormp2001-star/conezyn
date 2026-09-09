@@ -362,6 +362,9 @@
   .opcoes .criar{color:var(--framboesa)}
   .opcoes .vazio{padding:.6rem .8rem;font-size:.8rem;color:rgb(62 39 35/.6)}
   /* blocos de dados: o rótulo fica logo acima do valor, não do outro lado da linha */
+  /* fio pontilhado ligando o nome ao valor, como em cardápio */
+  .fio{flex:1;border-bottom:1px dotted rgb(62 39 35/.35);transform:translateY(-.25rem);min-width:1.5rem}
+  .linha-valor{display:flex;align-items:baseline;gap:.4rem}
   .dados-grade{display:grid;gap:.5rem;margin-top:.6rem;
     grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr))}
   .dado{background:var(--chantilly);border-radius:.6rem;padding:.5rem .65rem;min-width:0}
@@ -4394,14 +4397,14 @@ function vConesDoPedido(p, f){
     <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
       letter-spacing:.05em">Cones deste pedido</p>
     <ul style="list-style:none;margin-top:.35rem;display:flex;flex-direction:column;gap:.2rem">
-      ${unidades.map(u => `<li style="display:flex;justify-content:space-between;gap:.75rem;
-          font-size:.82rem;align-items:baseline">
+      ${unidades.map(u => `<li class="linha-valor" style="font-size:.82rem">
         <span>1× ${esc(u.sabor)}
           ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">🎁 brinde</span>` : ""}
           ${u.pct ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
             🎫 ${u.pct}% OFF</span>` : ""}</span>
-        <span style="font-weight:600;white-space:nowrap;${u.brinde ? "text-decoration:line-through;opacity:.5" : ""}">
-          ${reais(u.preco)}</span>
+        <span class="fio"></span>
+        <span style="font-weight:600;white-space:nowrap;${u.brinde ? "color:#B4590F" : ""}">
+          ${u.brinde ? reais(0) : reais(u.preco)}</span>
       </li>`).join("")}
     </ul>
   </div>`;
@@ -4437,29 +4440,28 @@ function vDetalhePedido(p){
 
   return `<div style="margin-top:.6rem;border-top:1px solid rgb(62 39 35/.08);padding-top:.5rem">
     <ul style="list-style:none;display:flex;flex-direction:column;gap:.2rem">
-      ${unidades.map(u => `<li style="display:flex;justify-content:space-between;gap:.75rem;
-          font-size:.82rem;align-items:baseline">
+      ${unidades.map(u => `<li class="linha-valor" style="font-size:.82rem">
         <span>1× ${esc(u.sabor)}
           ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">🎁 brinde</span>` : ""}
           ${u.comDesconto ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
             🎫 ${ab.pctAplicado}% OFF</span>` : ""}</span>
-        <span style="font-weight:600;white-space:nowrap;${u.brinde ? "text-decoration:line-through;opacity:.5" : ""}">
-          ${u.preco != null ? reais(u.preco) : "—"}</span>
+        <span class="fio"></span>
+        <span style="font-weight:600;white-space:nowrap;${u.brinde ? "color:#B4590F" : ""}">
+          ${u.brinde ? reais(0) : (u.preco != null ? reais(u.preco) : "—")}</span>
       </li>`).join("")}
     </ul>
 
     <dl style="margin-top:.5rem;display:flex;flex-direction:column;gap:.15rem;font-size:.78rem">
-      ${temAbatimento ? `<div style="display:flex;justify-content:space-between">
-        <dt class="muted">Soma dos cones</dt><dd>${reais(soma)}</dd></div>` : ""}
-      ${ab.brinde > 0 ? `<div style="display:flex;justify-content:space-between;color:#B4590F;font-weight:700">
-        <dt>🎁 Cone de brinde</dt><dd>− ${reais(ab.brinde)}</dd></div>` : ""}
-      ${ab.cartao > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--pistache);font-weight:700">
-        <dt>🎫 ${ab.pctAplicado}% do cartão</dt><dd>− ${reais(ab.cartao)}</dd></div>` : ""}
-      ${ab.primeira > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--pistache);font-weight:700">
-        <dt>✨ 10% do primeiro pedido</dt><dd>− ${reais(ab.primeira)}</dd></div>` : ""}
-      <div style="display:flex;justify-content:space-between;align-items:baseline;
-        border-top:1px solid rgb(62 39 35/.12);padding-top:.35rem;margin-top:.2rem">
+      ${ab.cartao > 0 ? `<div class="linha-valor" style="color:var(--pistache);font-weight:700">
+        <dt>🎫 ${ab.pctAplicado}% do cartão</dt><dd class="fio"></dd>
+        <dd>− ${reais(ab.cartao)}</dd></div>` : ""}
+      ${ab.primeira > 0 ? `<div class="linha-valor" style="color:var(--pistache);font-weight:700">
+        <dt>✨ 10% do primeiro pedido</dt><dd class="fio"></dd>
+        <dd>− ${reais(ab.primeira)}</dd></div>` : ""}
+      <div class="linha-valor" style="border-top:1px solid rgb(62 39 35/.12);
+        padding-top:.35rem;margin-top:.2rem">
         <dt class="display" style="font-weight:900;font-size:.95rem">Total</dt>
+        <dd class="fio"></dd>
         <dd class="display" style="font-size:1.45rem;font-weight:900;line-height:1;
           color:${p.valor === 0 ? "#B4590F" : "var(--cacau)"}">
           ${p.valor != null ? reais(p.valor) : "—"}</dd></div>
