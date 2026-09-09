@@ -3454,12 +3454,35 @@ async function removerLogo(){
 
 function vAdminDash(){
   const hoje = new Date().toDateString();
-  const deHoje = S.pedidos.filter(p=>p.criadoEm.toDateString()===hoje && p.status!=="Cancelado");
-  const cones = deHoje.reduce((s,p)=>s+p.itens.reduce((x,i)=>x+i.q,0),0);
-  const fat = deHoje.reduce((s,p)=>s+p.total,0);
-  const pend = S.pedidos.filter(p=>p.status==="Pedido feito").length;
+
+  // Conta os dois tipos: os pedidos do site e os que você lança na ficha.
+  // Antes só os do site entravam, e o dia parecia mais vazio do que foi.
+  const todos = S.admin.carregado ? pedidosUnificados() : S.pedidos.map(p => ({
+    itens: p.itens.map(i => ({ sabor: i.nome, quantidade: i.q })),
+    cones: p.itens.reduce((n, i) => n + i.q, 0),
+    valor: p.total, status: p.status, entrega: null, quando: p.criadoEm,
+  }));
+
+  const dataDoPedido = p => {
+    const d = p.entrega ? new Date(String(p.entrega).slice(0, 10) + "T12:00")
+                        : (p.quando ? new Date(p.quando) : null);
+    return d && !isNaN(d) ? d : null;
+  };
+
+  const deHoje = todos.filter(p => {
+    const d = dataDoPedido(p);
+    return d && d.toDateString() === hoje && p.status !== "Cancelado";
+  });
+
+  const cones = deHoje.reduce((n, p) => n + (p.cones || 0), 0);
+  const fat   = deHoje.reduce((n, p) => n + (p.valor || 0), 0);
+  const pend  = todos.filter(p => p.status === "Pedido feito").length;
+
   const rank = {};
-  S.pedidos.filter(p=>p.status!=="Cancelado").forEach(p=>p.itens.forEach(i=>rank[i.nome]=(rank[i.nome]||0)+i.q));
+  todos.filter(p => p.status !== "Cancelado")
+       .forEach(p => p.itens.forEach(i => {
+         rank[i.sabor] = (rank[i.sabor] || 0) + i.quantidade;
+       }));
   const ranking = Object.entries(rank).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const esgotados = PRODUTOS.filter(p=>p.estoque<=0);
   const stat = (r,v,cor="")=>`<div class="card" style="padding:1.25rem">
@@ -4449,9 +4472,7 @@ function vConesDoPedido(p, f){
     <ul style="list-style:none;margin-top:.35rem;display:flex;flex-direction:column;gap:.2rem">
       ${unidades.map(u => `<li class="linha-valor" style="font-size:.82rem">
         <span>1× ${esc(u.sabor)}
-          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">brinde</span>` : ""}
-          ${u.pct ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
-            desconto ${u.pct}%</span>` : ""}</span>
+          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">brinde</span>` : ""}</span>
         <span class="fio"></span>
         <span style="font-weight:600;white-space:nowrap;${u.brinde ? "color:#B4590F" : ""}">
           ${u.brinde ? reais(0) : reais(u.preco)}</span>
@@ -4492,9 +4513,7 @@ function vDetalhePedido(p){
     <ul style="list-style:none;display:flex;flex-direction:column;gap:.2rem">
       ${unidades.map(u => `<li class="linha-valor" style="font-size:.82rem">
         <span>1× ${esc(u.sabor)}
-          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">brinde</span>` : ""}
-          ${u.comDesconto ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
-            desconto ${ab.pctAplicado}%</span>` : ""}</span>
+          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">brinde</span>` : ""}</span>
         <span class="fio"></span>
         <span style="font-weight:600;white-space:nowrap;${u.brinde ? "color:#B4590F" : ""}">
           ${u.brinde ? reais(0) : (u.preco != null ? reais(u.preco) : "—")}</span>
@@ -5878,6 +5897,17 @@ function verCliente(id){
   const hist = historicoCompleto(id);
   const dataBr = d => d ? new Date(String(d).length <= 10 ? d + "T12:00" : d)
                             .toLocaleDateString("pt-BR") : "—";
+  /* Cadastro com hora: o banco sempre guardou o instante completo,
+     a tela é que mostrava só o dia. Vale para as contas antigas também. */
+  const dataHoraBr = d => {
+    if (!d) return "—";
+    const x = new Date(d);
+    if (isNaN(x)) return "—";
+    // fuso fixo de São Paulo: a hora não muda conforme o aparelho
+    return x.toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", year:"numeric",
+                                       hour:"2-digit", minute:"2-digit",
+                                       timeZone:"America/Sao_Paulo" });
+  };
 
   document.getElementById("modal-slot").innerHTML = `
     <div class="modal-overlay" onclick="if(event.target===this)fecharModal()">
@@ -5896,7 +5926,7 @@ function verCliente(id){
         <dl class="linhas" style="margin-top:1rem">
           <div><dt class="muted">WhatsApp</dt><dd>${esc(c.telefone || "—")}</dd></div>
           <div><dt class="muted">E-mail</dt><dd>${esc(c.email || "—")}</dd></div>
-          <div><dt class="muted">Cadastro</dt><dd>${dataBr(c.criado_em)}</dd></div>
+          <div><dt class="muted">Cadastro</dt><dd>${dataHoraBr(c.criado_em)}</dd></div>
           <div><dt class="muted">Total gasto</dt><dd>${reais(c.total_gasto_centavos)}</dd></div>
           <div><dt class="muted">Origem</dt>
             <dd>${c.veio_de_pre_cadastro ? "Ficha " + esc(ficha?.nome || "") : "Cadastro próprio"}</dd></div>
