@@ -4039,6 +4039,8 @@ function vFormularioPedidoSite(p){
       Os sabores ficam como o cliente escolheu. Todo o resto é editável,
       mesmo com o pedido pago.</p>
 
+    ${vConesDoPedido(p, f)}
+
     <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.7rem;align-items:end">
       <label style="font-size:.72rem;font-weight:600;flex:1.3;min-width:9rem">Local de entrega
         ${campoComLista("fs-local", { valor: f.local || "", placeholder: "Ex: TI",
@@ -4354,6 +4356,57 @@ const dataBrCurta = d => d
 /* Cada cone numa linha, com o preço dele, e o resumo embaixo.
    Para pedidos do site o preço vem do próprio pedido; para os
    lançados por você, da tabela de preços atual. */
+/* Os cones do pedido, um por linha, para conferir enquanto edita.
+   Reflete as escolhas do formulário: brinde e desconto marcados. */
+function vConesDoPedido(p, f){
+  // `p` aqui é o pedido já unificado: os itens vêm como
+  // { sabor, quantidade, valorLinha }, não como o registro bruto.
+  const cones = p.cones ?? p.itens.reduce((n, i) => n + (i.quantidade || 0), 0);
+  const unidades = [];
+  p.itens.forEach(i => {
+    const prod = PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(i.sabor));
+    const preco = i.valorLinha != null && i.quantidade > 0
+      ? Math.round(i.valorLinha / i.quantidade)
+      : (prod ? (cones === 1 ? prod.unit : prod.dupla) : 0);
+    for (let n = 0; n < i.quantidade; n++) unidades.push({ sabor: i.sabor, preco });
+  });
+
+  // o brinde cai no mais barato; o desconto, no mais caro
+  if (f?.brinde && unidades.length){
+    let idx = 0;
+    unidades.forEach((u, k) => { if (u.preco < unidades[idx].preco) idx = k; });
+    unidades[idx].brinde = true;
+  }
+  const disp = descontosDoSite(p);
+  const pct = f?.brinde ? 0 : Math.min(disp
+    .filter(d => (f?.descontos || []).includes(d.id))
+    .reduce((n, d) => n + d.percentual, 0), 100);
+  if (pct > 0){
+    let idx = -1;
+    unidades.forEach((u, k) => {
+      if (u.brinde) return;
+      if (idx === -1 || u.preco > unidades[idx].preco) idx = k;
+    });
+    if (idx >= 0) unidades[idx].pct = pct;
+  }
+
+  return `<div style="margin-top:.7rem;padding:.6rem .75rem;border-radius:.6rem;background:var(--chantilly)">
+    <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
+      letter-spacing:.05em">Cones deste pedido</p>
+    <ul style="list-style:none;margin-top:.35rem;display:flex;flex-direction:column;gap:.2rem">
+      ${unidades.map(u => `<li style="display:flex;justify-content:space-between;gap:.75rem;
+          font-size:.82rem;align-items:baseline">
+        <span>1× ${esc(u.sabor)}
+          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">🎁 brinde</span>` : ""}
+          ${u.pct ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
+            🎫 ${u.pct}% OFF</span>` : ""}</span>
+        <span style="font-weight:600;white-space:nowrap;${u.brinde ? "text-decoration:line-through;opacity:.5" : ""}">
+          ${reais(u.preco)}</span>
+      </li>`).join("")}
+    </ul>
+  </div>`;
+}
+
 function vDetalhePedido(p){
   const unidades = [];
   p.itens.forEach(i => {
@@ -4380,7 +4433,7 @@ function vDetalhePedido(p){
   }
 
   const soma = unidades.reduce((n, u) => n + (u.preco || 0), 0);
-  const temResumo = ab.brinde > 0 || ab.cartao > 0 || ab.primeira > 0;
+  const temAbatimento = ab.brinde > 0 || ab.cartao > 0 || ab.primeira > 0;
 
   return `<div style="margin-top:.6rem;border-top:1px solid rgb(62 39 35/.08);padding-top:.5rem">
     <ul style="list-style:none;display:flex;flex-direction:column;gap:.2rem">
@@ -4395,20 +4448,22 @@ function vDetalhePedido(p){
       </li>`).join("")}
     </ul>
 
-    ${temResumo ? `<dl style="margin-top:.5rem;display:flex;flex-direction:column;gap:.15rem;
-        font-size:.78rem">
-      <div style="display:flex;justify-content:space-between"><dt class="muted">Soma dos cones</dt>
-        <dd>${reais(soma)}</dd></div>
+    <dl style="margin-top:.5rem;display:flex;flex-direction:column;gap:.15rem;font-size:.78rem">
+      ${temAbatimento ? `<div style="display:flex;justify-content:space-between">
+        <dt class="muted">Soma dos cones</dt><dd>${reais(soma)}</dd></div>` : ""}
       ${ab.brinde > 0 ? `<div style="display:flex;justify-content:space-between;color:#B4590F;font-weight:700">
         <dt>🎁 Cone de brinde</dt><dd>− ${reais(ab.brinde)}</dd></div>` : ""}
       ${ab.cartao > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--pistache);font-weight:700">
         <dt>🎫 ${ab.pctAplicado}% do cartão</dt><dd>− ${reais(ab.cartao)}</dd></div>` : ""}
       ${ab.primeira > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--pistache);font-weight:700">
         <dt>✨ 10% do primeiro pedido</dt><dd>− ${reais(ab.primeira)}</dd></div>` : ""}
-      <div style="display:flex;justify-content:space-between;font-weight:900;
-        border-top:1px solid rgb(62 39 35/.12);padding-top:.25rem;margin-top:.15rem">
-        <dt>Total</dt><dd>${p.valor != null ? reais(p.valor) : "—"}</dd></div>
-    </dl>` : ""}
+      <div style="display:flex;justify-content:space-between;align-items:baseline;
+        border-top:1px solid rgb(62 39 35/.12);padding-top:.35rem;margin-top:.2rem">
+        <dt class="display" style="font-weight:900;font-size:.95rem">Total</dt>
+        <dd class="display" style="font-size:1.45rem;font-weight:900;line-height:1;
+          color:${p.valor === 0 ? "#B4590F" : "var(--cacau)"}">
+          ${p.valor != null ? reais(p.valor) : "—"}</dd></div>
+    </dl>
   </div>`;
 }
 
@@ -4437,9 +4492,6 @@ function vCardPedido(p){
 
       <div style="text-align:right;flex-shrink:0">
         <span class="status st-${String(p.status).replace(/ /g,"_")}">${p.status}</span>
-        ${p.valor != null ? `<p class="display" style="font-size:1.45rem;font-weight:900;
-          margin-top:.35rem;line-height:1;color:${p.valor === 0 ? "#B4590F" : "var(--cacau)"}">
-          ${reais(p.valor)}</p>` : ""}
       </div>
     </div>
 
