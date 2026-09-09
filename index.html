@@ -889,6 +889,9 @@ function mapearPedido(row){
     id: row.id, numero: row.numero, clienteId: row.cliente_id,
     forma_pagamento: row.forma_pagamento || null,
     dataPagamento: row.data_pagamento || null,
+    descontoCartao: row.desconto_percentual_centavos || 0,
+    pctAplicado: row.percentual_aplicado || 0,
+    descontoPrimeira: row.desconto_primeira_centavos || 0,
     produtoBrinde: row.produto_brinde_id || null,
     produtoDesconto: row.produto_desconto_id || null,
     cliente: { nome: row.profiles?.nome || (S.perfil?.nome ?? "Cliente"),
@@ -4297,10 +4300,16 @@ function pedidosUnificados(){
     clienteId: p.clienteId || null,
     cliente: p.cliente?.nome || "—", telefone: p.cliente?.tel || "",
     itens: p.itens.map(i => ({
-      sabor: i.nome, quantidade: i.q,
+      sabor: i.nome, quantidade: i.q, valorLinha: i.efetivo,
       brinde: p.produtoBrinde && i.produtoId === p.produtoBrinde,
       comDesconto: p.produtoDesconto && i.produtoId === p.produtoDesconto,
     })),
+    abatimentos: {
+      brinde: p.brinde || 0,
+      cartao: p.descontoCartao || 0,
+      pctAplicado: p.pctAplicado || 0,
+      primeira: p.descontoPrimeira || 0,
+    },
     cones: p.itens.reduce((n, i) => n + i.q, 0),
     valor: p.total, brinde: p.brinde, ehBrinde: p.brinde > 0,
     entrega: null, pagamento: p.dataPagamento || null, forma: p.forma_pagamento || null,
@@ -4342,6 +4351,67 @@ const dataBrCurta = d => d
   ? new Date(String(d).length <= 10 ? d + "T12:00" : d).toLocaleDateString("pt-BR")
   : null;
 
+/* Cada cone numa linha, com o preço dele, e o resumo embaixo.
+   Para pedidos do site o preço vem do próprio pedido; para os
+   lançados por você, da tabela de preços atual. */
+function vDetalhePedido(p){
+  const unidades = [];
+  p.itens.forEach(i => {
+    const prod = PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(i.sabor));
+    const preco = i.valorLinha != null && i.quantidade > 0
+      ? Math.round(i.valorLinha / i.quantidade)
+      : (prod ? (p.cones === 1 ? prod.unit : prod.dupla) : null);
+    for (let n = 0; n < i.quantidade; n++){
+      unidades.push({ sabor: i.sabor, preco, brinde: false, comDesconto: false });
+    }
+  });
+
+  const ab = p.abatimentos || {};
+  // o brinde cai numa unidade do sabor marcado; o desconto, em outra
+  if (ab.brinde > 0){
+    const alvo = unidades.find(u => p.itens.some(i =>
+      i.brinde && semAcentoMin(i.sabor) === semAcentoMin(u.sabor)));
+    if (alvo) alvo.brinde = true;
+  }
+  if (ab.cartao > 0){
+    const alvo = unidades.find(u => !u.brinde && p.itens.some(i =>
+      i.comDesconto && semAcentoMin(i.sabor) === semAcentoMin(u.sabor)));
+    if (alvo) alvo.comDesconto = true;
+  }
+
+  const soma = unidades.reduce((n, u) => n + (u.preco || 0), 0);
+  const temResumo = ab.brinde > 0 || ab.cartao > 0 || ab.primeira > 0;
+
+  return `<div style="margin-top:.6rem;border-top:1px solid rgb(62 39 35/.08);padding-top:.5rem">
+    <ul style="list-style:none;display:flex;flex-direction:column;gap:.2rem">
+      ${unidades.map(u => `<li style="display:flex;justify-content:space-between;gap:.75rem;
+          font-size:.82rem;align-items:baseline">
+        <span>1× ${esc(u.sabor)}
+          ${u.brinde ? `<span style="color:#B4590F;font-weight:700;font-size:.9em">🎁 brinde</span>` : ""}
+          ${u.comDesconto ? `<span style="color:var(--pistache);font-weight:700;font-size:.9em">
+            🎫 ${ab.pctAplicado}% OFF</span>` : ""}</span>
+        <span style="font-weight:600;white-space:nowrap;${u.brinde ? "text-decoration:line-through;opacity:.5" : ""}">
+          ${u.preco != null ? reais(u.preco) : "—"}</span>
+      </li>`).join("")}
+    </ul>
+
+    ${temResumo ? `<dl style="margin-top:.5rem;display:flex;flex-direction:column;gap:.15rem;
+        font-size:.78rem">
+      <div style="display:flex;justify-content:space-between"><dt class="muted">Soma dos cones</dt>
+        <dd>${reais(soma)}</dd></div>
+      ${ab.brinde > 0 ? `<div style="display:flex;justify-content:space-between;color:#B4590F;font-weight:700">
+        <dt>🎁 Cone de brinde</dt><dd>− ${reais(ab.brinde)}</dd></div>` : ""}
+      ${ab.cartao > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--pistache);font-weight:700">
+        <dt>🎫 ${ab.pctAplicado}% do cartão</dt><dd>− ${reais(ab.cartao)}</dd></div>` : ""}
+      ${ab.primeira > 0 ? `<div style="display:flex;justify-content:space-between;color:var(--pistache);font-weight:700">
+        <dt>✨ 10% do primeiro pedido</dt><dd>− ${reais(ab.primeira)}</dd></div>` : ""}
+      <div style="display:flex;justify-content:space-between;font-weight:900;
+        border-top:1px solid rgb(62 39 35/.12);padding-top:.25rem;margin-top:.15rem">
+        <dt>Total</dt><dd>${p.valor != null ? reais(p.valor) : "—"}</dd></div>
+    </dl>` : ""}
+  </div>`;
+}
+
 function vCardPedido(p){
   const editando = S.admin.pedidoEditando === `${p.tipo}:${p.id}`;
   return `<div class="card" style="padding:1rem">
@@ -4373,11 +4443,7 @@ function vCardPedido(p){
       </div>
     </div>
 
-    <p style="font-size:.82rem;margin-top:.5rem">
-      <strong>${p.cones} cone(s)</strong> ·
-      ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}${
-        i.brinde ? ` <span style="color:#B4590F;font-weight:700">(1 de brinde)</span>` : ""}${
-        i.comDesconto ? ` <span style="color:var(--pistache);font-weight:700">(desconto)</span>` : ""}`).join(", ")}</p>
+    ${vDetalhePedido(p)}
 
     ${p.presente ? `<p style="font-size:.75rem;font-weight:700;color:var(--cacau-claro);margin-top:.25rem">
       🎁 Presente para ${esc(p.destinatario || "")}</p>` : ""}
