@@ -888,6 +888,7 @@ function mapearPedido(row){
   return {
     id: row.id, numero: row.numero, clienteId: row.cliente_id,
     forma_pagamento: row.forma_pagamento || null,
+    dataPagamento: row.data_pagamento || null,
     produtoBrinde: row.produto_brinde_id || null,
     produtoDesconto: row.produto_desconto_id || null,
     cliente: { nome: row.profiles?.nome || (S.perfil?.nome ?? "Cliente"),
@@ -3985,6 +3986,7 @@ async function editarPedidoSite(id){
     forma:  p.forma_pagamento || "",
     valor:  mascaraValor(String(p.total ?? 0)),
     data:   p.criadoEm ? new Date(p.criadoEm).toISOString().slice(0, 10) : "",
+    pagamento: p.dataPagamento ? String(p.dataPagamento).slice(0, 10) : "",
     brinde: (p.brinde || 0) > 0,
     descontos: [],
     descontosAplicados: [],
@@ -4044,7 +4046,13 @@ function vFormularioPedidoSite(p){
       <label style="font-size:.72rem;font-weight:600;min-width:8rem">Data do pedido
         <input id="fs-data" class="field" type="date" value="${esc(f.data || "")}"
           style="display:block;margin-top:.15rem"></label>
+      <label style="font-size:.72rem;font-weight:600;min-width:8rem">Data do pagamento
+        <input id="fs-pagamento" class="field" type="date" value="${esc(f.pagamento || "")}"
+          style="display:block;margin-top:.15rem"></label>
     </div>
+    <p class="muted" style="font-size:.7rem;margin-top:.3rem">
+      Informar a data do pagamento marca o pedido como pago. Apagando a data,
+      ele volta para entregue.</p>
 
     ${disp.length ? `<div style="margin-top:.9rem;padding:.7rem .8rem;border-radius:.6rem;
         background:rgba(63,191,127,.12);border-left:3px solid var(--pistache)">
@@ -4104,7 +4112,7 @@ function lerFormSite(){
   const pega = id => document.getElementById(id)?.value;
   const v = {
     local: pega("fs-local"), quando: pega("fs-quando"), data: pega("fs-data"),
-    forma: pega("fs-forma"), valor: pega("fs-valor"),
+    pagamento: pega("fs-pagamento"), forma: pega("fs-forma"), valor: pega("fs-valor"),
   };
   Object.keys(v).forEach(k => { if (v[k] !== undefined) f[k] = v[k]; });
   const cb = document.getElementById("fs-brinde");
@@ -4196,6 +4204,8 @@ async function salvarPedidoSite(pedidoId){
     p_pct_centavos: pct > 0 ? Math.round(maior * pct / 100) : 0,
     p_pct_aplicado: pct,
     p_desconto_ids: f.brinde ? [] : escolhidos,
+    p_data_pagamento: f.pagamento || null,
+    p_limpar_pagamento: !f.pagamento,
   });
   if (error){ avisarErro(error, "salvar o pedido"); return; }
 
@@ -4293,7 +4303,7 @@ function pedidosUnificados(){
     })),
     cones: p.itens.reduce((n, i) => n + i.q, 0),
     valor: p.total, brinde: p.brinde, ehBrinde: p.brinde > 0,
-    entrega: null, pagamento: null, forma: p.forma_pagamento || null,
+    entrega: null, pagamento: p.dataPagamento || null, forma: p.forma_pagamento || null,
     status: p.status, quando: p.criadoEm, local: p.local,
     presente: p.presente, destinatario: p.destinatario,
   }));
@@ -4351,7 +4361,7 @@ function vCardPedido(p){
           ${p.entrega ? "entrega " + dataBrCurta(p.entrega)
             : p.quando ? new Date(p.quando).toLocaleDateString("pt-BR") : "sem data"}
           ${p.pagamento ? " · pago em " + dataBrCurta(p.pagamento)
-            : p.tipo === "ficha" ? " · pagamento pendente" : ""}
+            : " · pagamento pendente"}
           ${p.forma ? " · " + esc(p.forma) : ""}</p>
       </div>
 
