@@ -888,6 +888,8 @@ function mapearPedido(row){
   return {
     id: row.id, numero: row.numero, clienteId: row.cliente_id,
     forma_pagamento: row.forma_pagamento || null,
+    produtoBrinde: row.produto_brinde_id || null,
+    produtoDesconto: row.produto_desconto_id || null,
     cliente: { nome: row.profiles?.nome || (S.perfil?.nome ?? "Cliente"),
                tel:  row.profiles?.telefone || (S.perfil?.tel ?? "") },
     itens: (row.order_items||[]).map(i => ({
@@ -2353,7 +2355,12 @@ function vConfirmado(){
         : "Pedido realizado com sucesso!"}</h1>
       <p class="display" style="margin-top:.5rem;font-size:1.25rem;font-weight:700;color:var(--casquinha)">Pedido #${p.numero}</p>
       <dl class="linhas" style="margin-top:1.5rem;background:var(--chantilly);border-radius:1rem;padding:1rem;text-align:left">
-        ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}</dt><dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
+        ${p.itens.map(i=>`<div><dt>${i.q}× ${esc(i.nome)}${
+          p.produtoBrinde && i.produtoId === p.produtoBrinde
+            ? ` <span style="color:#B4590F;font-weight:700;font-size:.8em">🎁 1 de brinde</span>` : ""}${
+          p.produtoDesconto && i.produtoId === p.produtoDesconto
+            ? ` <span style="color:var(--pistache);font-weight:700;font-size:.8em">🎫 com desconto</span>` : ""}</dt>
+          <dd style="font-weight:600">${reais(i.efetivo)}</dd></div>`).join("")}
         ${p.brinde>0?`<div style="font-weight:700;color:#B4590F">
           <dt>🎁 Brinde do cartão fidelidade</dt><dd>− ${reais(p.brinde)}</dd></div>`:""}
         ${p.economia>0?`<div style="font-weight:600;color:var(--pistache)"><dt>Economia total</dt><dd>− ${reais(p.economia)}</dd></div>`:""}
@@ -2780,9 +2787,10 @@ function vPedidos(){
   const novos = S.pedidos.map(p => ({
     chave: "n" + p.id, numero: p.numero, antigo: false,
     data: p.criadoEm, status: p.status, total: p.total,
-    itens: p.itens.map(i => ({ nome: i.nome, q: i.q, valor: i.efetivo })),
+    itens: p.itens.map(i => ({ nome: i.nome, q: i.q, valor: i.efetivo, produtoId: i.produtoId })),
     local: p.local, quando: p.quando, brinde: p.brinde, presente: p.presente,
     destinatario: p.destinatario,
+    produtoBrinde: p.produtoBrinde, produtoDesconto: p.produtoDesconto,
   }));
   const antigos = S.pedidosAntigos.map(p => ({
     chave: "a" + p.id, numero: null, antigo: true,
@@ -2831,7 +2839,11 @@ function vPedidos(){
             </p>
 
             <dl class="linhas" style="margin-top:.75rem">
-              ${p.itens.map(i => `<div><dt>${i.q}× ${esc(i.nome)}</dt>
+              ${p.itens.map(i => `<div><dt>${i.q}× ${esc(i.nome)}${
+                p.produtoBrinde && i.produtoId === p.produtoBrinde
+                  ? ` <span style="color:#B4590F;font-weight:700;font-size:.8em">🎁 brinde</span>` : ""}${
+                p.produtoDesconto && i.produtoId === p.produtoDesconto
+                  ? ` <span style="color:var(--pistache);font-weight:700;font-size:.8em">🎫 desconto</span>` : ""}</dt>
                 <dd style="font-weight:600">${i.valor != null ? reais(i.valor) : ""}</dd></div>`).join("")}
             </dl>
 
@@ -4274,7 +4286,11 @@ function pedidosUnificados(){
     chave: p.clienteId ? "c:" + p.clienteId : "n:" + semAcentoMin(p.cliente?.nome || ""),
     clienteId: p.clienteId || null,
     cliente: p.cliente?.nome || "—", telefone: p.cliente?.tel || "",
-    itens: p.itens.map(i => ({ sabor: i.nome, quantidade: i.q })),
+    itens: p.itens.map(i => ({
+      sabor: i.nome, quantidade: i.q,
+      brinde: p.produtoBrinde && i.produtoId === p.produtoBrinde,
+      comDesconto: p.produtoDesconto && i.produtoId === p.produtoDesconto,
+    })),
     cones: p.itens.reduce((n, i) => n + i.q, 0),
     valor: p.total, brinde: p.brinde, ehBrinde: p.brinde > 0,
     entrega: null, pagamento: null, forma: p.forma_pagamento || null,
@@ -4348,7 +4364,10 @@ function vCardPedido(p){
     </div>
 
     <p style="font-size:.82rem;margin-top:.5rem">
-      <strong>${p.cones} cone(s)</strong> · ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join(", ")}</p>
+      <strong>${p.cones} cone(s)</strong> ·
+      ${p.itens.map(i => `${i.quantidade}× ${esc(i.sabor)}${
+        i.brinde ? ` <span style="color:#B4590F;font-weight:700">(1 de brinde)</span>` : ""}${
+        i.comDesconto ? ` <span style="color:var(--pistache);font-weight:700">(desconto)</span>` : ""}`).join(", ")}</p>
 
     ${p.presente ? `<p style="font-size:.75rem;font-weight:700;color:var(--cacau-claro);margin-top:.25rem">
       🎁 Presente para ${esc(p.destinatario || "")}</p>` : ""}
