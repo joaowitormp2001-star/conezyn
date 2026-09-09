@@ -362,9 +362,13 @@
   .opcoes .criar{color:var(--framboesa)}
   .opcoes .vazio{padding:.6rem .8rem;font-size:.8rem;color:rgb(62 39 35/.6)}
   /* blocos de dados: o rótulo fica logo acima do valor, não do outro lado da linha */
-  /* fio pontilhado ligando o nome ao valor, como em cardápio */
-  .fio{flex:1;border-bottom:1px dotted rgb(62 39 35/.35);transform:translateY(-.25rem);min-width:1.5rem}
-  .linha-valor{display:flex;align-items:baseline;gap:.4rem}
+  /* Fio pontilhado ligando o nome ao valor, como em cardápio.
+     Pontos espaçados e claros, para não competir com as linhas
+     divisórias do card. Fica na base do texto, não no meio. */
+  .fio{flex:1;min-width:1.5rem;align-self:flex-end;height:.45rem;
+    background-image:radial-gradient(circle, rgb(62 39 35/.28) 1px, transparent 1px);
+    background-size:6px 6px;background-repeat:repeat-x;background-position:left bottom}
+  .linha-valor{display:flex;align-items:baseline;gap:.5rem}
   .dados-grade{display:grid;gap:.5rem;margin-top:.6rem;
     grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr))}
   .dado{background:var(--chantilly);border-radius:.6rem;padding:.5rem .65rem;min-width:0}
