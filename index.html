@@ -620,7 +620,7 @@ const S = {
   adminTab: "dash", adminFiltro: "todos",
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], tentativas: [], categorias: [],
            produtoEditando: null, fichaAberta: null, carregado: false,
-           descontos: [],
+           descontos: [], descontosFicha: [],
            novoPedido: false, pedidoEditando: null, formPedido: null, formSite: null,
            clienteAberto: null,
            filtroCliente: "",
@@ -3735,10 +3735,22 @@ async function salvarFormPedido(){
 
     // Baixa do estoque: só em pedido novo, e só se você pediu.
     // Importação de histórico antigo nunca passa por aqui.
-    // consome os descontos escolhidos
+    // consome os descontos escolhidos, cada um na sua trilha
     if ((f.descontos || []).length){
-      const uso = await sb.rpc("usar_descontos", { p_ids: f.descontos });
-      if (uso.error) avisarErro(uso.error, "registrar o uso do desconto");
+      const disp = descontosDoNome(f.cliente);
+      const daConta = f.descontos.filter(id =>
+        disp.some(d => d.id === id && d.origem === "conta"));
+      const daFicha = f.descontos.filter(id =>
+        disp.some(d => d.id === id && d.origem === "ficha"));
+
+      if (daConta.length){
+        const r = await sb.rpc("usar_descontos", { p_ids: daConta });
+        if (r.error) avisarErro(r.error, "registrar o uso do desconto");
+      }
+      if (daFicha.length){
+        const r = await sb.rpc("usar_descontos_ficha", { p_ids: daFicha });
+        if (r.error) avisarErro(r.error, "registrar o uso do desconto");
+      }
     }
 
     if (f.baixarEstoque !== false){
@@ -3769,13 +3781,26 @@ function descontosDoNome(nome){
   const alvo = semAcentoMin(nome || "");
   if (!alvo) return [];
 
+  // 1) conta ativa, pelo nome dela ou pelo apelido da ficha vinculada
   let cliente = S.admin.clientes.find(c => semAcentoMin(c.nome) === alvo);
-  if (!cliente){
-    const ficha = S.admin.fichas.find(f => semAcentoMin(f.nome) === alvo && f.vinculado_a);
-    if (ficha) cliente = S.admin.clientes.find(c => c.id === ficha.vinculado_a);
+  const fichaLigada = S.admin.fichas.find(f => semAcentoMin(f.nome) === alvo && f.vinculado_a);
+  if (!cliente && fichaLigada) cliente = S.admin.clientes.find(c => c.id === fichaLigada.vinculado_a);
+
+  if (cliente){
+    return (S.admin.descontos || [])
+      .filter(d => d.cliente_id === cliente.id)
+      .map(d => ({ ...d, origem: "conta" }));
   }
-  if (!cliente) return [];
-  return (S.admin.descontos || []).filter(d => d.cliente_id === cliente.id);
+
+  // 2) ficha sem conta: ela tem a própria trilha de carimbos
+  const ficha = S.admin.fichas.find(f => semAcentoMin(f.nome) === alvo && !f.vinculado_a);
+  if (ficha){
+    return (S.admin.descontosFicha || [])
+      .filter(d => d.pre_cliente_id === ficha.id)
+      .map(d => ({ ...d, origem: "ficha" }));
+  }
+
+  return [];
 }
 
 function vFormularioPedido(){
@@ -4435,7 +4460,7 @@ async function abrirAdmin(aba){
 
 async function carregarAdmin(){
   if (!S.perfil?.admin) return;
-  const [prod, cats, avs, sug, cli, fic, comp, senhas, tent, desc] = await Promise.all([
+  const [prod, cats, avs, sug, cli, fic, comp, senhas, tent, desc, descF] = await Promise.all([
     sb.from("products").select("*, categories(nome, slug)").order("nome"),
     sb.from("categories").select("id, nome").order("nome"),
     sb.from("reviews").select("*, products(nome), profiles(nome)").order("criado_em", { ascending:false }),
@@ -4446,6 +4471,7 @@ async function carregarAdmin(){
     sb.from("pedidos_senha").select("*").is("atendido_em", null).order("criado_em"),
     sb.rpc("tentativas_painel"),
     sb.from("descontos_cartao").select("id, cliente_id, percentual, carimbo_num").is("usado_em", null),
+    sb.from("descontos_ficha").select("id, pre_cliente_id, percentual, carimbo_num").is("usado_em", null),
   ]);
   if (!prod.error) S.admin.produtos  = prod.data || [];
   if (!cats.error) S.admin.categorias = cats.data || [];
@@ -4457,6 +4483,7 @@ async function carregarAdmin(){
   if (!senhas.error) S.admin.senhas   = senhas.data || [];
   if (!tent.error)   S.admin.tentativas = tent.data || [];
   if (!desc.error)   S.admin.descontos  = desc.data || [];
+  if (!descF.error)  S.admin.descontosFicha = descF.data || [];
   S.admin.carregado = true;
   if (S.admin.avaliacoes.some(a => a.excluida_em)) limparLixeira(true);   // some com o que passou de 48h
 }
@@ -5929,7 +5956,13 @@ function vFicha(f){
       <div style="flex:1;min-width:0">
         <p style="font-weight:700;font-size:.9rem">${esc(f.nome)}</p>
         <p class="muted" style="font-size:.75rem">${esc(mascaraTelefone(f.telefone || "sem WhatsApp"))}
-          ${cones ? ` · 🍦 ${cones} cone(s)` : ""}</p>
+          ${cones ? ` · 🍦 ${cones} cone(s)` : ""}
+          ${(() => {
+            const d = (S.admin.descontosFicha || []).filter(x => x.pre_cliente_id === f.id);
+            if (!d.length) return "";
+            const soma = Math.min(d.reduce((n, x) => n + x.percentual, 0), 100);
+            return ` · <strong style="color:var(--pistache)">🎫 ${soma}% guardado</strong>`;
+          })()}</p>
       </div>
 
       ${f.recusas > 0 && !f.vinculado_a
