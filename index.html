@@ -4353,15 +4353,38 @@ function pedidosUnificados(){
     // Quando a ficha está vinculada a uma conta, vale o nome da CONTA.
     // Assim "Guima" (ficha) e "Guilherme" (conta) viram uma pessoa só.
     const dono = f?.vinculado_a ? S.admin.clientes.find(x => x.id === f.vinculado_a) : null;
+
+    // Descontos que você aplicou à mão neste pedido. O valor gravado
+    // já está com o abatimento, então recompomos quanto foi para
+    // mostrar a conta na tela.
+    const aplicados = Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : [];
+    const pctFicha = Math.min(aplicados.reduce((n, d) => n + (d.percentual || 0), 0), 100);
+
+    const itensFicha = Array.isArray(c.itens) && c.itens.length
+      ? c.itens.map(i => ({ sabor: i.sabor, quantidade: i.quantidade }))
+      : [{ sabor: c.sabores || "Cones", quantidade: c.quantidade }];
+
+    let maiorFicha = 0, saborCaro = null;
+    itensFicha.forEach(i => {
+      const prod = PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(i.sabor));
+      const preco = prod ? (c.quantidade === 1 ? prod.unit : prod.dupla) : 0;
+      if (preco > maiorFicha){ maiorFicha = preco; saborCaro = i.sabor; }
+    });
+    const descFicha = pctFicha > 0 ? Math.round(maiorFicha * pctFicha / 100) : 0;
+
+    if (descFicha > 0){
+      const alvo = itensFicha.find(i => i.sabor === saborCaro);
+      if (alvo) alvo.comDesconto = true;
+    }
+
     return {
       tipo: "ficha", id: c.id, numero: null, fichaId: c.pre_cliente_id,
+      abatimentos: { brinde: 0, cartao: descFicha, pctAplicado: pctFicha, primeira: 0 },
       chave: dono ? "c:" + dono.id : "n:" + semAcentoMin(f?.nome || ""),
       cliente: dono?.nome || f?.nome || "—",
       apelidoFicha: dono && f && semAcentoMin(dono.nome) !== semAcentoMin(f.nome) ? f.nome : null,
       telefone: dono?.telefone || f?.telefone || "",
-      itens: Array.isArray(c.itens) && c.itens.length
-        ? c.itens.map(i => ({ sabor: i.sabor, quantidade: i.quantidade }))
-        : [{ sabor: c.sabores || "Cones", quantidade: c.quantidade }],
+      itens: itensFicha,
       cones: c.quantidade,
       valor: c.valor_centavos, brinde: 0, ehBrinde: ehBrindeDaFicha(c),
       entrega: c.data_entrega, pagamento: c.data_pagamento, forma: c.forma_pagamento,
