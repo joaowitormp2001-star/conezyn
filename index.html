@@ -3956,16 +3956,36 @@ async function excluirPedidoSite(id){
   render();
 }
 
-function editarPedidoSite(id){
+async function editarPedidoSite(id){
   const chave = "site:" + id;
-  if (S.admin.pedidoEditando === chave){ S.admin.pedidoEditando = null; return render(); }
+  if (S.admin.pedidoEditando === chave){
+    S.admin.pedidoEditando = null; S.admin.formSite = null; return render();
+  }
   const p = S.pedidos.find(x => x.id === id);
   if (!p) return;
+
   S.admin.novoPedido = false;
   S.admin.pedidoEditando = chave;
-  S.admin.formSite = { id, local: p.local || "", quando: p.quando || "agora",
-                       forma: p.forma_pagamento || "" };
+  S.admin.formSite = {
+    id,
+    local:  p.local || "",
+    quando: p.quando || "agora",
+    forma:  p.forma_pagamento || "",
+    valor:  mascaraValor(String(p.total ?? 0)),
+    data:   p.criadoEm ? new Date(p.criadoEm).toISOString().slice(0, 10) : "",
+    brinde: (p.brinde || 0) > 0,
+    descontos: [],
+    descontosAplicados: [],
+  };
   render();
+
+  // quais descontos este pedido já consumiu
+  const { data } = await sb.rpc("descontos_do_pedido", { p_pedido: id });
+  if (Array.isArray(data) && data.length && S.admin.formSite?.id === id){
+    S.admin.formSite.descontosAplicados = data.map(d => ({ ...d, origem: "conta" }));
+    S.admin.formSite.descontos = data.map(d => d.id);
+    render();
+  }
 }
 
 async function salvarPedidoSite(){
@@ -3985,34 +4005,192 @@ async function salvarPedidoSite(){
   render();
 }
 
-/* Pedido do site: itens e valores vêm do próprio site e não são
-   editáveis aqui. O que dá para corrigir é a entrega e o pagamento. */
+/* Pedido do site: tudo editável, em qualquer status.
+   Só os itens ficam como o cliente escolheu — são o registro do
+   que ele pediu. Para mudar sabores, exclua e lance como seu. */
 function vFormularioPedidoSite(p){
-  const f = S.admin.formSite || { local: p.local || "", quando: p.quando || "", forma: "" };
+  const f = S.admin.formSite || {};
   const formas = ["Pix","Dinheiro","Cartão","Transferência"].map(x => ({ rotulo: x }));
+  const disp = descontosDoSite(p);
+  const marcados = f.descontos || [];
+  const soma = Math.min(disp.filter(d => marcados.includes(d.id))
+    .reduce((n, d) => n + d.percentual, 0), 100);
+
   return `<div class="card" style="padding:1.1rem;background:var(--chantilly-esc);margin-top:.75rem">
     <p style="font-weight:700;font-size:.9rem">Editando pedido #${p.numero}</p>
     <p class="muted" style="font-size:.72rem;margin-top:.2rem">
-      Sabores e valores vêm do pedido feito pelo cliente e não mudam aqui.
-      Para corrigi-los, exclua e lance de novo como pedido seu.</p>
+      Os sabores ficam como o cliente escolheu. Todo o resto é editável,
+      mesmo com o pedido pago.</p>
 
     <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.7rem;align-items:end">
       <label style="font-size:.72rem;font-weight:600;flex:1.3;min-width:9rem">Local de entrega
-        ${campoComLista("fs-local", { valor: f.local, placeholder: "Ex: TI",
+        ${campoComLista("fs-local", { valor: f.local || "", placeholder: "Ex: TI",
           opcoes: SETORES.map(x => ({ rotulo: x.nome })), permitirNovo: true })}</label>
       <label style="font-size:.72rem;font-weight:600;min-width:7rem">Horário
-        <input id="fs-quando" class="field" value="${esc(f.quando)}" placeholder="agora ou 15:30"
+        <input id="fs-quando" class="field" value="${esc(f.quando || "")}" placeholder="agora ou 15:30"
           style="display:block;margin-top:.15rem"></label>
+      <label style="font-size:.72rem;font-weight:600;min-width:8rem">Data do pedido
+        <input id="fs-data" class="field" type="date" value="${esc(f.data || "")}"
+          style="display:block;margin-top:.15rem"></label>
+    </div>
+
+    ${disp.length ? `<div style="margin-top:.9rem;padding:.7rem .8rem;border-radius:.6rem;
+        background:rgba(63,191,127,.12);border-left:3px solid var(--pistache)">
+      <p style="font-weight:700;font-size:.78rem;color:#1F7A4D">🎫 Descontos do cartão</p>
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem">
+        ${disp.map(d => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.8rem;
+            font-weight:700;cursor:pointer;background:var(--chantilly);border-radius:9999px;
+            padding:.3rem .7rem">
+          <input type="checkbox" value="${d.id}" ${marcados.includes(d.id) ? "checked" : ""}
+            onchange="alternarDescontoSite('${p.id}','${d.id}', this.checked)"
+            style="width:.95rem;height:.95rem">
+          ${d.percentual}% OFF
+        </label>`).join("")}
+      </div>
+      ${soma > 0 ? `<p style="font-size:.78rem;font-weight:700;color:#1F7A4D;margin-top:.5rem">
+        Aplicando ${soma}% no cone mais caro.</p>` : ""}
+    </div>` : ""}
+
+    <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.9rem;align-items:end">
       <label style="font-size:.72rem;font-weight:600;min-width:8rem">Forma de pagamento
-        ${campoComLista("fs-forma", { valor: f.forma, placeholder: "Pix",
+        ${campoComLista("fs-forma", { valor: f.forma || "", placeholder: "Pix",
           opcoes: formas, permitirNovo: true })}</label>
+      <label style="font-size:.72rem;font-weight:600;min-width:7rem">Valor total
+        <input id="fs-valor" class="field" inputmode="numeric" value="${esc(f.valor || "")}"
+          placeholder="0,00" oninput="aoDigitarValor(this)"
+          style="display:block;margin-top:.15rem;text-align:right"></label>
+      <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .7rem;font-size:.72rem"
+        onclick="recalcularPedidoSite('${p.id}')">Recalcular</button>
+      <label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;font-weight:700;
+        color:#B4590F;cursor:pointer;padding-bottom:.4rem">
+        <input type="checkbox" id="fs-brinde" ${f.brinde ? "checked" : ""}
+          onchange="marcarBrindeSite('${p.id}', this.checked)" style="width:1rem;height:1rem">
+        🎁 Foi brinde
+      </label>
     </div>
 
     <div style="display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="salvarPedidoSite()">Salvar alterações</button>
+      <button class="btn btn-primary" onclick="salvarPedidoSite('${p.id}')">Salvar alterações</button>
       <button class="btn btn-ghost" onclick="editarPedidoSite('${p.id}')">Cancelar</button>
     </div>
   </div>`;
+}
+
+/* Disponíveis do cliente + os que este pedido já consumiu. */
+function descontosDoSite(p){
+  const doCliente = (S.admin.descontos || [])
+    .filter(d => d.cliente_id === p.clienteId)
+    .map(d => ({ ...d, origem: "conta" }));
+  const noPedido = (S.admin.formSite?.descontosAplicados || [])
+    .filter(d => !doCliente.some(x => x.id === d.id));
+  return [...doCliente, ...noPedido];
+}
+
+function lerFormSite(){
+  const f = S.admin.formSite;
+  if (!f) return null;
+  const pega = id => document.getElementById(id)?.value;
+  const v = {
+    local: pega("fs-local"), quando: pega("fs-quando"), data: pega("fs-data"),
+    forma: pega("fs-forma"), valor: pega("fs-valor"),
+  };
+  Object.keys(v).forEach(k => { if (v[k] !== undefined) f[k] = v[k]; });
+  const cb = document.getElementById("fs-brinde");
+  if (cb) f.brinde = cb.checked;
+  return f;
+}
+
+function alternarDescontoSite(pedidoId, id, marcado){
+  const f = lerFormSite();
+  f.descontos = marcado
+    ? [...new Set([...(f.descontos || []), id])]
+    : (f.descontos || []).filter(x => x !== id);
+  recalcularPedidoSite(pedidoId);
+}
+
+function marcarBrindeSite(pedidoId, marcado){
+  // sincroniza a caixa antes de reler, senão o valor lido do DOM
+  // sobrescreve a escolha que acabou de ser feita
+  const cb = document.getElementById("fs-brinde");
+  if (cb) cb.checked = marcado;
+  const f = lerFormSite();
+  f.brinde = marcado;
+  recalcularPedidoSite(pedidoId);
+}
+
+/* Refaz a conta: preço de dupla, brinde OU desconto, como no site. */
+function recalcularPedidoSite(pedidoId){
+  const p = S.pedidos.find(x => x.id === pedidoId);
+  const f = lerFormSite();
+  if (!p || !f) return;
+
+  const cones = p.itens.reduce((n, i) => n + i.q, 0);
+  let base = 0, maior = 0, menor = null;
+  p.itens.forEach(i => {
+    const prod = PRODUTOS.find(x => x.id === i.produtoId)
+              || PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(i.nome));
+    const dupla = prod ? prod.dupla : 1200;
+    const unit  = prod ? prod.unit  : 1400;
+    const preco = cones === 1 ? unit : dupla;
+    base += preco * i.q;
+    if (preco > maior) maior = preco;
+    if (menor === null || preco < menor) menor = preco;
+  });
+  if (cones % 2 === 1 && cones > 1) base += 200;
+
+  let total = base;
+  if (f.brinde){
+    total = Math.max(total - (menor || 0), 0);
+  } else {
+    const disp = descontosDoSite(p);
+    const pct = Math.min(disp.filter(d => (f.descontos || []).includes(d.id))
+      .reduce((n, d) => n + d.percentual, 0), 100);
+    if (pct > 0) total = Math.max(total - Math.round(maior * pct / 100), 0);
+  }
+
+  f.valor = mascaraValor(String(total));
+  render();
+}
+
+async function salvarPedidoSite(pedidoId){
+  const f = lerFormSite();
+  const p = S.pedidos.find(x => x.id === pedidoId);
+  if (!f || !p) return;
+
+  const disp = descontosDoSite(p);
+  const escolhidos = (f.descontos || []).filter(id => disp.some(d => d.id === id));
+  const cones = p.itens.reduce((n, i) => n + i.q, 0);
+
+  let maior = 0, menor = null;
+  p.itens.forEach(i => {
+    const prod = PRODUTOS.find(x => x.id === i.produtoId)
+              || PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(i.nome));
+    const preco = cones === 1 ? (prod ? prod.unit : 1400) : (prod ? prod.dupla : 1200);
+    if (preco > maior) maior = preco;
+    if (menor === null || preco < menor) menor = preco;
+  });
+
+  const pct = f.brinde ? 0 : Math.min(disp.filter(d => escolhidos.includes(d.id))
+    .reduce((n, d) => n + d.percentual, 0), 100);
+
+  const { error } = await sb.rpc("editar_pedido_site_completo", {
+    p_id: pedidoId,
+    p_local: f.local || null,
+    p_quando: f.quando || null,
+    p_forma: f.forma || null,
+    p_total: valorEmCentavos(f.valor),
+    p_data: f.data ? new Date(f.data + "T12:00").toISOString() : null,
+    p_brinde_centavos: f.brinde ? (menor || 0) : 0,
+    p_pct_centavos: pct > 0 ? Math.round(maior * pct / 100) : 0,
+    p_pct_aplicado: pct,
+    p_desconto_ids: f.brinde ? [] : escolhidos,
+  });
+  if (error){ avisarErro(error, "salvar o pedido"); return; }
+
+  S.admin.pedidoEditando = null;
+  S.admin.formSite = null;
+  await Promise.all([carregarAdmin(), carregarPedidos()]);
+  render();
 }
 
 function verNotaFicha(id){
@@ -4094,6 +4272,7 @@ function pedidosUnificados(){
     tipo: "site", id: p.id, numero: p.numero,
     // a chave identifica a PESSOA, não o texto do nome
     chave: p.clienteId ? "c:" + p.clienteId : "n:" + semAcentoMin(p.cliente?.nome || ""),
+    clienteId: p.clienteId || null,
     cliente: p.cliente?.nome || "—", telefone: p.cliente?.tel || "",
     itens: p.itens.map(i => ({ sabor: i.nome, quantidade: i.q })),
     cones: p.itens.reduce((n, i) => n + i.q, 0),
