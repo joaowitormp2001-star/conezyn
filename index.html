@@ -3612,7 +3612,7 @@ function vAdminDash(){
 function formPedido(){
   if (!S.admin.formPedido){
     S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                           forma:"", valor:"", brinde:false, baixarEstoque:true, descontos:[],
+                           forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, descontos:[],
                          linhas:[{ sabor:"", qtd:1 }] };
   }
   return S.admin.formPedido;
@@ -3628,7 +3628,7 @@ function abrirNovoPedido(){
   S.admin.pedidoEditando = null;
   S.admin.novoPedido = true;
   S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
-                         forma:"", valor:"", brinde:false, baixarEstoque:true, descontos:[],
+                         forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, descontos:[],
                          linhas:[{ sabor:"", qtd:1 }] };
   render();
 }
@@ -3647,6 +3647,7 @@ function editarPedidoFicha(id){
     forma: c.forma_pagamento || "",
     valor: c.valor_centavos != null ? mascaraValor(String(c.valor_centavos)) : "",
     brinde: ehBrindeDaFicha(c),
+    conesBrinde: c.cones_brinde || 0,
     observacao: c.observacao || "",
     descontosAplicados: Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : [],
     descontos: (Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : []).map(d => d.id),
@@ -3682,6 +3683,8 @@ function lerFormPedido(){
   pega("fp-obs", "observacao");
   const cb = document.getElementById("fp-brinde");
   if (cb) f.brinde = cb.checked;
+  const cbn = document.getElementById("fp-cbrinde");
+  if (cbn) f.conesBrinde = Math.max(parseInt(cbn.value, 10) || 0, 0);
   const cbe = document.getElementById("fp-baixa");
   if (cbe) f.baixarEstoque = cbe.checked;
   return f;
@@ -3699,9 +3702,28 @@ function alternarDesconto(id, marcado){
 }
 
 function marcarComoBrinde(marcado){
+  const cb = document.getElementById("fp-brinde");
+  if (cb) cb.checked = marcado;
   const f = lerFormPedido();
   f.brinde = marcado;
-  if (marcado){ f.valor = mascaraValor("0"); f.pagamento = ""; }
+  const total = f.linhas.reduce((n, l) => n + (l.qtd || 0), 0);
+  if (marcado){
+    f.valor = mascaraValor("0");
+    f.pagamento = "";
+    f.conesBrinde = total;      // pedido inteiro grátis
+  } else if (f.conesBrinde >= total){
+    f.conesBrinde = 0;
+  }
+  render();
+}
+
+/* Quantos cones deste pedido saíram de graça. Eles não geram
+   carimbo e contam como brinde usado no perfil do cliente. */
+function aoMudarConesBrinde(){
+  const f = lerFormPedido();
+  const total = f.linhas.reduce((n, l) => n + (l.qtd || 0), 0);
+  f.conesBrinde = Math.min(Math.max(f.conesBrinde || 0, 0), total);
+  f.brinde = total > 0 && f.conesBrinde === total;
   render();
 }
 
@@ -3799,6 +3821,7 @@ async function salvarFormPedido(){
       forma_pagamento: f.brinde ? null : (f.forma.trim() || null),
       valor_centavos: centavos,
       descontos_aplicados: snapshot,
+      cones_brinde: Math.min(f.conesBrinde || 0, itens.reduce((n, i) => n + i.quantidade, 0)),
       observacao: (f.observacao || "").trim() || null,
     }).eq("id", f.id);
     if (error){ avisarErro(error, "salvar o pedido"); return; }
@@ -3820,7 +3843,12 @@ async function salvarFormPedido(){
         await sb.rpc("registrar_descontos_pedido", { p_pedido: data, p_lista: snapshot });
       }
       const obs = (f.observacao || "").trim();
-      if (obs) await sb.from("pre_compras").update({ observacao: obs }).eq("id", data);
+      const cbr = Math.min(f.conesBrinde || 0, itens.reduce((n, i) => n + i.quantidade, 0));
+      if (obs || cbr > 0){
+        await sb.from("pre_compras")
+          .update({ observacao: obs || null, cones_brinde: cbr })
+          .eq("id", data);
+      }
     }
 
     // Baixa do estoque: só em pedido novo, e só se você pediu.
@@ -3963,11 +3991,18 @@ function vFormularioPedido(){
           style="display:block;margin-top:.15rem;text-align:right"></label>
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .7rem;font-size:.72rem"
         onclick="sugerirValorPedido()">Sugerir valor</button>
+      <label style="font-size:.72rem;font-weight:600;min-width:8rem;color:#B4590F">
+        Cones de brinde
+        <input id="fp-cbrinde" class="field" type="number" min="0"
+          max="${f.linhas.reduce((n, l) => n + (l.qtd || 0), 0)}"
+          value="${f.conesBrinde ?? 0}" onchange="aoMudarConesBrinde()"
+          style="width:5rem;padding:.4rem .6rem;display:block;margin-top:.15rem;text-align:center">
+      </label>
       <label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;font-weight:700;
         color:#B4590F;cursor:pointer;padding-bottom:.4rem">
         <input type="checkbox" id="fp-brinde" ${f.brinde ? "checked" : ""}
           onchange="marcarComoBrinde(this.checked)" style="width:1rem;height:1rem">
-        🎁 Foi brinde
+        Pedido inteiro de brinde
       </label>
       ${f.id ? "" : `<label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;
         font-weight:700;color:var(--cacau);cursor:pointer;padding-bottom:.4rem">
@@ -4380,6 +4415,7 @@ function pedidosUnificados(){
     // Descontos que você aplicou à mão neste pedido. O valor gravado
     // já está com o abatimento, então recompomos quanto foi para
     // mostrar a conta na tela.
+    const conesBrinde = c.cones_brinde || 0;
     const aplicados = Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : [];
     const pctFicha = Math.min(aplicados.reduce((n, d) => n + (d.percentual || 0), 0), 100);
 
@@ -4402,7 +4438,8 @@ function pedidosUnificados(){
 
     return {
       tipo: "ficha", id: c.id, numero: null, fichaId: c.pre_cliente_id,
-      abatimentos: { brinde: 0, cartao: descFicha, pctAplicado: pctFicha, primeira: 0 },
+      abatimentos: { brinde: 0, cartao: descFicha, pctAplicado: pctFicha, primeira: 0,
+                     conesBrinde },
       chave: dono ? "c:" + dono.id : "n:" + semAcentoMin(f?.nome || ""),
       cliente: dono?.nome || f?.nome || "—",
       apelidoFicha: dono && f && semAcentoMin(dono.nome) !== semAcentoMin(f.nome) ? f.nome : null,
@@ -4494,11 +4531,21 @@ function vDetalhePedido(p){
   });
 
   const ab = p.abatimentos || {};
-  // o brinde cai numa unidade do sabor marcado; o desconto, em outra
+
+  // pedido do site: o brinde cai na unidade do sabor registrado
   if (ab.brinde > 0){
     const alvo = unidades.find(u => p.itens.some(i =>
       i.brinde && semAcentoMin(i.sabor) === semAcentoMin(u.sabor)));
     if (alvo) alvo.brinde = true;
+  }
+
+  // pedido lançado por você: marca a quantidade que você informou,
+  // começando pelos cones mais baratos
+  if (ab.conesBrinde > 0){
+    [...unidades]
+      .sort((a, b) => (a.preco || 0) - (b.preco || 0))
+      .slice(0, ab.conesBrinde)
+      .forEach(u => { u.brinde = true; });
   }
   if (ab.cartao > 0){
     const alvo = unidades.find(u => !u.brinde && p.itens.some(i =>
