@@ -3611,7 +3611,7 @@ function vAdminDash(){
    ============================================================ */
 function formPedido(){
   if (!S.admin.formPedido){
-    S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
+    S.admin.formPedido = { id:null, cliente:"", clienteRef:null, telefone:"", entrega:hoje(), pagamento:"",
                            forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, descontos:[],
                          linhas:[{ sabor:"", qtd:1 }] };
   }
@@ -3627,7 +3627,7 @@ function aplicarFiltroCliente(_id, nome){
 function abrirNovoPedido(){
   S.admin.pedidoEditando = null;
   S.admin.novoPedido = true;
-  S.admin.formPedido = { id:null, cliente:"", telefone:"", entrega:hoje(), pagamento:"",
+  S.admin.formPedido = { id:null, cliente:"", clienteRef:null, telefone:"", entrega:hoje(), pagamento:"",
                          forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, descontos:[],
                          linhas:[{ sabor:"", qtd:1 }] };
   render();
@@ -3643,6 +3643,7 @@ function editarPedidoFicha(id){
   S.admin.pedidoEditando = chave;
   S.admin.formPedido = {
     id, cliente: f?.nome || "", telefone: f?.telefone || "",
+    clienteRef: f ? (f.vinculado_a ? "conta:" + f.vinculado_a : "ficha:" + f.id) : null,
     entrega: c.data_entrega || "", pagamento: c.data_pagamento || "",
     forma: c.forma_pagamento || "",
     valor: c.valor_centavos != null ? mascaraValor(String(c.valor_centavos)) : "",
@@ -3692,6 +3693,21 @@ function lerFormPedido(){
 
 /* Marcar como brinde zera o valor e limpa o pagamento —
    é assim que o pedido entra na categoria Brindes. */
+/* Fixa QUEM é o cliente do pedido assim que você escolhe na lista.
+   Antes o clique só mudava o texto na tela: o formulário não sabia,
+   e no redesenho seguinte o nome se perdia. */
+function aoEscolherCliente(_id, nome){
+  const f = lerFormPedido();
+  f.cliente = nome;
+
+  const opcoes = (LISTAS["fp-cliente"] || {}).opcoes || [];
+  const escolhida = opcoes.find(o => semAcentoMin(o.rotulo) === semAcentoMin(nome));
+  // nome digitado à mão não fixa ninguém: vale a busca por nome
+  f.clienteRef = escolhida ? escolhida.ref : null;
+  f.descontos = [];
+  render();
+}
+
 function alternarDesconto(id, marcado){
   const f = lerFormPedido();
   f.descontos = f.descontos || [];
@@ -3877,6 +3893,28 @@ async function salvarFormPedido(){
 
 /* Descontos guardados da pessoa digitada no campo cliente.
    Vale tanto o nome da conta quanto o da ficha vinculada a ela. */
+/* Descontos de uma pessoa identificada — "conta:id" ou "ficha:id".
+   É o caminho preferido: não depende do texto digitado. */
+function descontosDaPessoa(ref){
+  if (!ref) return [];
+  const [tipo, id] = String(ref).split(":");
+
+  if (tipo === "conta"){
+    return (S.admin.descontos || [])
+      .filter(d => d.cliente_id === id)
+      .map(d => ({ ...d, origem: "conta" }));
+  }
+  if (tipo === "ficha"){
+    const ficha = S.admin.fichas.find(x => x.id === id);
+    // ficha vinculada usa os descontos da conta dona
+    if (ficha && ficha.vinculado_a) return descontosDaPessoa("conta:" + ficha.vinculado_a);
+    return (S.admin.descontosFicha || [])
+      .filter(d => d.pre_cliente_id === id)
+      .map(d => ({ ...d, origem: "ficha" }));
+  }
+  return [];
+}
+
 function descontosDoNome(nome){
   const alvo = semAcentoMin(nome || "");
   if (!alvo) return [];
@@ -3908,7 +3946,9 @@ function descontosDoNome(nome){
    sumia da lista e dava para escolher outro por cima. */
 function descontosDoFormulario(){
   const f = formPedido();
-  const disponiveis = descontosDoNome(f.cliente);
+  const disponiveis = f.clienteRef
+    ? descontosDaPessoa(f.clienteRef)
+    : descontosDoNome(f.cliente);
   const jaUsados = (f.descontosAplicados || [])
     .filter(d => !disponiveis.some(x => x.id === d.id));
   return [...disponiveis, ...jaUsados];
@@ -3916,10 +3956,15 @@ function descontosDoFormulario(){
 
 function vFormularioPedido(){
   const f = formPedido();
+  // Cada opção carrega QUEM é a pessoa. Sem isso, o formulário
+  // dependia só do texto digitado para achar os descontos.
   const clientes = [
-    ...S.admin.clientes.map(c => ({ rotulo: c.nome, detalhe: mascaraTelefone(c.telefone || "") })),
-    ...S.admin.fichas.filter(x => !x.vinculado_a)
-        .map(x => ({ rotulo: x.nome, detalhe: mascaraTelefone(x.telefone || "") })),
+    ...S.admin.clientes.map(c => ({
+      rotulo: c.nome, detalhe: mascaraTelefone(c.telefone || ""),
+      ref: "conta:" + c.id })),
+    ...S.admin.fichas.filter(x => !x.vinculado_a).map(x => ({
+      rotulo: x.nome, detalhe: mascaraTelefone(x.telefone || ""),
+      ref: "ficha:" + x.id })),
   ];
   const sabores = PRODUTOS.map(p => ({ rotulo: p.nome, detalhe: reais(p.dupla) + " na dupla" }));
   const formas  = ["Pix","Dinheiro","Cartão","Transferência"].map(x => ({ rotulo: x }));
@@ -3930,7 +3975,7 @@ function vFormularioPedido(){
     <div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.7rem">
       <label style="font-size:.72rem;font-weight:600;flex:2;min-width:11rem">Cliente
         ${campoComLista("fp-cliente", { valor:f.cliente, placeholder:"Nome do cliente",
-          opcoes:clientes, permitirNovo:true })}</label>
+          opcoes:clientes, permitirNovo:true, aoEscolher:"aoEscolherCliente" })}</label>
       <label style="font-size:.72rem;font-weight:600;min-width:8rem">Data de entrega
         <input id="fp-entrega" class="field" type="date" value="${f.entrega || ""}"
           style="display:block;margin-top:.15rem"></label>
