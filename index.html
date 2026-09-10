@@ -5892,6 +5892,68 @@ async function ajustarCarimbos(id){
 
 /* O cartão fidelidade de um cliente, visto pelo administrador.
    Fica só aqui: o cliente continua vendo apenas o próprio. */
+/* Cartão de quem só tem ficha, sem conta no site.
+   Os carimbos vêm dos cones do histórico; os brindes já dados,
+   dos cones que você marcou como brinde nos pedidos. */
+function verCartaoFicha(fichaId){
+  if (!Seguranca.ehAdmin()) return;
+  const f = S.admin.fichas.find(x => x.id === fichaId);
+  if (!f) return;
+
+  const compras = S.admin.compras.filter(c => c.pre_cliente_id === fichaId && !c.cancelado);
+  const brindes = compras.reduce((n, c) => n + (c.cones_brinde || 0), 0);
+  const carimbos = compras.reduce((n, c) =>
+    n + Math.max((c.quantidade || 0) - (c.cones_brinde || 0), 0), 0);
+
+  const prog = progressoCartoes(carimbos);
+  const nivel = nivelDe(prog.completos);
+  const guardado = (S.admin.descontosFicha || [])
+    .filter(d => d.pre_cliente_id === fichaId)
+    .reduce((n, d) => n + d.percentual, 0);
+
+  document.getElementById("modal-slot").innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)fecharModal()">
+      <div class="modal card" role="dialog" aria-modal="true" style="max-width:34rem">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:.75rem">
+          <div>
+            <h2 class="display" style="font-size:1.2rem;font-weight:900">
+              Cartão de ${esc(f.nome)}</h2>
+            <p class="muted" style="font-size:.78rem;margin-top:.15rem">
+              Ficha sem conta no site · ${carimbos} carimbo(s) ·
+              ${prog.completos} cartão(ões) completo(s) · ${brindes} brinde(s) usado(s)
+              ${prog.completos > brindes
+                ? ` · <strong style="color:#B4590F">tem brinde a receber</strong>` : ""}</p>
+          </div>
+          <button class="back-btn" style="box-shadow:none" aria-label="Fechar"
+            onclick="fecharModal()">✕</button>
+        </div>
+
+        <div style="margin-top:1rem">
+          ${cartaoFidelidade(prog.passouDoFim ? nivel.meta : prog.noAtual,
+                             f.nome, Math.min(prog.completos, NIVEIS.length - 1), f.genero)}
+        </div>
+
+        <p class="muted" style="font-size:.78rem;text-align:center;margin-top:.75rem">
+          ${prog.passouDoFim
+            ? "🏆 Completou todos os cartões."
+            : `Faltam <strong style="color:var(--cacau)">${nivel.meta - prog.noAtual}</strong>
+               carimbo(s) para fechar o cartão ${esc(tituloNivel(nivel, f.genero))}.`}
+          ${guardado > 0 ? `<br><strong style="color:var(--pistache)">
+            ${Math.min(guardado, 100)}% de desconto guardado.</strong>` : ""}
+        </p>
+
+        <p class="muted" style="font-size:.72rem;text-align:center;margin-top:.75rem">
+          Quando esta pessoa criar conta com o mesmo WhatsApp, o cartão passa
+          automaticamente para o perfil dela.</p>
+
+        <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+            onclick="fecharModal();abrirFicha('${fichaId}')">← Dados da ficha</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function verCartaoCliente(id){
   if (!Seguranca.ehAdmin()) return;
   const c = S.admin.clientes.find(x => x.id === id);
@@ -6470,6 +6532,9 @@ function vFicha(f){
         : `<span class="badge b-novo">sem vínculo</span>`}
 
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
+        onclick="${f.vinculado_a ? `verCartaoCliente('${f.vinculado_a}')` : `verCartaoFicha('${f.id}')`}"
+        >Ver cartão</button>
+      <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.75rem"
         onclick="abrirFicha('${f.id}')">${aberta ? "Fechar" : "Detalhes"}</button>
       <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2.1rem;
         padding:.25rem .8rem;font-size:.75rem" onclick="excluirFicha('${f.id}')">Excluir</button>
@@ -6509,8 +6574,13 @@ function vFicha(f){
           <div class="dado destaque"><dt>Cones consumidos</dt><dd>${cones}</dd></div>
           <div class="dado"><dt>Pedidos</dt><dd>${compras.length}</dd></div>
         </dl>
-        <button class="btn btn-ghost" style="margin-top:.6rem;min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
-          onclick="editarFicha('${f.id}')">Editar dados</button>`}
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem">
+          <button class="btn btn-ghost" style="min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
+            onclick="editarFicha('${f.id}')">Editar dados</button>
+          <button class="btn btn-ghost" style="min-height:2rem;padding:.2rem .8rem;font-size:.74rem"
+            onclick="${f.vinculado_a ? `verCartaoCliente('${f.vinculado_a}')` : `verCartaoFicha('${f.id}')`}"
+            >Ver cartão fidelidade</button>
+        </div>`}
 
       <p style="font-weight:700;font-size:.8rem;margin-top:1rem">Pedidos</p>
       ${compras.length === 0
