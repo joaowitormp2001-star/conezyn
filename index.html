@@ -5671,17 +5671,28 @@ async function salvarFicha(){
   const nome  = document.getElementById("f-nome").value.trim();
   const tel   = document.getElementById("f-tel").value.trim();
   const setor = document.getElementById("f-setor").value.trim();
-  if (!nome || !telefoneValido(tel)){
-    alert("Informe o nome e um WhatsApp com DDD."); return;
+
+  if (!nome){ alert("Informe o nome do cliente."); return; }
+
+  // O WhatsApp é opcional. Sem ele a ficha não é reconhecida
+  // sozinha quando a pessoa se cadastrar no site — aí você vincula
+  // à mão pelo botão da própria ficha.
+  if (tel && !telefoneValido(tel)){
+    alert("O WhatsApp digitado está incompleto. Apague ou informe com DDD."); return;
   }
+
   const { error } = await sb.from("pre_clientes")
-    .insert({ nome, telefone: digitos(tel), setor: setorOficial(setor) || setor || null,
+    .insert({ nome, telefone: tel ? digitos(tel) : null,
+              setor: setorOficial(setor) || setor || null,
               genero: document.getElementById("f-genero")?.value || null });
   if (error){
     alert(/duplicate|unique/i.test(error.message)
       ? "Já existe uma ficha com este WhatsApp." : erroAmigavel(error));
     return;
   }
+  ["f-nome", "f-tel", "f-setor"].forEach(id => {
+    const c = document.getElementById(id); if (c) c.value = "";
+  });
   await carregarAdmin(); render();
 }
 
@@ -6469,7 +6480,7 @@ function vAdminClientes(){
         <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem">
           <input id="f-nome" class="field" style="flex:2;min-width:9rem" placeholder="Nome completo">
           <input id="f-tel" class="field" style="flex:1.4;min-width:9rem" type="tel" maxlength="16"
-            placeholder="(11) 9 9999-9999" oninput="aoDigitarTelefone(this)">
+            placeholder="(11) 9 9999-9999 (opcional)" oninput="aoDigitarTelefone(this)">
           <span style="flex:1.2;min-width:8rem">${campoComLista("f-setor", {
             placeholder:"Setor (ex: TI)", opcoes:SETORES.map(x=>({rotulo:x.nome})), permitirNovo:true })}</span>
           <select id="f-genero" class="field" style="width:auto;min-width:7rem">
