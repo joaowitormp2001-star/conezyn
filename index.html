@@ -3644,6 +3644,7 @@ function editarPedidoFicha(id){
   S.admin.formPedido = {
     id, cliente: f?.nome || "", telefone: f?.telefone || "",
     clienteRef: f ? (f.vinculado_a ? "conta:" + f.vinculado_a : "ficha:" + f.id) : null,
+    clienteOriginal: f?.nome || "",
     entrega: c.data_entrega || "", pagamento: c.data_pagamento || "",
     forma: c.forma_pagamento || "",
     valor: c.valor_centavos != null ? mascaraValor(String(c.valor_centavos)) : "",
@@ -3704,6 +3705,7 @@ function aoEscolherCliente(_id, nome){
   const escolhida = opcoes.find(o => semAcentoMin(o.rotulo) === semAcentoMin(nome));
   // nome digitado à mão não fixa ninguém: vale a busca por nome
   f.clienteRef = escolhida ? escolhida.ref : null;
+  f.telefone = escolhida ? digitos(escolhida.detalhe || "") : "";
   f.descontos = [];
   render();
 }
@@ -3841,6 +3843,16 @@ async function salvarFormPedido(){
       observacao: (f.observacao || "").trim() || null,
     }).eq("id", f.id);
     if (error){ avisarErro(error, "salvar o pedido"); return; }
+
+    // Trocou o cliente? O pedido precisa mudar de ficha, senão ele
+    // volta para o nome antigo e os carimbos ficam com a pessoa errada.
+    if (f.cliente && semAcentoMin(f.cliente) !== semAcentoMin(f.clienteOriginal || "")){
+      const mov = await sb.rpc("mover_pedido_ficha", {
+        p_pedido: f.id, p_nome: f.cliente.trim(), p_telefone: f.telefone || null,
+      });
+      if (mov.error) avisarErro(mov.error, "trocar o cliente do pedido");
+    }
+
     await aplicarDescontos();
   } else {
     const { data, error } = await sb.rpc("importar_pedido_ficha", {
