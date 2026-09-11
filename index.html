@@ -999,15 +999,15 @@ function vAvisoPedido(){
           background:var(--chantilly);border:1px solid rgb(62 39 35/.14);
           display:grid;place-items:center;overflow:hidden">
           ${primeiro && primeiro.img
-            ? `<img src="${primeiro.img}" alt="" style="width:100%;height:100%;object-fit:contain;
-                 display:block;padding:.5rem">`
+            ? `<img src="${primeiro.img}" alt="" style="width:100%;height:100%;object-fit:cover;
+                 display:block">`
             : `<span style="font-size:3.5rem;line-height:1" aria-hidden>${primeiro ? primeiro.emoji : "🍦"}</span>`}
         </div>
       </div>
 
       <div style="padding:.75rem 1.25rem 1.25rem">
         <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
-          letter-spacing:.06em">Pedido registrado por nós</p>
+          letter-spacing:.06em">Pedido registrado</p>
         <h2 id="aviso-t" class="display" style="font-size:1.25rem;font-weight:900;margin-top:.2rem">
           ${esc(S.perfil?.nome || "Olá")}, tem um pedido seu aqui</h2>
 
@@ -1031,22 +1031,30 @@ function vAvisoPedido(){
   </div>`;
 }
 
+/* Registra no banco que a pessoa viu o aviso, e só então tira da
+   tela. Assim, se a gravação falhar, o aviso continua aparecendo —
+   melhor repetir do que sumir sem ela ter visto. Recarregar a
+   página antes de clicar mantém o aviso, que é o esperado. */
+async function marcarAvisoVisto(id){
+  const { error } = await sb.rpc("marcar_aviso_visto", { p_id: id });
+  if (error){ console.warn("aviso não registrado:", error.message); return false; }
+  S.avisos = (S.avisos || []).filter(x => x.id !== id);
+  return true;
+}
+
 async function fecharAviso(){
   const a = (S.avisos || [])[0];
   if (!a) return;
-  S.avisos = S.avisos.slice(1);
+  await marcarAvisoVisto(a.id);
   render();
-  await sb.rpc("marcar_aviso_visto", { p_id: a.id });
 }
 
 async function irParaPagamento(id){
   const a = (S.avisos || []).find(x => x.id === id);
-  S.avisos = (S.avisos || []).filter(x => x.id !== id);
-  if (a){
-    S.notaFicha = a;
-    nav("nota-ficha");
-    await sb.rpc("marcar_aviso_visto", { p_id: id });
-  }
+  if (!a) return;
+  S.notaFicha = a;
+  await marcarAvisoVisto(id);
+  nav("nota-ficha");
 }
 
 /* Nota do pedido lançado por você, na visão do cliente:
@@ -1064,7 +1072,7 @@ function vNotaFicha(){
   return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
     <div class="card" style="padding:1.5rem">
       <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
-        letter-spacing:.06em">Pedido registrado por nós</p>
+        letter-spacing:.06em">Pedido registrado</p>
       <h1 class="display" style="font-size:1.6rem;font-weight:900;margin-top:.2rem">
         Seu pedido</h1>
       ${data ? `<p class="muted" style="font-size:.85rem;margin-top:.2rem">Entrega em ${data}</p>` : ""}
