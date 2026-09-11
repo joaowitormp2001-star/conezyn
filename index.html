@@ -3269,21 +3269,30 @@ async function baixarCartao(nome, carimbos, indiceCartao, genero){
   const ok = await carregarCaptura();
   if (!ok){ alert("Não consegui carregar o gerador de imagem. Tente de novo com internet."); return; }
 
-  // desenha o cartão fora da tela, em tamanho cheio, para a foto
-  // sair nítida e sem o recorte do celular
-  const palco = document.createElement("div");
-  palco.style.cssText = "position:fixed;left:-9999px;top:0;width:640px;padding:20px;background:transparent";
-  palco.innerHTML = cartaoFidelidade(carimbos, nome, indiceCartao, genero);
-  document.body.appendChild(palco);
+  // Fotografa o cartão que JÁ está na tela: mesmas medidas, mesma
+  // proporção, mesmo resultado que você está vendo. Só se ele não
+  // estiver aberto é que um é montado fora da tela.
+  const naTela = document.querySelector("#modal-slot .fid");
+  let palco = null, alvo = naTela;
 
-  const alvo = palco.querySelector(".fid") || palco.firstElementChild;
+  if (!alvo){
+    palco = document.createElement("div");
+    palco.style.cssText = "position:fixed;left:-9999px;top:0;width:520px;background:transparent";
+    palco.innerHTML = cartaoFidelidade(carimbos, nome, indiceCartao, genero);
+    document.body.appendChild(palco);
+    alvo = palco.querySelector(".fid") || palco.firstElementChild;
+  }
 
   try {
     const canvas = await window.html2canvas(alvo, {
       backgroundColor: null,
-      scale: 3,
+      scale: 4,                       // nitidez sem mexer na proporção
       logging: false,
       useCORS: true,
+      width:  alvo.offsetWidth,
+      height: alvo.offsetHeight,
+      windowWidth:  alvo.offsetWidth,
+      windowHeight: alvo.offsetHeight,
     });
     const a = document.createElement("a");
     a.download = `cartao-${semAcentoMin(nome || "cliente").replace(/\s+/g, "-")}.png`;
@@ -3292,7 +3301,7 @@ async function baixarCartao(nome, carimbos, indiceCartao, genero){
   } catch (e){
     avisarErro(e, "gerar a imagem do cartão");
   } finally {
-    palco.remove();
+    if (palco) palco.remove();
   }
 }
 
@@ -4794,9 +4803,9 @@ function pedidosUnificados(){
     };
   });
 
-  // Do dia mais recente para o mais antigo. Dentro do mesmo dia,
-  // na ordem em que os pedidos foram registrados — do primeiro ao
-  // último —, que é como eles acontecem no balcão.
+  // Do mais recente para o mais antigo: primeiro pelo dia da
+  // entrega, e dentro do mesmo dia pelo horário de registro, para
+  // o que acabou de sair aparecer no topo.
   const soODia = d => {
     const x = new Date(d || 0);
     return isNaN(x) ? 0 : new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -4809,7 +4818,7 @@ function pedidosUnificados(){
 
     const regA = new Date(a.registro || a.quando || 0).getTime() || 0;
     const regB = new Date(b.registro || b.quando || 0).getTime() || 0;
-    return regA - regB;
+    return regB - regA;
   });
 }
 
