@@ -1002,20 +1002,20 @@ function vFotosDoAviso(itens){
 
   if (sabores.length <= 1){
     const unico = sabores[0] || { sabor: "" };
-    return `<div style="padding:1.5rem 1.25rem .5rem;display:flex;justify-content:center">
+    return `<div style="padding:1.75rem 1.25rem .5rem;display:flex;justify-content:center">
       <div style="width:8rem">${moldura(unico, "100%")}</div>
     </div>`;
   }
 
   if (sabores.length === 2){
-    return `<div style="padding:1.5rem 1.25rem .5rem;display:flex;gap:.6rem">
+    return `<div style="padding:1.75rem 1.25rem .5rem;display:flex;gap:.6rem">
       ${sabores.map(i => moldura(i, "calc(50% - .3rem)")).join("")}
     </div>`;
   }
 
   // Três cabem inteiros na largura do card, sem precisar rolar.
   if (sabores.length === 3){
-    return `<div style="padding:1.5rem 1.25rem .5rem;display:flex;gap:.5rem">
+    return `<div style="padding:1.75rem 1.25rem .5rem;display:flex;gap:.5rem">
       ${sabores.map(i => moldura(i, "calc(33.333% - .34rem)")).join("")}
     </div>`;
   }
@@ -1023,15 +1023,15 @@ function vFotosDoAviso(itens){
   // Quatro ou mais: mostra três e um pedaço. Os esmaecidos são fixos nas
   // bordas — ficam na frente das fotos e atrás das setas, então a
   // foto que passa por baixo some suavemente antes de tocar a seta.
-  return `<div style="padding:1.5rem 1.25rem .5rem;position:relative">
+  return `<div style="padding:1.75rem 1.25rem .5rem;position:relative">
     <div id="aviso-carrossel" style="display:flex;gap:.5rem;overflow-x:auto;padding:0 2.4rem;
       scroll-behavior:smooth;scrollbar-width:none;-webkit-overflow-scrolling:touch">
       ${sabores.map(i => moldura(i, "5.1rem")).join("")}
     </div>
 
-    <div aria-hidden style="position:absolute;z-index:1;top:1.5rem;left:1.25rem;bottom:1.6rem;
+    <div aria-hidden style="position:absolute;z-index:1;top:1.75rem;left:1.25rem;bottom:1.6rem;
       width:2.4rem;pointer-events:none;background:linear-gradient(270deg,transparent,#fff 70%)"></div>
-    <div aria-hidden style="position:absolute;z-index:1;top:1.5rem;right:1.25rem;bottom:1.6rem;
+    <div aria-hidden style="position:absolute;z-index:1;top:1.75rem;right:1.25rem;bottom:1.6rem;
       width:2.4rem;pointer-events:none;background:linear-gradient(90deg,transparent,#fff 70%)"></div>
 
     <button class="back-btn" aria-label="Sabores anteriores"
@@ -1068,7 +1068,8 @@ function vAvisoPedido(){
         position:relative">
 
       <button class="back-btn" aria-label="Fechar" title="Fechar"
-        style="position:absolute;top:.6rem;right:.6rem;z-index:2;box-shadow:none;
+        style="position:absolute;top:.35rem;right:.35rem;z-index:3;box-shadow:none;
+          width:1.6rem;height:1.6rem;min-height:0;font-size:.7rem;
           background:var(--chantilly);border:1px solid rgb(62 39 35/.12)"
         onclick="fecharAviso()">✕</button>
 
