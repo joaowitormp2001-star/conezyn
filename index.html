@@ -630,7 +630,7 @@ const S = {
            descontos: [], descontosFicha: [],
            novoPedido: false, pedidoEditando: null, formPedido: null, formSite: null,
            clienteAberto: null,
-           filtroCliente: "",
+           filtroCliente: "", subClientes: "ativos",
            pedidosCliente: {},
            form: {}, pedidosExpandidos: {}, clienteEditando: null, fichaEditando: null,
            setoresExpandidos: false, importacao: null,
@@ -1635,7 +1635,11 @@ function abrirLista(id){
   caixa.innerHTML = `<ul class="opcoes">
     ${achadas.map((o, i) => `<li><button type="button" onmousedown="event.preventDefault()"
       onclick="escolherDaLista('${id}', ${i})">
-      ${esc(o.rotulo)}${o.detalhe ? `<span class="muted" style="font-weight:400"> · ${esc(o.detalhe)}</span>` : ""}
+      ${esc(o.rotulo)}
+      ${o.setor ? `<span class="setor-tag" style="margin-left:.35rem;font-size:.68rem;
+        padding:.05rem .45rem;vertical-align:middle">${esc(o.setor)}</span>` : ""}
+      ${o.detalhe ? `<span class="muted" style="font-weight:400;display:block;font-size:.72rem">
+        ${esc(o.detalhe)}</span>` : ""}
     </button></li>`).join("")}
     ${podeCriar ? `<li><button type="button" class="criar" onmousedown="event.preventDefault()"
       onclick="usarValorNovo('${id}')">+ usar “${esc(campo.value.trim())}”</button></li>` : ""}
@@ -3970,12 +3974,15 @@ function vFormularioPedido(){
   const f = formPedido();
   // Cada opção carrega QUEM é a pessoa. Sem isso, o formulário
   // dependia só do texto digitado para achar os descontos.
+  // o setor vira etiqueta; o detalhe fica só com o telefone
   const clientes = [
     ...S.admin.clientes.map(c => ({
-      rotulo: c.nome, detalhe: mascaraTelefone(c.telefone || ""),
+      rotulo: c.nome, setor: c.setor || "",
+      detalhe: mascaraTelefone(c.telefone || ""),
       ref: "conta:" + c.id })),
     ...S.admin.fichas.filter(x => !x.vinculado_a).map(x => ({
-      rotulo: x.nome, detalhe: mascaraTelefone(x.telefone || ""),
+      rotulo: x.nome, setor: x.setor || "",
+      detalhe: mascaraTelefone(x.telefone || ""),
       ref: "ficha:" + x.id })),
   ];
   const sabores = PRODUTOS.map(p => ({ rotulo: p.nome, detalhe: reais(p.dupla) + " na dupla" }));
@@ -4742,9 +4749,19 @@ function vAdminPedidos(){
     // guarda o registro que conhece o apelido da ficha, para mostrá-lo na lista
     if (!atual || (!atual.apelidoFicha && p.apelidoFicha)) porChave.set(p.chave, p);
   });
+  const setorDe = p => {
+    if (p.clienteId){
+      const c = S.admin.clientes.find(x => x.id === p.clienteId);
+      if (c?.setor) return c.setor;
+    }
+    const f = S.admin.fichas.find(x => semAcentoMin(x.nome) === semAcentoMin(p.apelidoFicha || p.cliente));
+    return f?.setor || p.local || "";
+  };
+
   const nomes = [...porChave.values()]
     .sort((a, b) => a.cliente.localeCompare(b.cliente))
-    .map(p => ({ rotulo: p.cliente, detalhe: p.apelidoFicha ? "ficha: " + p.apelidoFicha : "" }));
+    .map(p => ({ rotulo: p.cliente, setor: setorDe(p),
+                 detalhe: p.apelidoFicha ? "ficha: " + p.apelidoFicha : "" }));
 
   const contar = st => lista.filter(p => p.status === st).length;
   const abas = [
@@ -5188,8 +5205,6 @@ function vAdminProdutos(){
       </div>
       <button class="btn btn-ghost" onclick="zerarTodoEstoque()">Zerar tudo (fim do dia)</button>
     </div>
-
-    ${vGerenciarSetores()}
 
     <div style="display:flex;flex-direction:column;gap:.75rem">
       ${S.admin.produtos.map(p=>{
@@ -6196,6 +6211,20 @@ async function apagarSetor(indice){
   alert(`Removido de ${data.perfis} perfil(is) e ${data.fichas} ficha(s).`);
 }
 
+/* Transforma o texto digitado num setor oficial da lista.
+   Quem já está cadastrado com ele passa a bater com a lista. */
+async function registrarSetor(indice){
+  const fora = setoresForaDaLista();
+  const alvo = fora[indice];
+  if (!alvo) return;
+  if (!confirm(`Registrar "${alvo.texto}" como setor da empresa?`)) return;
+
+  const { error } = await sb.rpc("criar_setor", { p_nome: alvo.texto });
+  if (error){ avisarErro(error, "registrar o setor"); return; }
+  await Promise.all([carregarCatalogo(), carregarAdmin()]);
+  render();
+}
+
 async function vincularSetor(indice){
   const fora = setoresForaDaLista();
   const alvo = fora[indice];
@@ -6332,6 +6361,8 @@ function vAdminClientes(){
   const cadastrados = S.admin.clientes;
   const semVinculo  = S.admin.fichas.filter(f => !f.vinculado_a);
   const vinculadas  = S.admin.fichas.filter(f =>  f.vinculado_a);
+  const sub  = S.admin.subClientes || "ativos";
+  const fora = setoresForaDaLista();
 
   return `<div style="display:flex;flex-direction:column;gap:1.5rem">
     <div>
@@ -6406,7 +6437,15 @@ function vAdminClientes(){
       </ul>
     </section>` : ""}
 
-    <section aria-labelledby="c-ativos">
+    <div class="chips" role="tablist" aria-label="Seções de clientes">
+      ${[["ativos", `Clientes ativos (${cadastrados.length})`],
+         ["fichas", `Clientes da ficha (${S.admin.fichas.length})`],
+         ["setores", `Setores (${SETORES.length}${fora.length ? " + " + fora.length : ""})`]]
+        .map(([id, rot]) => `<button class="chip" role="tab" aria-selected="${sub === id}"
+          onclick="S.admin.subClientes='${id}';render()">${rot}</button>`).join("")}
+    </div>
+
+    ${sub === "ativos" ? `    <section aria-labelledby="c-ativos">
       <h2 id="c-ativos" class="display" style="font-size:1.1rem;font-weight:700">Contas ativas</h2>
       ${cadastrados.length === 0
         ? `<p class="muted" style="margin-top:.5rem;font-size:.875rem">Nenhum cliente se cadastrou ainda.</p>`
@@ -6467,9 +6506,9 @@ function vAdminClientes(){
             </div>`;
             }).join("")}
           </div>`}
-    </section>
+    </section>` : ""}
 
-    <section aria-labelledby="c-fichas">
+    ${sub === "fichas" ? `    <section aria-labelledby="c-fichas">
       <h2 id="c-fichas" class="display" style="font-size:1.1rem;font-weight:700">Fichas que você cadastrou</h2>
       <p class="muted" style="font-size:.8rem;margin-top:.25rem">
         Não são usuários. Quando a pessoa criar a conta com o mesmo WhatsApp,
@@ -6512,8 +6551,9 @@ function vAdminClientes(){
         : `<div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.75rem">
             ${S.admin.fichas.map(f => vFicha(f)).join("")}
           </div>`}
-    </section>
+    </section>` : ""}
 
+    ${sub === "setores" ? `${vGerenciarSetores()}
     ${(() => {
       const fora = setoresForaDaLista();
       if (fora.length === 0) return "";
@@ -6545,6 +6585,9 @@ function vAdminClientes(){
               </select>
               <button class="btn btn-primary" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.72rem"
                 onclick="vincularSetor(${fora.indexOf(f)})">Vincular</button>
+              <button class="btn btn-ghost" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.72rem"
+                title="Acrescentar este texto à lista oficial de setores"
+                onclick="registrarSetor(${fora.indexOf(f)})">Registrar</button>
               <button class="btn" style="background:var(--framboesa);color:#fff;min-height:1.9rem;
                 padding:.15rem .6rem;font-size:.72rem"
                 onclick="apagarSetor(${fora.indexOf(f)})">Excluir</button>
@@ -6556,7 +6599,7 @@ function vAdminClientes(){
           onclick="S.admin.setoresExpandidos=!S.admin.setoresExpandidos;render()">
           ${expandido ? "Mostrar menos" : `Ver todos os ${fora.length}`}</button>` : ""}
       </section>`;
-    })()}
+    })()}` : ""}
   </div>`;
 }
 
