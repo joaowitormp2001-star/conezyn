@@ -4684,7 +4684,7 @@ function pedidosUnificados(){
     cones: p.itens.reduce((n, i) => n + i.q, 0),
     valor: p.total, brinde: p.brinde, ehBrinde: p.brinde > 0,
     entrega: null, pagamento: p.dataPagamento || null, forma: p.forma_pagamento || null,
-    status: p.status, quando: p.criadoEm, local: p.local,
+    status: p.status, quando: p.criadoEm, registro: p.criadoEm, local: p.local,
     observacao: p.observacao || null,
     presente: p.presente, destinatario: p.destinatario,
   }));
@@ -4733,15 +4733,28 @@ function pedidosUnificados(){
       entrega: c.data_entrega, pagamento: c.data_pagamento, forma: c.forma_pagamento,
       status: statusDaFicha(c),
       quando: c.data_entrega || c.data_pagamento || c.criado_em,
+      registro: c.criado_em,
       local: null, presente: false, destinatario: "",
       observacao: c.observacao || null,
     };
   });
 
+  // Do dia mais recente para o mais antigo. Dentro do mesmo dia,
+  // na ordem em que os pedidos foram registrados — do primeiro ao
+  // último —, que é como eles acontecem no balcão.
+  const soODia = d => {
+    const x = new Date(d || 0);
+    return isNaN(x) ? 0 : new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  };
+
   return [...doSite, ...daFicha].sort((a, b) => {
-    const da = new Date(a.entrega || a.quando || 0);
-    const db_ = new Date(b.entrega || b.quando || 0);
-    return db_ - da;
+    const diaA = soODia(a.entrega ? String(a.entrega).slice(0, 10) + "T12:00" : a.quando);
+    const diaB = soODia(b.entrega ? String(b.entrega).slice(0, 10) + "T12:00" : b.quando);
+    if (diaA !== diaB) return diaB - diaA;
+
+    const regA = new Date(a.registro || a.quando || 0).getTime() || 0;
+    const regB = new Date(b.registro || b.quando || 0).getTime() || 0;
+    return regA - regB;
   });
 }
 
