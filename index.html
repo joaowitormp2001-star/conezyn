@@ -1013,13 +1013,20 @@ function vFotosDoAviso(itens){
     </div>`;
   }
 
-  // Três ou mais: mostra dois e meio. Os esmaecidos são fixos nas
+  // Três cabem inteiros na largura do card, sem precisar rolar.
+  if (sabores.length === 3){
+    return `<div style="padding:1.5rem 1.25rem .5rem;display:flex;gap:.5rem">
+      ${sabores.map(i => moldura(i, "calc(33.333% - .34rem)")).join("")}
+    </div>`;
+  }
+
+  // Quatro ou mais: mostra três e um pedaço. Os esmaecidos são fixos nas
   // bordas — ficam na frente das fotos e atrás das setas, então a
   // foto que passa por baixo some suavemente antes de tocar a seta.
   return `<div style="padding:1.5rem 1.25rem .5rem;position:relative">
     <div id="aviso-carrossel" style="display:flex;gap:.5rem;overflow-x:auto;padding:0 2.4rem;
       scroll-behavior:smooth;scrollbar-width:none;-webkit-overflow-scrolling:touch">
-      ${sabores.map(i => moldura(i, "6rem")).join("")}
+      ${sabores.map(i => moldura(i, "5.1rem")).join("")}
     </div>
 
     <div aria-hidden style="position:absolute;z-index:1;top:1.5rem;left:1.25rem;bottom:1.6rem;
