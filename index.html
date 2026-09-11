@@ -3241,6 +3241,109 @@ function carrosselCartoes(carimbos, nome, genero = null){
 
 /* Réplica em código dos cartões físicos da conezyn.
    `cheios` é quanto já foi carimbado NESTE cartão (não o total geral). */
+/* ============================================================
+   CARTÃO EM IMAGEM (só administrador)
+   O cartão da tela é HTML com CSS, que não vira arquivo direto.
+   Aqui ele é redesenhado num canvas, com as mesmas cores e o
+   mesmo número de selos, e baixado como PNG.
+   ============================================================ */
+function desenharCartaoPNG(nome, carimbos, indiceCartao, genero){
+  const nv = nivelDe(indiceCartao);
+  const meta = nv.meta;
+  const colunas = Math.ceil(meta / 2);
+
+  const esc2 = 3;                       // desenha em 3× para não sair serrilhado
+  const L = 900, A = 404;               // proporção parecida com a do cartão na tela
+  const c = document.createElement("canvas");
+  c.width = L * esc2; c.height = A * esc2;
+  const g = c.getContext("2d");
+  g.scale(esc2, esc2);
+
+  const arred = (x, y, w, h, r) => {
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  };
+
+  // fundo
+  const fundo = g.createLinearGradient(0, 0, L, A);
+  fundo.addColorStop(0, nv.fundoClaro || nv.fundo);
+  fundo.addColorStop(1, nv.fundoEsc || nv.fundo);
+  arred(0, 0, L, A, 28); g.fillStyle = fundo; g.fill();
+
+  // moldura dupla
+  g.strokeStyle = nv.destaque; g.globalAlpha = .55; g.lineWidth = 2;
+  arred(14, 14, L - 28, A - 28, 20); g.stroke();
+  g.globalAlpha = .3;
+  arred(22, 22, L - 44, A - 44, 15); g.stroke();
+  g.globalAlpha = 1;
+
+  // título e nome
+  g.fillStyle = nv.destaque;
+  g.font = "800 34px Montserrat, system-ui, sans-serif";
+  g.textAlign = "center";
+  g.fillText(tituloNivel(nv, genero).toUpperCase(), L / 2, 68);
+
+  g.fillStyle = "#fff"; g.globalAlpha = .9;
+  g.font = "600 20px Inter, system-ui, sans-serif";
+  g.fillText(nome || "", L / 2, 96);
+  g.globalAlpha = 1;
+
+  // selos
+  const raio = 26, gapX = 18, gapY = 20;
+  const larguraGrade = colunas * (raio * 2) + (colunas - 1) * gapX;
+  const x0 = (L - larguraGrade) / 2 + raio;
+  const y0 = 160;
+
+  for (let i = 0; i < meta; i++){
+    const lin = Math.floor(i / colunas), col = i % colunas;
+    const cx = x0 + col * (raio * 2 + gapX);
+    const cy = y0 + lin * (raio * 2 + gapY);
+    const marcado = i < carimbos;
+    const bonus = (nv.bonus || []).find(b => b.pos === i + 1);
+
+    g.beginPath(); g.arc(cx, cy, raio, 0, Math.PI * 2);
+    if (marcado){
+      g.fillStyle = nv.destaque; g.fill();
+      g.fillStyle = nv.selo || nv.fundoEsc;
+      g.font = "800 22px Montserrat, system-ui, sans-serif";
+      g.fillText("✓", cx, cy + 8);
+    } else {
+      g.fillStyle = "rgba(255,255,255,.12)"; g.fill();
+      g.strokeStyle = "rgba(255,255,255,.45)"; g.lineWidth = 2; g.stroke();
+      if (bonus){
+        g.fillStyle = nv.destaque;
+        g.font = "800 15px Montserrat, system-ui, sans-serif";
+        g.fillText(bonus.texto, cx, cy - 1);
+        g.font = "800 12px Montserrat, system-ui, sans-serif";
+        g.fillText(bonus.texto2, cx, cy + 13);
+      }
+    }
+  }
+
+  // rodapé
+  g.fillStyle = "#fff"; g.globalAlpha = .85;
+  g.font = "600 17px Inter, system-ui, sans-serif";
+  g.fillText(`${Math.min(carimbos, meta)} de ${meta} carimbos · ${nv.subtitulo} ${nv.premio}`,
+             L / 2, A - 36);
+  g.globalAlpha = 1;
+
+  return c;
+}
+
+function baixarCartao(nome, carimbos, indiceCartao, genero){
+  if (!Seguranca.ehAdmin()) return;
+  const c = desenharCartaoPNG(nome, carimbos, indiceCartao, genero);
+  const a = document.createElement("a");
+  a.download = `cartao-${semAcentoMin(nome || "cliente").replace(/\s+/g, "-")}.png`;
+  a.href = c.toDataURL("image/png");
+  a.click();
+}
+
 function cartaoFidelidade(cheios, nome, indiceCartao = 0, genero = null){
   const nv = nivelDe(indiceCartao);
   const meta = nv.meta;
@@ -6262,6 +6365,10 @@ function verCartaoFicha(fichaId){
           automaticamente para o perfil dela.</p>
 
         <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
+          <button class="btn btn-primary" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+            onclick="baixarCartao('${esc(f.nome).replace(/'/g, "&#39;")}', ${prog.passouDoFim ? nivel.meta : prog.noAtual},
+              ${Math.min(prog.completos, NIVEIS.length - 1)}, ${f.genero ? `'${f.genero}'` : "null"})">
+            ⬇ Baixar imagem</button>
           <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
             onclick="fecharModal();abrirFicha('${fichaId}')">← Dados da ficha</button>
         </div>
@@ -6307,6 +6414,10 @@ function verCartaoCliente(id){
         </p>
 
         <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
+          <button class="btn btn-primary" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+            onclick="baixarCartao('${esc(c.nome).replace(/'/g, "&#39;")}', ${prog.passouDoFim ? nivelDe(prog.completos).meta : prog.noAtual},
+              ${Math.min(prog.completos, NIVEIS.length - 1)}, ${c.genero ? `'${c.genero}'` : "null"})">
+            ⬇ Baixar imagem</button>
           <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
             onclick="verCliente('${id}')">← Dados do cliente</button>
         </div>
