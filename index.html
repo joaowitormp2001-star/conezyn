@@ -166,6 +166,7 @@
   header.admin nav{display:flex;gap:.25rem;margin-top:.5rem}
   header.admin nav{overflow-x:auto;scrollbar-width:none}
   header.admin nav::-webkit-scrollbar{display:none}
+  #aviso-carrossel::-webkit-scrollbar{display:none}
   header.admin nav button{min-height:2.5rem;padding:.4rem 1rem;border-radius:9999px;font-size:.875rem;
     font-weight:600;color:rgb(62 39 35/.6);white-space:nowrap}
   header.admin nav button:hover{background:var(--chantilly-esc)}
@@ -973,6 +974,72 @@ async function carregarAvisos(){
   S.avisos = (!error && Array.isArray(data)) ? data : [];
 }
 
+/* Fotos dos sabores do pedido.
+   Um sabor: foto única e centralizada. Dois: lado a lado.
+   Três ou mais: vira carrossel — o terceiro aparece cortado, com
+   um leve esmaecido à direita indicando que há mais, e setas. */
+function vFotosDoAviso(itens){
+  const sabores = [];
+  itens.forEach(i => {
+    const chave = semAcentoMin(i.sabor);
+    if (!sabores.some(x => semAcentoMin(x.sabor) === chave)) sabores.push(i);
+  });
+
+  const moldura = (i, largura) => {
+    const p = PRODUTOS.find(x => semAcentoMin(x.nome) === semAcentoMin(i.sabor));
+    return `<figure style="flex:0 0 ${largura};margin:0">
+      <div style="aspect-ratio:1;border-radius:1.25rem;background:var(--chantilly);
+        border:1px solid rgb(62 39 35/.14);display:grid;place-items:center;overflow:hidden">
+        ${p && p.img
+          ? `<img src="${p.img}" alt="${esc(i.sabor)}"
+               style="width:100%;height:100%;object-fit:cover;display:block">`
+          : `<span style="font-size:2.5rem;line-height:1" aria-hidden>${p ? p.emoji : "🍦"}</span>`}
+      </div>
+      <figcaption class="muted" style="font-size:.68rem;margin-top:.3rem;font-weight:600;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.sabor)}</figcaption>
+    </figure>`;
+  };
+
+  if (sabores.length <= 1){
+    const unico = sabores[0] || { sabor: "" };
+    return `<div style="padding:1.5rem 1.25rem .5rem;display:flex;justify-content:center">
+      <div style="width:8rem">${moldura(unico, "100%")}</div>
+    </div>`;
+  }
+
+  if (sabores.length === 2){
+    return `<div style="padding:1.5rem 1.25rem .5rem;display:flex;gap:.6rem">
+      ${sabores.map(i => moldura(i, "calc(50% - .3rem)")).join("")}
+    </div>`;
+  }
+
+  // três ou mais: mostra dois e meio
+  return `<div style="padding:1.5rem 1.25rem .5rem;position:relative">
+    <div id="aviso-carrossel" style="display:flex;gap:.6rem;overflow-x:auto;
+      scroll-behavior:smooth;scrollbar-width:none;-webkit-overflow-scrolling:touch">
+      ${sabores.map(i => moldura(i, "40%")).join("")}
+    </div>
+
+    <div aria-hidden style="position:absolute;top:1.5rem;right:1.25rem;bottom:1.6rem;width:3rem;
+      pointer-events:none;background:linear-gradient(90deg,transparent,#fff 85%)"></div>
+
+    <button class="back-btn" aria-label="Sabores anteriores"
+      style="position:absolute;left:.4rem;top:44%;transform:translateY(-50%);
+        box-shadow:var(--shadow);background:#fff;width:2rem;height:2rem;min-height:0;font-size:.8rem"
+      onclick="rolarFotosAviso(-1)">‹</button>
+    <button class="back-btn" aria-label="Próximos sabores"
+      style="position:absolute;right:.4rem;top:44%;transform:translateY(-50%);
+        box-shadow:var(--shadow);background:#fff;width:2rem;height:2rem;min-height:0;font-size:.8rem"
+      onclick="rolarFotosAviso(1)">›</button>
+  </div>`;
+}
+
+function rolarFotosAviso(dir){
+  const c = document.getElementById("aviso-carrossel");
+  if (!c) return;
+  c.scrollBy({ left: dir * (c.clientWidth * 0.45), behavior: "smooth" });
+}
+
 function vAvisoPedido(){
   const a = (S.avisos || [])[0];
   if (!a) return "";
@@ -994,16 +1061,7 @@ function vAvisoPedido(){
           background:var(--chantilly);border:1px solid rgb(62 39 35/.12)"
         onclick="fecharAviso()">✕</button>
 
-      <div style="padding:1.5rem 1.25rem .5rem">
-        <div style="width:8rem;height:8rem;margin:0 auto;border-radius:1.25rem;
-          background:var(--chantilly);border:1px solid rgb(62 39 35/.14);
-          display:grid;place-items:center;overflow:hidden">
-          ${primeiro && primeiro.img
-            ? `<img src="${primeiro.img}" alt="" style="width:100%;height:100%;object-fit:cover;
-                 display:block">`
-            : `<span style="font-size:3.5rem;line-height:1" aria-hidden>${primeiro ? primeiro.emoji : "🍦"}</span>`}
-        </div>
-      </div>
+      ${vFotosDoAviso(itens)}
 
       <div style="padding:.75rem 1.25rem 1.25rem">
         <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
