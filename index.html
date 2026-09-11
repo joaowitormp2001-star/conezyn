@@ -1013,54 +1013,35 @@ function vFotosDoAviso(itens){
     </div>`;
   }
 
-  // Três ou mais: mostra dois e meio. As setas ficam em corredores
-  // próprios nas laterais, sem encostar nas fotos.
-  return `<div style="padding:1.5rem 2.6rem .5rem;position:relative">
-    <div id="aviso-carrossel" onscroll="atualizarFadesAviso()"
-      style="display:flex;gap:.5rem;overflow-x:auto;
-        scroll-behavior:smooth;scrollbar-width:none;-webkit-overflow-scrolling:touch">
-      ${sabores.map(i => moldura(i, "38%")).join("")}
+  // Três ou mais: mostra dois e meio. Os esmaecidos são fixos nas
+  // bordas — ficam na frente das fotos e atrás das setas, então a
+  // foto que passa por baixo some suavemente antes de tocar a seta.
+  return `<div style="padding:1.5rem 1.25rem .5rem;position:relative">
+    <div id="aviso-carrossel" style="display:flex;gap:.5rem;overflow-x:auto;
+      scroll-behavior:smooth;scrollbar-width:none;-webkit-overflow-scrolling:touch">
+      ${sabores.map(i => moldura(i, "40%")).join("")}
     </div>
 
-    <div id="fade-esq" aria-hidden style="position:absolute;top:1.5rem;left:2.6rem;bottom:1.6rem;
-      width:2rem;pointer-events:none;opacity:0;transition:opacity .2s;
-      background:linear-gradient(270deg,transparent,#fff 85%)"></div>
-    <div id="fade-dir" aria-hidden style="position:absolute;top:1.5rem;right:2.6rem;bottom:1.6rem;
-      width:2rem;pointer-events:none;opacity:0;transition:opacity .2s;
-      background:linear-gradient(90deg,transparent,#fff 85%)"></div>
+    <div aria-hidden style="position:absolute;z-index:1;top:1.5rem;left:1.25rem;bottom:1.6rem;
+      width:2.4rem;pointer-events:none;background:linear-gradient(270deg,transparent,#fff 70%)"></div>
+    <div aria-hidden style="position:absolute;z-index:1;top:1.5rem;right:1.25rem;bottom:1.6rem;
+      width:2.4rem;pointer-events:none;background:linear-gradient(90deg,transparent,#fff 70%)"></div>
 
     <button class="back-btn" aria-label="Sabores anteriores"
-      style="position:absolute;left:.3rem;top:44%;transform:translateY(-50%);
+      style="position:absolute;z-index:2;left:.5rem;top:44%;transform:translateY(-50%);
         box-shadow:var(--shadow);background:#fff;width:1.9rem;height:1.9rem;min-height:0;font-size:.8rem"
       onclick="rolarFotosAviso(-1)">‹</button>
     <button class="back-btn" aria-label="Próximos sabores"
-      style="position:absolute;right:.3rem;top:44%;transform:translateY(-50%);
+      style="position:absolute;z-index:2;right:.5rem;top:44%;transform:translateY(-50%);
         box-shadow:var(--shadow);background:#fff;width:1.9rem;height:1.9rem;min-height:0;font-size:.8rem"
       onclick="rolarFotosAviso(1)">›</button>
   </div>`;
-}
-
-/* O esmaecido só cobre foto cortada: aparece quando ainda há algo
-   para rolar naquele lado, e some quando a ponta foi alcançada. */
-function atualizarFadesAviso(){
-  const c = document.getElementById("aviso-carrossel");
-  const esq = document.getElementById("fade-esq");
-  const dir = document.getElementById("fade-dir");
-  if (!c || !esq || !dir) return;
-
-  const folga = 4;   // tolerância para arredondamento do navegador
-  const temAntes  = c.scrollLeft > folga;
-  const temDepois = c.scrollLeft + c.clientWidth < c.scrollWidth - folga;
-
-  esq.style.opacity = temAntes  ? "1" : "0";
-  dir.style.opacity = temDepois ? "1" : "0";
 }
 
 function rolarFotosAviso(dir){
   const c = document.getElementById("aviso-carrossel");
   if (!c) return;
   c.scrollBy({ left: dir * (c.clientWidth * 0.45), behavior: "smooth" });
-  setTimeout(atualizarFadesAviso, 350);
 }
 
 function vAvisoPedido(){
@@ -6995,10 +6976,7 @@ function render(){
   alvo.innerHTML = (views[S.view]||vHome)();
   // o aviso de pedido fica por cima de qualquer tela
   const slotAviso = document.getElementById("aviso-slot");
-  if (slotAviso){
-    slotAviso.innerHTML = (S.avisos || []).length ? vAvisoPedido() : "";
-    if (document.getElementById("aviso-carrossel")) atualizarFadesAviso();
-  }
+  if (slotAviso) slotAviso.innerHTML = (S.avisos || []).length ? vAvisoPedido() : "";
   // as tags de setor precisam ser desenhadas depois que a tela existe
   if (document.getElementById("local-tags")) desenharSetores("local-tags", "local");
   if (document.getElementById("pr-setor-tags")) desenharSetores("pr-setor-tags", "pr-setor");
