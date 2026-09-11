@@ -631,7 +631,8 @@ const S = {
   admin: { produtos: [], avaliacoes: [], sugestoes: [], clientes: [], fichas: [], compras: [], senhas: [], tentativas: [], categorias: [],
            produtoEditando: null, fichaAberta: null, carregado: false,
            descontos: [], descontosFicha: [],
-           periodos: [], receitas: [], ingredientes: [],
+           periodos: [], receitas: [], ingredientes: [], precos: [], receitaItens: [],
+           receitaAberta: null,
            periodoAberto: null, resumoPeriodo: null, subProdutos: "catalogo",
            novoPedido: false, pedidoEditando: null, formPedido: null, formSite: null,
            clienteAberto: null,
@@ -5430,19 +5431,24 @@ function vGerenciarSetores(){
 
 /* ============================================================
    CUSTOS E LUCRO
-   Os preços dos ingredientes mudam. Em vez de um custo fixo,
-   cada período guarda a receita de cada sabor, e o lucro é
-   calculado com os cones vendidos naquele intervalo.
+   Três partes independentes:
+   · INGREDIENTES: lista única, cada um com preço por período.
+   · RECEITAS: quanto cada sabor usa, mais o modo de preparo.
+   · PERÍODOS: o resumo de vendas, custo e lucro.
    ============================================================ */
 async function carregarCustos(){
-  const [per, rec, ing] = await Promise.all([
+  const [per, ing, pre, rec, itens] = await Promise.all([
     sb.from("periodos_custo").select("*").order("inicio", { ascending: false }),
+    sb.from("ingredientes").select("*").order("nome"),
+    sb.from("precos_ingrediente").select("*"),
     sb.from("receitas").select("*"),
-    sb.from("ingredientes").select("*").order("ordem"),
+    sb.from("receita_itens").select("*").order("ordem"),
   ]);
-  if (!per.error) S.admin.periodos    = per.data || [];
-  if (!rec.error) S.admin.receitas    = rec.data || [];
-  if (!ing.error) S.admin.ingredientes = ing.data || [];
+  if (!per.error)   S.admin.periodos   = per.data || [];
+  if (!ing.error)   S.admin.ingredientes = ing.data || [];
+  if (!pre.error)   S.admin.precos     = pre.data || [];
+  if (!rec.error)   S.admin.receitas    = rec.data || [];
+  if (!itens.error) S.admin.receitaItens = itens.data || [];
 
   if (!S.admin.periodoAberto && S.admin.periodos.length)
     S.admin.periodoAberto = S.admin.periodos[0].id;
@@ -5455,23 +5461,24 @@ async function carregarResumoPeriodo(){
   S.admin.resumoPeriodo = error ? null : data;
 }
 
+/* ---------------- períodos ---------------- */
 async function criarPeriodo(){
   const nome   = document.getElementById("pc-nome").value.trim();
   const inicio = document.getElementById("pc-inicio").value;
   const fim    = document.getElementById("pc-fim").value;
   if (nome.length < 2 || !inicio){ alert("Informe o nome e a data de início."); return; }
 
-  const { error } = await sb.from("periodos_custo")
-    .insert({ nome, inicio, fim: fim || null });
+  const { error } = await sb.from("periodos_custo").insert({ nome, inicio, fim: fim || null });
   if (error){ avisarErro(error, "criar o período"); return; }
   S.admin.periodoAberto = null;
   await carregarCustos(); render();
 }
 
 async function excluirPeriodo(id){
-  const p = S.admin.periodos.find(x => x.id === id);
+  const p = (S.admin.periodos || []).find(x => x.id === id);
   if (!confirm(`Excluir o período "${p?.nome || ""}"?\n\n` +
-    `As receitas e ingredientes dele também são apagados. Os pedidos não são afetados.`)) return;
+    `Os preços de ingredientes cadastrados nele também saem. ` +
+    `As receitas e os pedidos não são afetados.`)) return;
   const { error } = await sb.from("periodos_custo").delete().eq("id", id);
   if (error){ avisarErro(error, "excluir o período"); return; }
   S.admin.periodoAberto = null;
@@ -5484,77 +5491,153 @@ async function abrirPeriodo(id){
   render();
 }
 
-/* Garante que existe a receita daquele sabor no período aberto. */
-async function receitaDoSabor(produtoId){
-  const achada = (S.admin.receitas || []).find(r =>
-    r.periodo_id === S.admin.periodoAberto && r.produto_id === produtoId);
-  if (achada) return achada;
-
-  const { data, error } = await sb.from("receitas")
-    .insert({ periodo_id: S.admin.periodoAberto, produto_id: produtoId, rendimento: 1 })
-    .select().single();
-  if (error){ avisarErro(error, "criar a receita"); return null; }
-  S.admin.receitas = [...(S.admin.receitas || []), data];
-  return data;
-}
-
-async function addIngrediente(produtoId){
-  const r = await receitaDoSabor(produtoId);
-  if (!r) return;
-  const { error } = await sb.from("ingredientes")
-    .insert({ receita_id: r.id, nome: "Ingrediente", custo_centavos: 0,
-              ordem: (S.admin.ingredientes || []).filter(i => i.receita_id === r.id).length });
-  if (error){ avisarErro(error, "adicionar o ingrediente"); return; }
-  await carregarCustos(); render();
-}
-
-async function salvarIngrediente(id){
-  const nome = document.getElementById("ig-nome-" + id).value.trim();
-  const qtd  = document.getElementById("ig-qtd-" + id).value.trim();
-  const val  = valorEmCentavos(document.getElementById("ig-val-" + id).value);
+/* ---------------- ingredientes ---------------- */
+async function addIngrediente(){
+  const nome = document.getElementById("in-nome").value.trim();
+  const un   = document.getElementById("in-unidade").value.trim() || "g";
   if (!nome){ alert("Informe o nome do ingrediente."); return; }
 
-  const { error } = await sb.from("ingredientes")
-    .update({ nome, quantidade: qtd || null, custo_centavos: val || 0 })
-    .eq("id", id);
-  if (error){ avisarErro(error, "salvar o ingrediente"); return; }
+  const { error } = await sb.from("ingredientes").insert({ nome, unidade: un });
+  if (error){
+    avisarErro(error, error.code === "23505" ? "cadastrar: já existe um com esse nome" : "cadastrar o ingrediente");
+    return;
+  }
   await carregarCustos(); render();
 }
 
 async function excluirIngrediente(id){
+  const i = (S.admin.ingredientes || []).find(x => x.id === id);
+  const usado = (S.admin.receitaItens || []).some(x => x.ingrediente_id === id);
+  if (!confirm(`Excluir "${i?.nome || ""}"?` +
+    (usado ? "\n\nEle está em uso em alguma receita e será removido de lá também." : ""))) return;
   const { error } = await sb.from("ingredientes").delete().eq("id", id);
   if (error){ avisarErro(error, "excluir o ingrediente"); return; }
   await carregarCustos(); render();
 }
 
-async function salvarRendimento(receitaId){
-  const n = parseInt(document.getElementById("rc-rend-" + receitaId).value, 10);
-  if (!Number.isFinite(n) || n < 1){ alert("O rendimento precisa ser 1 ou mais."); return; }
-  const { error } = await sb.from("receitas").update({ rendimento: n }).eq("id", receitaId);
-  if (error){ avisarErro(error, "salvar o rendimento"); return; }
+/* Preço de um ingrediente no período aberto. */
+async function salvarPreco(ingredienteId){
+  if (!S.admin.periodoAberto){ alert("Escolha um período primeiro."); return; }
+  const custo = valorEmCentavos(document.getElementById("pi-val-" + ingredienteId).value);
+  const cont  = parseFloat(String(document.getElementById("pi-cont-" + ingredienteId).value).replace(",", "."));
+  if (!Number.isFinite(cont) || cont <= 0){ alert("Informe quanto vem na compra."); return; }
+
+  const existe = (S.admin.precos || []).find(p =>
+    p.ingrediente_id === ingredienteId && p.periodo_id === S.admin.periodoAberto);
+
+  const { error } = existe
+    ? await sb.from("precos_ingrediente")
+        .update({ custo_centavos: custo || 0, conteudo: cont }).eq("id", existe.id)
+    : await sb.from("precos_ingrediente")
+        .insert({ ingrediente_id: ingredienteId, periodo_id: S.admin.periodoAberto,
+                  custo_centavos: custo || 0, conteudo: cont });
+
+  if (error){ avisarErro(error, "salvar o preço"); return; }
   await carregarCustos(); render();
+}
+
+/* ---------------- receitas ---------------- */
+async function receitaDoSabor(produtoId){
+  const achada = (S.admin.receitas || []).find(r => r.produto_id === produtoId);
+  if (achada) return achada;
+  const { data, error } = await sb.from("receitas")
+    .insert({ produto_id: produtoId, rendimento: 1 }).select().single();
+  if (error){ avisarErro(error, "criar a receita"); return null; }
+  S.admin.receitas = [...(S.admin.receitas || []), data];
+  return data;
+}
+
+async function addItemReceita(produtoId){
+  const sel = document.getElementById("ri-novo-" + produtoId);
+  const ingredienteId = sel?.value;
+  if (!ingredienteId){ alert("Escolha um ingrediente."); return; }
+
+  const r = await receitaDoSabor(produtoId);
+  if (!r) return;
+  const { error } = await sb.from("receita_itens").insert({
+    receita_id: r.id, ingrediente_id: ingredienteId, quantidade: 0,
+    ordem: (S.admin.receitaItens || []).filter(x => x.receita_id === r.id).length,
+  });
+  if (error){
+    avisarErro(error, error.code === "23505" ? "adicionar: esse ingrediente já está na receita" : "adicionar o ingrediente");
+    return;
+  }
+  await carregarCustos(); render();
+}
+
+async function salvarQuantidade(itemId){
+  const q = parseFloat(String(document.getElementById("ri-qtd-" + itemId).value).replace(",", "."));
+  if (!Number.isFinite(q) || q < 0){ alert("Quantidade inválida."); return; }
+  const { error } = await sb.from("receita_itens").update({ quantidade: q }).eq("id", itemId);
+  if (error){ avisarErro(error, "salvar a quantidade"); return; }
+  await carregarCustos(); render();
+}
+
+async function removerItemReceita(itemId){
+  const { error } = await sb.from("receita_itens").delete().eq("id", itemId);
+  if (error){ avisarErro(error, "remover o ingrediente"); return; }
+  await carregarCustos(); render();
+}
+
+async function salvarReceita(produtoId){
+  const r = await receitaDoSabor(produtoId);
+  if (!r) return;
+  const rend = parseInt(document.getElementById("rc-rend-" + produtoId).value, 10);
+  const modo = document.getElementById("rc-modo-" + produtoId).value;
+  if (!Number.isFinite(rend) || rend < 1){ alert("O rendimento precisa ser 1 ou mais."); return; }
+
+  const { error } = await sb.from("receitas")
+    .update({ rendimento: rend, modo_preparo: modo.trim() || null }).eq("id", r.id);
+  if (error){ avisarErro(error, "salvar a receita"); return; }
+  await carregarCustos(); render();
+}
+
+function alternarReceita(produtoId){
+  S.admin.receitaAberta = S.admin.receitaAberta === produtoId ? null : produtoId;
+  render();
+}
+
+/* Custo de um cone, calculado na tela com os dados já carregados. */
+function custoDoCone(produtoId, periodoId){
+  const r = (S.admin.receitas || []).find(x => x.produto_id === produtoId);
+  if (!r) return { total: 0, itens: [], faltando: 0 };
+
+  const itens = (S.admin.receitaItens || []).filter(x => x.receita_id === r.id).map(x => {
+    const ing = (S.admin.ingredientes || []).find(y => y.id === x.ingrediente_id);
+    const pr  = (S.admin.precos || []).find(y =>
+      y.ingrediente_id === x.ingrediente_id && y.periodo_id === periodoId);
+    const custo = pr && pr.conteudo > 0
+      ? x.quantidade * pr.custo_centavos / pr.conteudo : null;
+    return { ...x, nome: ing?.nome || "?", unidade: ing?.unidade || "", custo };
+  });
+
+  const total = Math.round(itens.reduce((n, i) => n + (i.custo || 0), 0)
+    / Math.max(r.rendimento, 1));
+  return { total, itens, faltando: itens.filter(i => i.custo === null).length, rendimento: r.rendimento };
 }
 
 function vAdminCustos(){
   const periodos = S.admin.periodos || [];
   const aberto = periodos.find(p => p.id === S.admin.periodoAberto);
   const res = S.admin.resumoPeriodo;
+  const ings = S.admin.ingredientes || [];
 
   return `<div style="display:flex;flex-direction:column;gap:1rem">
-    <section class="card" style="padding:1.25rem" aria-labelledby="pc-t">
-      <h2 id="pc-t" class="display" style="font-size:1.1rem;font-weight:700">Períodos de custo</h2>
+
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Períodos</h2>
       <p class="muted" style="font-size:.8rem;margin-top:.25rem">
-        Os ingredientes mudam de preço. Crie um período para cada fase e registre
-        nele a receita de cada sabor.</p>
+        Os preços mudam com o tempo. Cada período guarda quanto custava cada
+        ingrediente naquela fase.</p>
 
       <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.8rem">
         ${periodos.map(p => `<button class="chip" aria-selected="${p.id === S.admin.periodoAberto}"
           onclick="abrirPeriodo('${p.id}')">${esc(p.nome)}</button>`).join("")
-          || `<p class="muted" style="font-size:.8rem">Nenhum período ainda.</p>`}
+          || `<p class="muted" style="font-size:.8rem">Nenhum período ainda. Crie o primeiro abaixo.</p>`}
       </div>
 
       <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.9rem;align-items:end">
-        <label style="font-size:.72rem;font-weight:600;flex:1;min-width:9rem">Nome
+        <label style="font-size:.72rem;font-weight:600;flex:1;min-width:8rem">Nome
           <input id="pc-nome" class="field" placeholder="Ex: Agosto/2026"
             style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
         <label style="font-size:.72rem;font-weight:600">Início
@@ -5564,21 +5647,154 @@ function vAdminCustos(){
           <input id="pc-fim" class="field" type="date"
             style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
         <button class="btn btn-primary" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
-          onclick="criarPeriodo()">Criar período</button>
+          onclick="criarPeriodo()">Criar</button>
+        ${aberto ? `<button class="btn" style="background:var(--framboesa);color:#fff;
+          min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+          onclick="excluirPeriodo('${aberto.id}')">Excluir ${esc(aberto.nome)}</button>` : ""}
       </div>
     </section>
 
     ${!aberto ? "" : `
-    <section class="card" style="padding:1.25rem;border-left:4px solid var(--casquinha)">
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:start">
-        <div>
-          <h2 class="display" style="font-size:1.1rem;font-weight:700">${esc(aberto.nome)}</h2>
-          <p class="muted" style="font-size:.78rem">
-            ${dataBrCurta(aberto.inicio)} até ${aberto.fim ? dataBrCurta(aberto.fim) : "hoje"}</p>
-        </div>
-        <button class="btn" style="background:var(--framboesa);color:#fff;min-height:2rem;
-          padding:.2rem .8rem;font-size:.74rem" onclick="excluirPeriodo('${aberto.id}')">Excluir período</button>
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.05rem;font-weight:700">
+        Ingredientes e preços em ${esc(aberto.nome)}</h2>
+      <p class="muted" style="font-size:.78rem;margin-top:.2rem">
+        Informe quanto você pagou e quanto vem na compra. Exemplo: lata de leite
+        condensado, 395 g por R$ 7,50. O preço por grama sai sozinho.</p>
+
+      ${ings.length ? `<div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.9rem">
+        ${ings.map(i => {
+          const pr = (S.admin.precos || []).find(p =>
+            p.ingrediente_id === i.id && p.periodo_id === aberto.id);
+          const unit = pr && pr.conteudo > 0 ? pr.custo_centavos / pr.conteudo : null;
+          return `<div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;
+            padding:.4rem .5rem;border-radius:.5rem;
+            background:${pr ? "transparent" : "rgba(212,78,91,.07)"}">
+            <strong style="flex:1.2;min-width:7rem;font-size:.82rem">${esc(i.nome)}
+              <span class="muted" style="font-weight:400">(${esc(i.unidade)})</span></strong>
+            <label style="font-size:.68rem;font-weight:600">paguei
+              <input id="pi-val-${i.id}" class="field" inputmode="numeric"
+                value="${pr ? mascaraValor(String(pr.custo_centavos)) : ""}" placeholder="0,00"
+                oninput="aoDigitarValor(this)"
+                style="width:5rem;padding:.25rem .45rem;font-size:.78rem;text-align:right;
+                  display:block;margin-top:.1rem"></label>
+            <label style="font-size:.68rem;font-weight:600">e vem
+              <input id="pi-cont-${i.id}" class="field" inputmode="decimal"
+                value="${pr ? pr.conteudo : ""}" placeholder="395"
+                style="width:4.5rem;padding:.25rem .45rem;font-size:.78rem;text-align:right;
+                  display:block;margin-top:.1rem"></label>
+            <span class="muted" style="font-size:.7rem">${esc(i.unidade)}</span>
+            <button class="btn btn-ghost" style="min-height:1.8rem;padding:.1rem .6rem;font-size:.72rem"
+              onclick="salvarPreco('${i.id}')">Salvar</button>
+            <span style="font-size:.72rem;font-weight:700;min-width:5.5rem;
+              color:${unit === null ? "var(--framboesa)" : "var(--cacau)"}">
+              ${unit === null ? "sem preço" : `R$ ${(unit / 100).toFixed(4)}/${esc(i.unidade)}`}</span>
+            <button style="color:var(--framboesa);font-weight:800;padding:.1rem .35rem"
+              title="Excluir ingrediente" onclick="excluirIngrediente('${i.id}')">×</button>
+          </div>`;
+        }).join("")}
+      </div>` : `<p class="muted" style="font-size:.8rem;margin-top:.75rem">
+        Nenhum ingrediente cadastrado ainda.</p>`}
+
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.9rem;align-items:end;
+        border-top:1px solid rgb(62 39 35/.1);padding-top:.75rem">
+        <label style="font-size:.72rem;font-weight:600;flex:1;min-width:8rem">Novo ingrediente
+          <input id="in-nome" class="field" placeholder="Ex: Leite condensado"
+            style="padding:.4rem .6rem;display:block;margin-top:.15rem"></label>
+        <label style="font-size:.72rem;font-weight:600">Unidade
+          <input id="in-unidade" class="field" placeholder="g" value="g"
+            style="width:4rem;padding:.4rem .5rem;display:block;margin-top:.15rem;text-align:center"></label>
+        <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+          onclick="addIngrediente()">Adicionar</button>
       </div>
+    </section>
+
+    <section class="card" style="padding:1.25rem">
+      <h2 class="display" style="font-size:1.05rem;font-weight:700">Receitas</h2>
+      <p class="muted" style="font-size:.78rem;margin-top:.2rem">
+        A receita é a mesma sempre; o que muda é o preço dos ingredientes em cada
+        período. Custos calculados com os preços de ${esc(aberto.nome)}.</p>
+
+      <div style="display:flex;flex-direction:column;gap:.6rem;margin-top:1rem">
+        ${PRODUTOS.map(p => {
+          const c = custoDoCone(p.id, aberto.id);
+          const r = (S.admin.receitas || []).find(x => x.produto_id === p.id);
+          const abertaAqui = S.admin.receitaAberta === p.id;
+
+          return `<div style="border:1px solid rgb(62 39 35/.12);border-radius:.7rem;overflow:hidden">
+            <button style="width:100%;display:flex;flex-wrap:wrap;justify-content:space-between;
+              gap:.5rem;align-items:center;padding:.7rem .85rem;text-align:left"
+              onclick="alternarReceita('${p.id}')">
+              <strong style="font-size:.9rem">${esc(p.nome)}</strong>
+              <span style="display:flex;align-items:center;gap:.5rem">
+                ${c.faltando ? `<span style="font-size:.7rem;color:var(--framboesa);font-weight:700">
+                  ${c.faltando} sem preço</span>` : ""}
+                <span style="font-size:.85rem;font-weight:800;
+                  color:${c.total ? "var(--cacau)" : "rgb(62 39 35/.4)"}">
+                  ${c.total ? reais(c.total) + " / cone" : "sem receita"}</span>
+                <span class="muted" style="font-size:.8rem">${abertaAqui ? "▲" : "▼"}</span>
+              </span>
+            </button>
+
+            ${!abertaAqui ? "" : `<div style="padding:0 .85rem .85rem">
+              ${c.itens.length ? `<ul style="list-style:none;display:flex;flex-direction:column;gap:.3rem">
+                ${c.itens.map(i => `<li style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;
+                  font-size:.8rem">
+                  <span style="flex:1.2;min-width:6rem">${esc(i.nome)}</span>
+                  <input id="ri-qtd-${i.id}" class="field" inputmode="decimal" value="${i.quantidade}"
+                    style="width:4.5rem;padding:.25rem .45rem;font-size:.78rem;text-align:right">
+                  <span class="muted" style="font-size:.72rem;width:1.5rem">${esc(i.unidade)}</span>
+                  <button class="btn btn-ghost" style="min-height:1.8rem;padding:.1rem .55rem;font-size:.72rem"
+                    onclick="salvarQuantidade('${i.id}')">ok</button>
+                  <span style="font-size:.75rem;font-weight:700;min-width:4rem;text-align:right;
+                    color:${i.custo === null ? "var(--framboesa)" : "inherit"}">
+                    ${i.custo === null ? "sem preço" : reais(Math.round(i.custo))}</span>
+                  <button style="color:var(--framboesa);font-weight:800;padding:.1rem .3rem"
+                    title="Tirar da receita" onclick="removerItemReceita('${i.id}')">×</button>
+                </li>`).join("")}
+              </ul>` : `<p class="muted" style="font-size:.78rem">Nenhum ingrediente nesta receita.</p>`}
+
+              <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;align-items:center">
+                <select id="ri-novo-${p.id}" class="field"
+                  style="flex:1;min-width:8rem;padding:.3rem .5rem;font-size:.78rem">
+                  <option value="">Escolha um ingrediente...</option>
+                  ${ings.map(i => `<option value="${i.id}">${esc(i.nome)}</option>`).join("")}
+                </select>
+                <button class="btn btn-ghost" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.74rem"
+                  onclick="addItemReceita('${p.id}')">+ adicionar</button>
+              </div>
+
+              <label style="font-size:.72rem;font-weight:600;display:flex;align-items:center;
+                gap:.35rem;margin-top:.7rem">
+                Esta receita rende
+                <input id="rc-rend-${p.id}" class="field" type="number" min="1"
+                  value="${r?.rendimento || 1}"
+                  style="width:4rem;padding:.25rem .4rem;font-size:.78rem;text-align:center">
+                cone(s)
+              </label>
+
+              <label style="font-size:.72rem;font-weight:600;display:block;margin-top:.7rem">
+                Modo de preparo
+                <textarea id="rc-modo-${p.id}" class="field" rows="4"
+                  placeholder="Escreva aqui o passo a passo desta receita"
+                  style="display:block;margin-top:.2rem;width:100%;resize:vertical;
+                    font-family:inherit;font-size:.82rem"
+                  >${esc(r?.modo_preparo || "")}</textarea></label>
+
+              <button class="btn btn-primary" style="margin-top:.6rem;min-height:2.1rem;
+                padding:.25rem .9rem;font-size:.78rem"
+                onclick="salvarReceita('${p.id}')">Salvar receita</button>
+            </div>`}
+          </div>`;
+        }).join("")}
+      </div>
+    </section>
+
+    <section class="card" style="padding:1.25rem;border-left:4px solid var(--casquinha)">
+      <h2 class="display" style="font-size:1.05rem;font-weight:700">
+        Resultado de ${esc(aberto.nome)}</h2>
+      <p class="muted" style="font-size:.78rem">
+        ${dataBrCurta(aberto.inicio)} até ${aberto.fim ? dataBrCurta(aberto.fim) : "hoje"}</p>
 
       ${!res ? `<p class="muted" style="font-size:.8rem;margin-top:.75rem">Calculando...</p>` : `
       <div style="display:grid;gap:.75rem;margin-top:1rem;
@@ -5587,8 +5803,8 @@ function vAdminCustos(){
            ["Receita", reais(res.receita), "var(--cacau)"],
            ["Custo", reais(res.custo), "#B4590F"],
            ["Lucro", reais(res.lucro), res.lucro >= 0 ? "var(--pistache)" : "var(--framboesa)"]]
-          .map(([r, v, cor]) => `<div class="dado">
-            <dt>${r}</dt>
+          .map(([rot, v, cor]) => `<div class="dado">
+            <dt>${rot}</dt>
             <dd class="display" style="font-size:1.3rem;font-weight:900;${cor ? `color:${cor}` : ""}">
               ${v}</dd></div>`).join("")}
       </div>
@@ -5605,66 +5821,9 @@ function vAdminCustos(){
       <dl class="linhas" style="margin-top:.9rem;font-size:.8rem">
         ${res.sabores.map(sb => `<div>
           <dt>${sb.cones}× ${esc(sb.nome)}
-            <span class="muted">(${reais(sb.custo_unitario)} por cone)</span></dt>
+            <span class="muted">(${reais(sb.custo_unitario)} cada)</span></dt>
           <dd>${reais(sb.custo_total)}</dd></div>`).join("")}
       </dl>` : ""}`}
-    </section>
-
-    <section class="card" style="padding:1.25rem">
-      <h2 class="display" style="font-size:1.05rem;font-weight:700">Receitas de ${esc(aberto.nome)}</h2>
-      <p class="muted" style="font-size:.78rem;margin-top:.2rem">
-        Informe os ingredientes de cada sabor. Deixe o rendimento em 1 para lançar
-        o custo de um cone; use outro número se estiver lançando uma fornada.</p>
-
-      <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1rem">
-        ${PRODUTOS.map(p => {
-          const r = (S.admin.receitas || []).find(x =>
-            x.periodo_id === aberto.id && x.produto_id === p.id);
-          const ings = r ? (S.admin.ingredientes || []).filter(i => i.receita_id === r.id) : [];
-          const soma = ings.reduce((n, i) => n + (i.custo_centavos || 0), 0);
-          const porCone = r && r.rendimento > 0 ? Math.round(soma / r.rendimento) : soma;
-
-          return `<div style="border:1px solid rgb(62 39 35/.12);border-radius:.7rem;padding:.75rem .85rem">
-            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:center">
-              <strong style="font-size:.9rem">${esc(p.nome)}</strong>
-              <span style="font-size:.8rem;font-weight:700;color:${porCone ? "var(--cacau)" : "rgb(62 39 35/.45)"}">
-                ${porCone ? reais(porCone) + " por cone" : "sem receita"}</span>
-            </div>
-
-            ${ings.length ? `<ul style="list-style:none;margin-top:.6rem;display:flex;
-              flex-direction:column;gap:.35rem">
-              ${ings.map(i => `<li style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">
-                <input id="ig-nome-${i.id}" class="field" value="${esc(i.nome)}"
-                  style="flex:1.4;min-width:7rem;padding:.3rem .5rem;font-size:.78rem">
-                <input id="ig-qtd-${i.id}" class="field" value="${esc(i.quantidade || "")}"
-                  placeholder="50 g" style="flex:.8;min-width:4.5rem;padding:.3rem .5rem;font-size:.78rem">
-                <input id="ig-val-${i.id}" class="field" inputmode="numeric"
-                  value="${mascaraValor(String(i.custo_centavos || 0))}" oninput="aoDigitarValor(this)"
-                  style="width:5rem;padding:.3rem .5rem;font-size:.78rem;text-align:right">
-                <button class="btn btn-ghost" style="min-height:1.9rem;padding:.1rem .6rem;font-size:.72rem"
-                  onclick="salvarIngrediente('${i.id}')">Salvar</button>
-                <button style="color:var(--framboesa);font-weight:800;padding:.1rem .35rem"
-                  title="Remover" onclick="excluirIngrediente('${i.id}')">×</button>
-              </li>`).join("")}
-            </ul>` : ""}
-
-            <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;align-items:center">
-              <button class="btn btn-ghost" style="min-height:1.9rem;padding:.15rem .7rem;font-size:.74rem"
-                onclick="addIngrediente('${p.id}')">+ ingrediente</button>
-              ${r ? `<label style="font-size:.72rem;font-weight:600;display:flex;align-items:center;gap:.3rem">
-                Rende
-                <input id="rc-rend-${r.id}" class="field" type="number" min="1" value="${r.rendimento}"
-                  style="width:4rem;padding:.25rem .4rem;font-size:.78rem;text-align:center">
-                cone(s)
-                <button class="btn btn-ghost" style="min-height:1.7rem;padding:.1rem .55rem;font-size:.7rem"
-                  onclick="salvarRendimento('${r.id}')">ok</button>
-              </label>` : ""}
-              ${ings.length ? `<span class="muted" style="font-size:.72rem">
-                soma dos ingredientes: ${reais(soma)}</span>` : ""}
-            </div>
-          </div>`;
-        }).join("")}
-      </div>
     </section>`}
   </div>`;
 }
