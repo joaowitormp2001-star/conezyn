@@ -423,6 +423,7 @@
 <div id="toast-slot"></div>
 <div id="cart-toast-slot"></div>
 <div id="modal-slot"></div>
+<div id="aviso-slot"></div>
 <datalist id="sabores-lista"></datalist>
 <datalist id="formas-lista">
   <option value="Pix"><option value="Dinheiro"><option value="Cartão"><option value="Transferência">
@@ -618,6 +619,7 @@ const S = {
   carrinho: {},
   pedidos: [], pedidosAntigos: [],
   fidelidade: { total: 0, historico: [], resgates: 0, temBrinde: false, primeiraCompra: null, descontoPct: 0 },
+  avisos: [], notaFicha: null,
   filtro: "todos",
   checkout: { local:"", quando:"agora", hora:"", erro:null },
   presente: { ativo:false, termo:"", sugestoes:[], escolhido:null, setor:"", buscando:false },
@@ -957,6 +959,125 @@ async function carregarPedidosAntigos(){
     status: c.data_pagamento ? "Pagamento concluído" : c.data_entrega ? "Entregue" : "Pedido feito",
     data: c.data_entrega || c.data_pagamento || null,
   }));
+}
+
+/* ============================================================
+   AVISO DE PEDIDO
+   Pedido que você lançou e marcou para avisar. Aparece assim que
+   a pessoa entra — na primeira vez ou meses depois — e some
+   quando ela fecha ou quando o pagamento é registrado.
+   ============================================================ */
+async function carregarAvisos(){
+  if (!S.perfil){ S.avisos = []; return; }
+  const { data, error } = await sb.rpc("meus_avisos_pedido");
+  S.avisos = (!error && Array.isArray(data)) ? data : [];
+}
+
+function vAvisoPedido(){
+  const a = (S.avisos || [])[0];
+  if (!a) return "";
+
+  const itens = Array.isArray(a.itens) && a.itens.length
+    ? a.itens : [{ sabor: a.sabores || "Cones", quantidade: a.quantidade }];
+  const primeiro = PRODUTOS.find(p => semAcentoMin(p.nome) === semAcentoMin(itens[0].sabor));
+  const data = a.data_entrega
+    ? new Date(String(a.data_entrega).slice(0, 10) + "T12:00").toLocaleDateString("pt-BR")
+    : null;
+
+  return `<div class="modal-overlay" style="z-index:120" onclick="if(event.target===this)fecharAviso()">
+    <div class="modal card" role="dialog" aria-modal="true" aria-labelledby="aviso-t"
+      style="max-width:24rem;text-align:center;padding:0;overflow:hidden">
+
+      <div style="background:${primeiro ? primeiro.grad : "var(--cacau)"};padding:1.5rem 1rem 1.25rem">
+        ${primeiro && primeiro.img
+          ? `<img src="${primeiro.img}" alt="" style="width:7rem;height:7rem;object-fit:contain;
+               display:block;margin:0 auto;filter:drop-shadow(0 10px 18px rgb(0 0 0/.35))">`
+          : `<span style="font-size:4rem;line-height:1" aria-hidden>${primeiro ? primeiro.emoji : "🍦"}</span>`}
+      </div>
+
+      <div style="padding:1.25rem">
+        <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
+          letter-spacing:.06em">Pedido registrado por nós</p>
+        <h2 id="aviso-t" class="display" style="font-size:1.25rem;font-weight:900;margin-top:.2rem">
+          ${esc(S.perfil?.nome || "Olá")}, tem um pedido seu aqui</h2>
+
+        <p style="font-size:.9rem;margin-top:.6rem">
+          <strong>${a.quantidade} cone(s)</strong><br>
+          ${itens.map(i => `${i.quantidade}× ${esc(i.sabor)}`).join(", ")}</p>
+
+        ${data ? `<p class="muted" style="font-size:.8rem;margin-top:.3rem">Entrega em ${data}</p>` : ""}
+
+        <p class="display" style="font-size:2rem;font-weight:900;margin-top:.5rem;line-height:1">
+          ${reais(a.valor_centavos || 0)}</p>
+
+        ${a.observacao ? `<p class="muted" style="font-size:.78rem;margin-top:.5rem;
+          background:var(--chantilly);border-radius:.5rem;padding:.5rem .6rem;white-space:pre-wrap"
+          >${esc(a.observacao)}</p>` : ""}
+
+        <button class="btn btn-primary" style="width:100%;margin-top:1rem;min-height:3rem;font-weight:700"
+          onclick="irParaPagamento('${a.id}')">Ir para pagamento</button>
+        <button class="btn btn-ghost" style="width:100%;margin-top:.5rem"
+          onclick="fecharAviso()">Agora não</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function fecharAviso(){
+  const a = (S.avisos || [])[0];
+  if (!a) return;
+  S.avisos = S.avisos.slice(1);
+  render();
+  await sb.rpc("marcar_aviso_visto", { p_id: a.id });
+}
+
+async function irParaPagamento(id){
+  const a = (S.avisos || []).find(x => x.id === id);
+  S.avisos = (S.avisos || []).filter(x => x.id !== id);
+  if (a){
+    S.notaFicha = a;
+    nav("nota-ficha");
+    await sb.rpc("marcar_aviso_visto", { p_id: id });
+  }
+}
+
+/* Nota do pedido lançado por você, na visão do cliente:
+   os mesmos blocos da nota normal, com Pix e QR. */
+function vNotaFicha(){
+  const a = S.notaFicha;
+  if (!a) return vPedidos();
+
+  const itens = Array.isArray(a.itens) && a.itens.length
+    ? a.itens : [{ sabor: a.sabores || "Cones", quantidade: a.quantidade }];
+  const data = a.data_entrega
+    ? new Date(String(a.data_entrega).slice(0, 10) + "T12:00").toLocaleDateString("pt-BR")
+    : null;
+
+  return `${vHeader()}<main class="wrap" style="padding-top:1.5rem;max-width:32rem">
+    <div class="card" style="padding:1.5rem">
+      <p class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
+        letter-spacing:.06em">Pedido registrado por nós</p>
+      <h1 class="display" style="font-size:1.6rem;font-weight:900;margin-top:.2rem">
+        Seu pedido</h1>
+      ${data ? `<p class="muted" style="font-size:.85rem;margin-top:.2rem">Entrega em ${data}</p>` : ""}
+
+      <dl class="linhas" style="margin-top:1rem">
+        ${itens.map(i => `<div><dt>${i.quantidade}× ${esc(i.sabor)}</dt><dd></dd></div>`).join("")}
+        ${a.cones_brinde > 0 ? `<div style="font-weight:700;color:#B4590F">
+          <dt>${a.cones_brinde} cone(s) de brinde</dt><dd>${reais(0)}</dd></div>` : ""}
+        <div class="total-row display"><dt>Total</dt><dd>${reais(a.valor_centavos || 0)}</dd></div>
+      </dl>
+
+      ${a.observacao ? `<p class="muted" style="font-size:.8rem;margin-top:.75rem;
+        background:var(--chantilly);border-radius:.5rem;padding:.6rem .7rem;white-space:pre-wrap"
+        >${esc(a.observacao)}</p>` : ""}
+
+      ${blocoPix({ total: a.valor_centavos || 0, numero: String(a.id).slice(0, 8).toUpperCase() })}
+
+      <button class="btn btn-ghost" style="width:100%;margin-top:1rem"
+        onclick="nav('pedidos')">Ver meus pedidos</button>
+    </div>
+  </main>${vFooter()}`;
 }
 
 async function carregarFidelidade(){
@@ -2612,7 +2733,7 @@ async function fazerLogin(){
   if (error){ S.loginErro = erroAmigavel(error); return render(); }
   await carregarPerfil();
   await confirmarAdmin();
-  await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
+  await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos(), carregarAvisos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
 
@@ -2660,7 +2781,7 @@ async function fazerCadastro(){
   }
   await carregarPerfil();
   await confirmarAdmin();
-  await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
+  await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos(), carregarAvisos()]);
   const v = S.voltarPara || "home"; S.voltarPara = null; nav(v);
 }
 
@@ -3616,7 +3737,7 @@ function vAdminDash(){
 function formPedido(){
   if (!S.admin.formPedido){
     S.admin.formPedido = { id:null, cliente:"", clienteRef:null, telefone:"", entrega:hoje(), pagamento:"",
-                           forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, descontos:[],
+                           forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, avisar:false, descontos:[],
                          linhas:[{ sabor:"", qtd:1 }] };
   }
   return S.admin.formPedido;
@@ -3632,7 +3753,7 @@ function abrirNovoPedido(){
   S.admin.pedidoEditando = null;
   S.admin.novoPedido = true;
   S.admin.formPedido = { id:null, cliente:"", clienteRef:null, telefone:"", entrega:hoje(), pagamento:"",
-                         forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, descontos:[],
+                         forma:"", valor:"", brinde:false, conesBrinde:0, baixarEstoque:true, avisar:false, descontos:[],
                          linhas:[{ sabor:"", qtd:1 }] };
   render();
 }
@@ -3654,6 +3775,7 @@ function editarPedidoFicha(id){
     valor: c.valor_centavos != null ? mascaraValor(String(c.valor_centavos)) : "",
     brinde: ehBrindeDaFicha(c),
     conesBrinde: c.cones_brinde || 0,
+    avisar: !!c.avisar,
     observacao: c.observacao || "",
     descontosAplicados: Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : [],
     descontos: (Array.isArray(c.descontos_aplicados) ? c.descontos_aplicados : []).map(d => d.id),
@@ -3691,6 +3813,8 @@ function lerFormPedido(){
   if (cb) f.brinde = cb.checked;
   const cbn = document.getElementById("fp-cbrinde");
   if (cbn) f.conesBrinde = Math.max(parseInt(cbn.value, 10) || 0, 0);
+  const av = document.getElementById("fp-avisar");
+  f.avisar = av ? av.checked : false;
   const cbe = document.getElementById("fp-baixa");
   if (cbe) f.baixarEstoque = cbe.checked;
   return f;
@@ -3845,6 +3969,7 @@ async function salvarFormPedido(){
       descontos_aplicados: snapshot,
       cones_brinde: Math.min(f.conesBrinde || 0, itens.reduce((n, i) => n + i.quantidade, 0)),
       observacao: (f.observacao || "").trim() || null,
+      avisar: !f.pagamento && !!f.avisar,
     }).eq("id", f.id);
     if (error){ avisarErro(error, "salvar o pedido"); return; }
 
@@ -3876,9 +4001,10 @@ async function salvarFormPedido(){
       }
       const obs = (f.observacao || "").trim();
       const cbr = Math.min(f.conesBrinde || 0, itens.reduce((n, i) => n + i.quantidade, 0));
-      if (obs || cbr > 0){
+      const avi = !f.pagamento && !!f.avisar;
+      if (obs || cbr > 0 || avi){
         await sb.from("pre_compras")
-          .update({ observacao: obs || null, cones_brinde: cbr })
+          .update({ observacao: obs || null, cones_brinde: cbr, avisar: avi })
           .eq("id", data);
       }
     }
@@ -4073,6 +4199,13 @@ function vFormularioPedido(){
         <input type="checkbox" id="fp-baixa" ${f.baixarEstoque !== false ? "checked" : ""}
           style="width:1rem;height:1rem">
         📦 Descontar do estoque
+      </label>`}
+      ${f.pagamento ? "" : `<label style="display:flex;align-items:center;gap:.4rem;font-size:.78rem;
+        font-weight:700;color:var(--framboesa);cursor:pointer;padding-bottom:.4rem"
+        title="A pessoa vê um aviso com o pedido assim que entrar no site">
+        <input type="checkbox" id="fp-avisar" ${f.avisar ? "checked" : ""}
+          onchange="lerFormPedido()" style="width:1rem;height:1rem">
+        Avisar o cliente
       </label>`}
     </div>
     <p class="muted" style="font-size:.72rem;margin-top:.3rem">
@@ -4978,7 +5111,7 @@ async function iniciar(){
     await carregarCatalogo();
     if (S.perfil){
     await confirmarAdmin();
-    await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos()]);
+    await Promise.all([carregarPedidos(), carregarFidelidade(), carregarPedidosAntigos(), carregarAvisos()]);
   }
     if (S.perfil) checarPresentes();
     restaurarNotificacoes();
@@ -6751,7 +6884,8 @@ function render(){
   if (S.perfil?.admin && S.view === "admin" && !S.admin.carregado) carregarAdmin().then(render);
   const views = { home:vHome, produto:vProduto, carrinho:vCarrinho, checkout:vCheckout,
     confirmado:vConfirmado, login:()=>vLogin(false), cadastro:vCadastro, conta:vConta,
-    pedidos:vPedidos, fidelidade:vFidelidade, admin:vAdmin };
+    pedidos:vPedidos, fidelidade:vFidelidade, admin:vAdmin,
+    "nota-ficha":vNotaFicha };
   if (S.view!=="produto") pqv = 1;
   // A animação de entrada só roda quando se muda de tela — trocar a
   // quantidade de um cone ou filtrar categoria não redesenha com efeito.
@@ -6762,6 +6896,9 @@ function render(){
   const alvo = document.getElementById("app");
   alvo.classList.toggle("animar", mudouDeTela);
   alvo.innerHTML = (views[S.view]||vHome)();
+  // o aviso de pedido fica por cima de qualquer tela
+  const slotAviso = document.getElementById("aviso-slot");
+  if (slotAviso) slotAviso.innerHTML = (S.avisos || []).length ? vAvisoPedido() : "";
   // as tags de setor precisam ser desenhadas depois que a tela existe
   if (document.getElementById("local-tags")) desenharSetores("local-tags", "local");
   if (document.getElementById("pr-setor-tags")) desenharSetores("pr-setor-tags", "pr-setor");
