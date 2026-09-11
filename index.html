@@ -3241,70 +3241,6 @@ function carrosselCartoes(carimbos, nome, genero = null){
 
 /* Réplica em código dos cartões físicos da conezyn.
    `cheios` é quanto já foi carimbado NESTE cartão (não o total geral). */
-/* ============================================================
-   CARTÃO EM IMAGEM (só administrador)
-   Em vez de redesenhar o cartão — o que sempre gera diferenças —,
-   o próprio cartão da tela é fotografado. A biblioteca de captura
-   só é baixada quando você clica, para não pesar o site.
-   ============================================================ */
-let capturaPronta = null;
-
-function carregarCaptura(){
-  if (window.html2canvas) return Promise.resolve(true);
-  if (capturaPronta) return capturaPronta;
-
-  capturaPronta = new Promise(resolve => {
-    const tag = document.createElement("script");
-    tag.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
-    tag.onload  = () => resolve(true);
-    tag.onerror = () => resolve(false);
-    document.head.appendChild(tag);
-  });
-  return capturaPronta;
-}
-
-async function baixarCartao(nome, carimbos, indiceCartao, genero){
-  if (!Seguranca.ehAdmin()) return;
-
-  const ok = await carregarCaptura();
-  if (!ok){ alert("Não consegui carregar o gerador de imagem. Tente de novo com internet."); return; }
-
-  // Fotografa o cartão que JÁ está na tela: mesmas medidas, mesma
-  // proporção, mesmo resultado que você está vendo. Só se ele não
-  // estiver aberto é que um é montado fora da tela.
-  const naTela = document.querySelector("#modal-slot .fid");
-  let palco = null, alvo = naTela;
-
-  if (!alvo){
-    palco = document.createElement("div");
-    palco.style.cssText = "position:fixed;left:-9999px;top:0;width:520px;background:transparent";
-    palco.innerHTML = cartaoFidelidade(carimbos, nome, indiceCartao, genero);
-    document.body.appendChild(palco);
-    alvo = palco.querySelector(".fid") || palco.firstElementChild;
-  }
-
-  try {
-    const canvas = await window.html2canvas(alvo, {
-      backgroundColor: null,
-      scale: 4,                       // nitidez sem mexer na proporção
-      logging: false,
-      useCORS: true,
-      width:  alvo.offsetWidth,
-      height: alvo.offsetHeight,
-      windowWidth:  alvo.offsetWidth,
-      windowHeight: alvo.offsetHeight,
-    });
-    const a = document.createElement("a");
-    a.download = `cartao-${semAcentoMin(nome || "cliente").replace(/\s+/g, "-")}.png`;
-    a.href = canvas.toDataURL("image/png");
-    a.click();
-  } catch (e){
-    avisarErro(e, "gerar a imagem do cartão");
-  } finally {
-    if (palco) palco.remove();
-  }
-}
-
 function cartaoFidelidade(cheios, nome, indiceCartao = 0, genero = null){
   const nv = nivelDe(indiceCartao);
   const meta = nv.meta;
@@ -6326,10 +6262,6 @@ function verCartaoFicha(fichaId){
           automaticamente para o perfil dela.</p>
 
         <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
-          <button class="btn btn-primary" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
-            onclick="baixarCartao('${esc(f.nome).replace(/'/g, "&#39;")}', ${prog.passouDoFim ? nivel.meta : prog.noAtual},
-              ${Math.min(prog.completos, NIVEIS.length - 1)}, ${f.genero ? `'${f.genero}'` : "null"})">
-            ⬇ Baixar imagem</button>
           <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
             onclick="fecharModal();abrirFicha('${fichaId}')">← Dados da ficha</button>
         </div>
@@ -6375,10 +6307,6 @@ function verCartaoCliente(id){
         </p>
 
         <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
-          <button class="btn btn-primary" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
-            onclick="baixarCartao('${esc(c.nome).replace(/'/g, "&#39;")}', ${prog.passouDoFim ? nivelDe(prog.completos).meta : prog.noAtual},
-              ${Math.min(prog.completos, NIVEIS.length - 1)}, ${c.genero ? `'${c.genero}'` : "null"})">
-            ⬇ Baixar imagem</button>
           <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
             onclick="verCliente('${id}')">← Dados do cliente</button>
         </div>
