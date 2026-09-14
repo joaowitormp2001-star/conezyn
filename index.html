@@ -3667,6 +3667,10 @@ async function removerLogo(){
 }
 
 function vAdminDash(){
+  if (!S.admin.periodos?.length && S.admin.carregado && !S.admin.custosPedidos){
+    S.admin.custosPedidos = true;
+    carregarCustos().then(render);
+  }
   const hoje = new Date().toDateString();
 
   // Conta os dois tipos: os pedidos do site e os que você lança na ficha.
@@ -3728,6 +3732,8 @@ function vAdminDash(){
         <p class="muted" style="margin-top:.75rem;font-size:.72rem">Cadastro e edição de produtos entram na Onda 2 (com Supabase).</p>
       </section>
     </div>
+
+    ${vLucroPeriodo()}
     <section class="card" style="padding:1.25rem" aria-labelledby="marca">
       <h2 id="marca" class="display" style="font-size:1.1rem;font-weight:700">Logo da loja</h2>
       <p class="muted" style="font-size:.8rem;margin-top:.25rem">
@@ -5598,13 +5604,20 @@ function vEditorReceita(p){
   return `<div style="margin-top:.75rem;padding:.9rem;border-radius:.7rem;
     background:var(--chantilly);border:1px solid rgb(62 39 35/.12)">
 
-    ${periodos.length ? `<div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">
       <span class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;
         letter-spacing:.05em">Valores de</span>
       ${periodos.map(x => `<button class="chip" style="font-size:.72rem;padding:.15rem .6rem"
         aria-selected="${x.id === per}" onclick="periodoDaReceita('${x.id}')">${esc(x.nome)}</button>`).join("")}
-    </div>` : `<p style="font-size:.78rem;color:var(--framboesa);font-weight:600">
-      Crie um período em "Custos e lucro" para lançar os valores.</p>`}
+      <button class="chip" style="font-size:.72rem;padding:.15rem .6rem;border-style:dashed"
+        title="Criar um período novo" onclick="novoPeriodoNaReceita('${p.id}')">+ período</button>
+      ${periodos.length > 1 && per ? `<button class="btn btn-ghost"
+        style="min-height:1.7rem;padding:.1rem .6rem;font-size:.7rem"
+        onclick="duplicarReceita('${p.id}')">Copiar valores para outro período</button>` : ""}
+    </div>
+
+    ${!periodos.length ? `<p style="font-size:.78rem;color:var(--framboesa);font-weight:600;margin-top:.4rem">
+      Crie o primeiro período no botão acima para lançar os valores.</p>` : ""}
 
     ${c.linhas.length ? `<ul style="list-style:none;margin-top:.75rem;display:flex;
       flex-direction:column;gap:.35rem">
@@ -5658,6 +5671,49 @@ function vEditorReceita(p){
   </div>`;
 }
 
+/* Cria um período sem sair do editor da receita. */
+async function novoPeriodoNaReceita(produtoId){
+  const nome = prompt("Nome do período (ex: Outubro/2026):");
+  if (!nome || nome.trim().length < 2) return;
+  const inicio = prompt("Data de início (AAAA-MM-DD):",
+    new Date().toISOString().slice(0, 10));
+  if (!inicio) return;
+
+  const { data, error } = await sb.from("periodos_custo")
+    .insert({ nome: nome.trim(), inicio, fim: null }).select().single();
+  if (error){ avisarErro(error, "criar o período"); return; }
+
+  await carregarCustos();
+  S.admin.periodoReceita = data.id;
+  S.admin.receitaAberta = produtoId;
+  render();
+}
+
+/* Copia os valores do período atual para outro. */
+async function duplicarReceita(produtoId){
+  const periodos = S.admin.periodos || [];
+  const de = periodoAtivoReceita();
+  const outros = periodos.filter(x => x.id !== de);
+  if (!de || !outros.length) return;
+
+  const escolha = prompt(
+    "Copiar os valores deste período para qual?\n\n" +
+    outros.map((x, i) => `${i + 1}. ${x.nome}`).join("\n") +
+    "\n\nDigite o número:");
+  const i = parseInt(escolha, 10) - 1;
+  if (!Number.isFinite(i) || !outros[i]) return;
+
+  const { data, error } = await sb.rpc("duplicar_valores_receita", {
+    p_produto: produtoId, p_de: de, p_para: outros[i].id,
+  });
+  if (error){ avisarErro(error, "copiar os valores"); return; }
+
+  await carregarCustos();
+  S.admin.periodoReceita = outros[i].id;
+  render();
+  alert(`${data || 0} ingrediente(s) copiados para ${outros[i].nome}. Ajuste o que mudou de preço.`);
+}
+
 /* ---------------- novo sabor ---------------- */
 async function criarSabor(){
   const nome = document.getElementById("np-nome").value.trim();
@@ -5676,14 +5732,15 @@ async function criarSabor(){
   render();
 }
 
-function vAdminCustos(){
+/* Bloco de lucro que aparece no painel, abaixo dos números do dia. */
+function vLucroPeriodo(){
   const periodos = S.admin.periodos || [];
   const aberto = periodos.find(p => p.id === S.admin.periodoAberto);
   const res = S.admin.resumoPeriodo;
 
   return `<div style="display:flex;flex-direction:column;gap:1rem">
     <section class="card" style="padding:1.25rem">
-      <h2 class="display" style="font-size:1.1rem;font-weight:700">Períodos</h2>
+      <h2 class="display" style="font-size:1.1rem;font-weight:700">Lucro por período</h2>
       <p class="muted" style="font-size:.8rem;margin-top:.25rem">
         Os preços mudam com o tempo. Crie um período para cada fase; os valores
         dos ingredientes são lançados na receita de cada sabor.</p>
@@ -5749,7 +5806,7 @@ function vAdminCustos(){
       </dl>` : ""}
 
       <p class="muted" style="font-size:.75rem;margin-top:.9rem">
-        As receitas ficam no card de cada sabor, na aba Catálogo e estoque.</p>`}
+        O custo vem das receitas, que ficam no card de cada sabor, na aba Produtos.</p>`}
     </section>`}
   </div>`;
 }
@@ -5757,17 +5814,7 @@ function vAdminCustos(){
 function vAdminProdutos(){
   if (!S.admin.carregado) return `<p class="muted">Carregando produtos...</p>`;
   const total = S.admin.produtos.reduce((n,p)=>n+(p.estoque||0),0);
-  const sub = S.admin.subProdutos || "catalogo";
-
   return `<div style="display:flex;flex-direction:column;gap:1rem">
-    <div class="chips" role="tablist" aria-label="Seções de produtos">
-      ${[["catalogo", "Catálogo e estoque"], ["custos", "Custos e lucro"]]
-        .map(([id, rot]) => `<button class="chip" role="tab" aria-selected="${sub === id}"
-          onclick="S.admin.subProdutos='${id}';${id === "custos" ? "carregarCustos().then(render);" : "render();"}"
-          >${rot}</button>`).join("")}
-    </div>
-
-    ${sub === "custos" ? vAdminCustos() : `<div style="display:flex;flex-direction:column;gap:1rem">
     <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem">
       <div>
         <h1 class="display" style="font-size:1.5rem;font-weight:900">Produtos e estoque</h1>
@@ -5838,18 +5885,27 @@ function vAdminProdutos(){
                 <button style="font-size:.7rem;font-weight:700;color:var(--cacau);text-decoration:underline;
                   margin-left:.35rem" onclick="editarProduto('${p.id}')">editar</button></p>
               <p class="muted" style="font-size:.75rem">${esc(p.categories?.nome || "")}
-                ${esg?' · <strong style="color:var(--framboesa)">Esgotado</strong>':""}</p>`}
+                ${esg?' · <strong style="color:var(--framboesa)">Esgotado</strong>':""}
+                ${(() => {
+                  const c = custoDoCone(p.id, periodoAtivoReceita());
+                  if (!c.total) return "";
+                  const venda = p.preco_dupla_centavos || 0;
+                  const m = venda ? Math.round((venda - c.total) / venda * 100) : 0;
+                  return ` · custo <strong style="color:var(--cacau)">${reais(c.total)}</strong>` +
+                         (venda ? ` <span style="color:${m >= 0 ? "var(--pistache)" : "var(--framboesa)"};
+                            font-weight:700">${m}% de margem</span>` : "");
+                })()}</p>`}
             <div style="display:flex;gap:.4rem;align-items:center;margin-top:.3rem">
               <label class="btn btn-ghost" style="min-height:1.9rem;padding:.1rem .6rem;font-size:.7rem;cursor:pointer">
                 <span id="up-${p.id}">${p.imagem_url ? "Trocar foto" : "Enviar foto"}</span>
                 <input type="file" accept="image/*" style="display:none"
                   onchange="enviarFotoProduto(this,'${p.id}','${p.slug}')">
               </label>
-              ${p.imagem_url ? `<button style="font-size:.7rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
-                onclick="removerFotoProduto('${p.id}','${p.slug}')">remover</button>` : ""}
               <button class="btn btn-ghost" style="min-height:1.9rem;padding:.1rem .6rem;font-size:.7rem"
                 onclick="alternarReceita('${p.id}')">
                 ${S.admin.receitaAberta === p.id ? "Fechar receita" : "Receita"}</button>
+              ${p.imagem_url ? `<button style="font-size:.7rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
+                onclick="removerFotoProduto('${p.id}','${p.slug}')">remover</button>` : ""}
             </div>
           </div>
 
@@ -5898,7 +5954,6 @@ function vAdminProdutos(){
     <p class="muted" style="font-size:.75rem">
       Toda alteração é salva no banco na hora e já vale para os clientes. O preço do pedido é sempre
       recalculado no servidor — pedidos antigos guardam o valor da época e não mudam.</p>
-    </div>`}
   </div>`;
 }
 
