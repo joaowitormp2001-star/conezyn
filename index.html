@@ -5374,6 +5374,24 @@ async function removerSetor(indice){
   render();
 }
 
+/* Descrição do sabor: é o texto que o cliente lê no cardápio.
+   Fica sempre visível no card, já preenchido para quem tem, e
+   editável para todos. */
+async function salvarDescricao(id){
+  const campo = document.getElementById("pd-desc-" + id);
+  if (!campo) return;
+  const texto = campo.value.trim();
+
+  const ok = await salvarCampoProduto(id, "descricao", texto || null);
+  if (ok !== false){
+    const aviso = document.getElementById("pd-ok-" + id);
+    if (aviso){
+      aviso.textContent = "salvo";
+      setTimeout(() => { if (aviso) aviso.textContent = ""; }, 2000);
+    }
+  }
+}
+
 async function salvarCampoProduto(id, campo, valor){
   const { error } = await sb.from("products")
     .update({ [campo]: valor, atualizado_em: new Date().toISOString() }).eq("id", id);
@@ -5907,6 +5925,21 @@ function vAdminProdutos(){
               ${p.imagem_url ? `<button style="font-size:.7rem;font-weight:700;color:var(--framboesa);text-decoration:underline"
                 onclick="removerFotoProduto('${p.id}','${p.slug}')">remover</button>` : ""}
             </div>
+
+            <label style="display:block;margin-top:.5rem">
+              <span class="muted" style="font-size:.66rem;font-weight:700;text-transform:uppercase;
+                letter-spacing:.05em">Descrição no cardápio</span>
+              <textarea id="pd-desc-${p.id}" class="field" rows="2"
+                placeholder="Ex: Trufa de avelã com Nutella e crocante de avelãs."
+                style="display:block;margin-top:.15rem;width:100%;resize:vertical;
+                  font-family:inherit;font-size:.78rem;line-height:1.35"
+                >${esc(p.descricao || "")}</textarea>
+              <span style="display:flex;gap:.4rem;align-items:center;margin-top:.25rem">
+                <button class="btn btn-ghost" style="min-height:1.7rem;padding:.1rem .6rem;font-size:.7rem"
+                  onclick="salvarDescricao('${p.id}')">Salvar descrição</button>
+                <span id="pd-ok-${p.id}" style="font-size:.7rem;color:var(--pistache);font-weight:700"></span>
+              </span>
+            </label>
           </div>
 
           <div>
