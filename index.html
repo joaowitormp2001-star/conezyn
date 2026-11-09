@@ -450,6 +450,8 @@
    número está cadastrado como chave Pix, senão o QR não funciona. */
 const PIX = {
   chave: "+5511996479452",
+  // como a chave aparece escrita para a pessoa copiar à mão
+  escrita: "11 99647-9452",
   nome: "Conezyn",
   cidade: "Sao Paulo",
   whatsapp: "5511996479452",
@@ -2570,7 +2572,7 @@ function notaEmCanvas(d){
   const alturaItens = d.itens.length * 26;
   const alturaDesc  = d.descontos.length * 24;
   const temQr = d.total > 0;
-  const A = 150 + alturaItens + alturaDesc + 90 + (temQr ? 230 : 0);
+  const A = 150 + alturaItens + alturaDesc + 90 + (temQr ? 198 : 0);
 
   const c = document.createElement("canvas");
   c.width = L * esc2; c.height = A * esc2;
@@ -2640,9 +2642,12 @@ function notaEmCanvas(d){
           if (qr.isDark(r, col)) g.fillRect(x0 + col * cel, y + r * cel, cel + .5, cel + .5);
       y += lado + 28;
     } catch { y += 20; }
+    g.fillStyle = "#3E2723";
+    g.font = "700 14px Inter, system-ui, sans-serif";
+    g.fillText("Pix  " + PIX.escrita, L / 2, y);
     g.fillStyle = "rgba(62,39,35,.6)";
     g.font = "400 12px Inter, system-ui, sans-serif";
-    g.fillText("Pix com o valor já preenchido", L / 2, y);
+    g.fillText("o QR Code já vem com o valor preenchido", L / 2, y + 20);
   }
   return c;
 }
@@ -2660,7 +2665,8 @@ function textoDaNota(d){
   ].filter(x => x !== null);
 
   if (d.total > 0){
-    linhas.push("", "Pix copia e cola:", payloadPix({ valorCentavos: d.total, txid: "CONEZYN" }));
+    linhas.push("", `Pix: *${PIX.escrita}* (celular)`);
+    linhas.push("", "Ou copia e cola, já com o valor:", payloadPix({ valorCentavos: d.total, txid: "CONEZYN" }));
     linhas.push("", `Ou pague pelo site: ${location.origin}`);
   } else {
     linhas.push("", "Esse saiu por nossa conta 🎉");
@@ -2703,6 +2709,335 @@ async function compartilharNota(tipo, id){
   }
   const destino = tel ? `https://wa.me/55${tel}?text=` : "https://wa.me/?text=";
   window.open(destino + encodeURIComponent(texto), "_blank");
+}
+
+/* ==========================================================
+   Compartilhar o cartão fidelidade
+   O cartão da tela é feito de CSS; aqui ele é redesenhado em
+   canvas com as mesmas cores, selos e proporções do nível, para
+   virar uma imagem que se manda no WhatsApp.
+   ========================================================== */
+
+/* Retângulo de cantos arredondados, usado no corpo e nas molduras. */
+function caminhoArredondado(g, x, y, l, a, r){
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + l, y,     x + l, y + a, r);
+  g.arcTo(x + l, y + a, x,     y + a, r);
+  g.arcTo(x,     y + a, x,     y,     r);
+  g.arcTo(x,     y,     x + l, y,     r);
+  g.closePath();
+}
+
+/* Letra por letra, para conseguir o espaçamento do cartão. */
+function larguraEspacada(g, txt, esp){
+  let l = 0;
+  for (const ch of txt) l += g.measureText(ch).width + esp;
+  return l - (txt.length ? esp : 0);
+}
+function textoEspacado(g, txt, x, y, esp){
+  let cx = x;
+  for (const ch of txt){ g.fillText(ch, cx, y); cx += g.measureText(ch).width + esp; }
+  return cx - x;
+}
+
+/* Abre um sistema de 48×48 centrado num ponto: é o mesmo
+   viewBox dos selos em SVG, então o desenho vem igual. */
+function desenharSelo48(g, cx, cy, tamanho, pintar){
+  g.save();
+  g.translate(cx - tamanho / 2, cy - tamanho / 2);
+  g.scale(tamanho / 48, tamanho / 48);
+  pintar();
+  g.restore();
+}
+
+/* O cone do selo, nas mesmas coordenadas do svgCone. */
+function conePintado(g, cor, dx, dy, giro, escala){
+  g.save();
+  g.translate(dx, dy);
+  g.translate(24, 24); g.rotate(giro * Math.PI / 180); g.translate(-24, -24);
+  g.scale(escala, escala);
+  g.fillStyle = cor;
+  g.globalAlpha = .55;
+  g.beginPath();
+  g.moveTo(24, 6); g.lineTo(34, 12); g.lineTo(25.6, 41.4);
+  g.quadraticCurveTo(24, 44.4, 22.4, 41.4); g.lineTo(14, 12);
+  g.closePath(); g.fill();
+  g.globalAlpha = 1;
+  g.beginPath(); g.ellipse(24, 10, 10.5, 5, 0, 0, Math.PI * 2); g.fill();
+  g.restore();
+}
+
+/* A cruzinha rosa (prêmio à vista) ou o tique verde (conquistado). */
+function marcaDoSelo(g, marca){
+  if (marca === "mais"){
+    g.save(); g.translate(32, 25);
+    g.beginPath();
+    g.moveTo(-2, -7.5); g.lineTo(2, -7.5); g.lineTo(2, -2); g.lineTo(7.5, -2);
+    g.lineTo(7.5, 2);   g.lineTo(2, 2);    g.lineTo(2, 7.5); g.lineTo(-2, 7.5);
+    g.lineTo(-2, 2);    g.lineTo(-7.5, 2); g.lineTo(-7.5, -2); g.lineTo(-2, -2);
+    g.closePath();
+    g.lineJoin = "round"; g.lineWidth = 3.2; g.strokeStyle = "#fff"; g.stroke();
+    g.fillStyle = "#EFB8C8"; g.fill();
+    g.restore();
+  } else if (marca === "check"){
+    g.save(); g.translate(29, 23);
+    const tique = () => {
+      g.beginPath(); g.moveTo(-6.5, 0); g.lineTo(-2, 4.8); g.lineTo(6.8, -5);
+    };
+    g.lineCap = "round"; g.lineJoin = "round";
+    tique(); g.lineWidth = 8.5; g.strokeStyle = "#fff";     g.stroke();
+    tique(); g.lineWidth = 4.2; g.strokeStyle = "#3FBF7F";  g.stroke();
+    g.restore();
+  }
+}
+
+/* Reúne o que o cartão mostra, venha de uma conta ou de uma ficha. */
+function dadosDoCartao(tipo, ref){
+  if (tipo === "cliente"){
+    const c = (S.admin.clientes || []).find(x => x.id === ref);
+    if (!c) return null;
+    const brindes = S.pedidos.filter(p =>
+      p.clienteId === ref && p.brinde > 0 && p.status !== "Cancelado").length;
+    return montarDadosCartao(c.nome, c.genero, c.carimbos || 0, brindes, c.telefone || "", false);
+  }
+  const f = (S.admin.fichas || []).find(x => x.id === ref);
+  if (!f) return null;
+  const compras = (S.admin.compras || []).filter(c => c.pre_cliente_id === ref && !c.cancelado);
+  const brindes  = compras.reduce((n, c) => n + (c.cones_brinde || 0), 0);
+  const carimbos = compras.reduce((n, c) =>
+    n + Math.max((c.quantidade || 0) - (c.cones_brinde || 0), 0), 0);
+  return montarDadosCartao(f.nome, f.genero, carimbos, brindes, f.telefone || "", true);
+}
+
+function montarDadosCartao(nome, genero, carimbos, brindes, telefone, ficha){
+  const prog   = progressoCartoes(carimbos);
+  const indice = Math.min(prog.completos, NIVEIS.length - 1);
+  const nivel  = nivelDe(indice);
+  const cheios = prog.passouDoFim ? nivel.meta : prog.noAtual;
+  return {
+    nome: nome || "", genero: genero || null, telefone, ficha,
+    carimbos, completos: prog.completos, brindes, cheios, nivel,
+    passouDoFim: prog.passouDoFim,
+    faltam: Math.max(nivel.meta - cheios, 0),
+    temBrinde: prog.completos > brindes,
+  };
+}
+
+function cartaoEmCanvas(d){
+  const esc2 = 3, L = 520, MG = 20, CL = L - MG * 2;
+  const nv = d.nivel, meta = nv.meta;
+  const colunas = Math.ceil(meta / 2);
+  const padLado = 25.6, gapCol = 4.8, linha = 70.4, gapLinha = 17.6;
+  const colL = (CL - padLado * 2 - gapCol * (colunas - 1)) / colunas;
+  const selo = Math.min(colL, linha);
+  const alturaGrade = linha * 2 + gapLinha;
+  const CA = 33.6 + 20 + 9.6 + 22 + 24 + alturaGrade + 36.8;
+  const A = 56 + CA + 96;
+
+  const c = document.createElement("canvas");
+  c.width = L * esc2; c.height = A * esc2;
+  const g = c.getContext("2d");
+  g.scale(esc2, esc2);
+
+  g.fillStyle = "#FBF4EC"; g.fillRect(0, 0, L, A);
+  g.textAlign = "center"; g.fillStyle = "#3E2723";
+  g.font = "900 24px Montserrat, system-ui, sans-serif";
+  g.fillText("conezyn", L / 2, 38);
+
+  const x0 = MG, y0 = 56;
+
+  // corpo: o mesmo degradê do cartão na tela
+  const grad = g.createLinearGradient(x0, y0, x0 + CL, y0 + CA);
+  grad.addColorStop(0, nv.fundoClaro);
+  grad.addColorStop(.48, nv.fundo);
+  grad.addColorStop(1, nv.fundoEsc);
+  caminhoArredondado(g, x0, y0, CL, CA, 22.4);
+  g.fillStyle = grad; g.fill();
+
+  g.save();
+  caminhoArredondado(g, x0, y0, CL, CA, 22.4); g.clip();
+
+  // a onda escura do topo
+  g.save();
+  g.translate(x0, y0); g.scale(CL / 400, 1);
+  g.globalAlpha = .85; g.fillStyle = nv.fundoEsc;
+  g.beginPath();
+  g.moveTo(0, 0); g.lineTo(400, 0); g.lineTo(400, 26);
+  g.bezierCurveTo(330, 58, 300, 6, 232, 22);
+  g.bezierCurveTo(150, 42, 120, 4, 44, 26);
+  g.bezierCurveTo(28, 31, 12, 32, 0, 30);
+  g.closePath(); g.fill();
+  g.restore();
+
+  // moldura dupla, como no cartão impresso
+  g.strokeStyle = "rgba(255,255,255,.32)"; g.lineWidth = 1;
+  caminhoArredondado(g, x0 + 8.8, y0 + 8.8, CL - 17.6, CA - 17.6, 16); g.stroke();
+  g.save();
+  g.setLineDash([4, 4]); g.strokeStyle = "rgba(255,255,255,.28)";
+  caminhoArredondado(g, x0 + 13.3, y0 + 13.3, CL - 26.6, CA - 26.6, 12.8); g.stroke();
+  g.restore();
+  g.restore();
+
+  // nome e faixa do nível, um ao lado do outro
+  const nomeTxt  = (d.nome || "Nome").toUpperCase();
+  const nivelTxt = tituloNivel(nv, d.genero).toUpperCase();
+  g.textAlign = "left";
+  g.font = "800 13.6px Montserrat, system-ui, sans-serif";
+  const lNome  = larguraEspacada(g, nomeTxt, .82);
+  const lTexto = larguraEspacada(g, nivelTxt, 1.09);
+  const lBadge = lTexto + 22.4;
+  const yNome  = y0 + 33.6 + 14;
+  let cx = x0 + CL / 2 - (lNome + 8.8 + lBadge) / 2;
+
+  g.fillStyle = "#fff";
+  textoEspacado(g, nomeTxt, cx, yNome, .82);
+  cx += lNome + 8.8;
+  caminhoArredondado(g, cx, yNome - 14.5, lBadge, 20, 4.8);
+  g.fillStyle = nv.badgeFundo; g.fill();
+  g.fillStyle = nv.badgeTexto;
+  textoEspacado(g, nivelTxt, cx + 11.2, yNome, 1.09);
+
+  // a linha do prêmio, na serifada do cartão
+  g.textAlign = "center";
+  g.fillStyle = "#fff";
+  g.font = "400 19.2px Fraunces, Georgia, serif";
+  g.fillText(nv.subtitulo, x0 + CL / 2, y0 + 33.6 + 20 + 9.6 + 17);
+
+  // os selos
+  const topoGrade = y0 + 33.6 + 20 + 9.6 + 22 + 24;
+  const completo = d.cheios >= meta;
+  for (let i = 0; i < meta; i++){
+    const col = i % colunas, lin = Math.floor(i / colunas);
+    const ex = x0 + padLado + col * (colL + gapCol) + colL / 2;
+    const ey = topoGrade + lin * (linha + gapLinha) + linha / 2;
+    const r  = selo / 2;
+    const pos = i + 1;
+    const marcado = i < d.cheios;
+    const bonus   = (nv.bonus || []).find(b => b.pos === pos);
+    const ultimo  = pos === meta;
+    const ehMarca = ultimo || (nv.marcaMeio && pos === nv.marcaMeio);
+    const marca   = ehMarca ? (completo && ultimo ? "check" : "mais") : null;
+    const duplo   = ehMarca && nv.duplo && ultimo;
+
+    g.save();
+    g.shadowColor = "rgba(0,0,0,.35)"; g.shadowBlur = 6; g.shadowOffsetY = 2;
+    g.fillStyle = "#fff";
+    g.beginPath(); g.arc(ex, ey, r, 0, Math.PI * 2); g.fill();
+    g.restore();
+
+    g.save();
+    g.setLineDash([3.5, 3.5]); g.lineWidth = 1.5;
+    g.strokeStyle = nv.fundo; g.globalAlpha = .3;
+    g.beginPath(); g.arc(ex, ey, r - 5, 0, Math.PI * 2); g.stroke();
+    g.restore();
+
+    if (bonus && !marcado){
+      desenharSelo48(g, ex, ey, selo * .66, () => {
+        g.fillStyle = bonus.cor; g.textAlign = "center";
+        g.font = "800 16px Montserrat, system-ui, sans-serif";
+        g.fillText(bonus.texto, 24, 19);
+        g.fillText(bonus.texto2, 24, 33);
+      });
+      continue;
+    }
+    if (!marcado && !ehMarca) continue;
+
+    desenharSelo48(g, ex, ey, selo * .66, () => {
+      const cor = marcado ? nv.selo : "#A18D80";
+      if (duplo){ conePintado(g, cor, -5, -2, -34, .82); conePintado(g, cor, 9, 2, 26, .82); }
+      else conePintado(g, cor, 0, 0, -28, 1);
+      marcaDoSelo(g, marca);
+    });
+  }
+
+  // o resumo embaixo do cartão
+  let y = y0 + CA + 28;
+  g.textAlign = "center"; g.fillStyle = "#3E2723";
+  g.font = "700 14px Inter, system-ui, sans-serif";
+  g.fillText(`${d.cheios} de ${meta} carimbos neste cartão`, L / 2, y);
+
+  y += 20;
+  g.fillStyle = "rgba(62,39,35,.62)";
+  g.font = "400 12.5px Inter, system-ui, sans-serif";
+  g.fillText([`${d.carimbos} cone(s) no total`,
+              `${d.completos} cartão(ões) completo(s)`,
+              `${d.brindes} brinde(s) usado(s)`].join("  ·  "), L / 2, y);
+
+  y += 20;
+  g.font = "700 12.5px Inter, system-ui, sans-serif";
+  if (d.temBrinde){
+    g.fillStyle = "#B4590F";
+    g.fillText("Tem um cone de brinde para receber", L / 2, y);
+  } else if (d.passouDoFim || d.faltam === 0){
+    g.fillStyle = "#B4590F";
+    g.fillText(d.passouDoFim ? "Completou todos os cartões" : "Cartão completo", L / 2, y);
+  } else {
+    g.fillStyle = "rgba(62,39,35,.62)";
+    g.fillText(`Faltam ${d.faltam} carimbo(s) para ganhar ${nv.premio}`, L / 2, y);
+  }
+  return c;
+}
+
+function textoDoCartao(d){
+  const nv = d.nivel;
+  const linhas = [
+    "*Cartão fidelidade — conezyn*",
+    d.nome ? `${d.nome} · ${tituloNivel(nv, d.genero)}` : tituloNivel(nv, d.genero),
+    "",
+    `Carimbos neste cartão: *${d.cheios} de ${nv.meta}*`,
+    `No total: ${d.carimbos} cone(s) · ${d.completos} cartão(ões) completo(s) · ${d.brindes} brinde(s) usado(s)`,
+  ];
+  if (d.temBrinde) linhas.push("", `🎁 Você tem um cone de brinde esperando!`);
+  else if (d.passouDoFim) linhas.push("", "🏆 Você completou todos os cartões!");
+  else if (d.faltam === 0) linhas.push("", "🎉 Cartão completo!");
+  else linhas.push("", `Faltam ${d.faltam} carimbo(s) para ganhar ${nv.premio}.`);
+  linhas.push("", `Cada cone comprado vale um carimbo. Veja o seu em ${location.origin}`);
+  return linhas.join("\n");
+}
+
+async function compartilharCartao(tipo, ref){
+  const d = dadosDoCartao(tipo, ref);
+  if (!d){ alert("Cartão não encontrado."); return; }
+
+  const texto  = textoDoCartao(d);
+  const canvas = cartaoEmCanvas(d);
+  const blob   = await new Promise(r => canvas.toBlob(r, "image/png"));
+  const nomeArq = `cartao-${semAcentoMin(d.nome || "cliente").replace(/\s+/g, "-")}.png`;
+  const arquivo = blob ? new File([blob], nomeArq, { type: "image/png" }) : null;
+
+  if (arquivo && navigator.canShare?.({ files: [arquivo] })){
+    try { await navigator.share({ files: [arquivo], text: texto }); return; }
+    catch (e){ if (e?.name === "AbortError") return; }
+  }
+
+  if (blob){
+    const a = document.createElement("a");
+    a.download = nomeArq;
+    a.href = URL.createObjectURL(blob);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  const tel = digitos(d.telefone || "");
+  const destino = tel ? `https://wa.me/55${tel}?text=` : "https://wa.me/?text=";
+  window.open(destino + encodeURIComponent(texto), "_blank");
+}
+
+/* Qual cartão pertence a este pedido. Ficha ligada a uma conta usa o
+   cartão da conta — é lá que os carimbos foram somados. */
+function cartaoDoPedido(p){
+  if (!p) return null;
+  if (p.tipo === "site") return p.clienteId ? { tipo: "cliente", ref: p.clienteId } : null;
+  const f = (S.admin.fichas || []).find(x => x.id === p.fichaId);
+  if (!f) return null;
+  return f.vinculado_a ? { tipo: "cliente", ref: f.vinculado_a } : { tipo: "ficha", ref: f.id };
+}
+
+function verCartaoDoPedido(tipo, id){
+  const alvo = cartaoDoPedido(pedidosUnificados().find(x => x.tipo === tipo && x.id === id));
+  if (!alvo){ alert("Este pedido não está ligado a nenhum cartão."); return; }
+  if (alvo.tipo === "cliente") verCartaoCliente(alvo.ref);
+  else verCartaoFicha(alvo.ref);
 }
 
 function blocoPix(p){
@@ -5074,6 +5409,7 @@ function vDetalhePedido(p){
 
 function vCardPedido(p){
   const editando = S.admin.pedidoEditando === `${p.tipo}:${p.id}`;
+  const alvoCartao = cartaoDoPedido(p);
   return `<div class="card" style="padding:1rem">
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:.75rem;align-items:start">
       <div style="min-width:0;flex:1">
@@ -5126,6 +5462,10 @@ function vCardPedido(p){
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
         title="Gera a imagem da nota e abre o WhatsApp com a mensagem pronta"
         onclick="compartilharNota('${p.tipo}','${p.id}')">Compartilhar</button>
+      ${alvoCartao ? `<button class="btn btn-ghost"
+        style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
+        title="Abre o cartão fidelidade de ${esc(p.cliente)}"
+        onclick="verCartaoDoPedido('${p.tipo}','${p.id}')">Cartão</button>` : ""}
       <button class="btn btn-ghost" style="min-height:2.1rem;padding:.25rem .8rem;font-size:.74rem"
         onclick="${p.tipo === "site"
           ? `editarPedidoSite('${p.id}')`
@@ -6913,6 +7253,9 @@ function verCartaoFicha(fichaId){
         <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
           <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
             onclick="fecharModal();abrirFicha('${fichaId}')">← Dados da ficha</button>
+          <button class="btn btn-primary" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+            title="Gera a imagem do cartão e abre o WhatsApp com a mensagem pronta"
+            onclick="compartilharCartao('ficha','${fichaId}')">Compartilhar cartão</button>
         </div>
       </div>
     </div>`;
@@ -6958,6 +7301,9 @@ function verCartaoCliente(id){
         <div style="display:flex;gap:.5rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
           <button class="btn btn-ghost" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
             onclick="verCliente('${id}')">← Dados do cliente</button>
+          <button class="btn btn-primary" style="min-height:2.2rem;padding:.3rem .9rem;font-size:.78rem"
+            title="Gera a imagem do cartão e abre o WhatsApp com a mensagem pronta"
+            onclick="compartilharCartao('cliente','${id}')">Compartilhar cartão</button>
         </div>
       </div>
     </div>`;
